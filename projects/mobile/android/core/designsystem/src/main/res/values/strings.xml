@@ -37,7 +37,6 @@
     <string name="ds_catalog_tile_off">Off</string>
     <string name="ds_catalog_fab_label">Scenario</string>
     <string name="ds_catalog_fab_extended">New alarm</string>
-    <string name="ds_catalog_menu">Open menu</string>
     <string name="ds_catalog_icon_action">Add</string>
 
     <string name="ds_light_note">Only parameters the light reports are shown. Turn off accepts only a transition.</string>

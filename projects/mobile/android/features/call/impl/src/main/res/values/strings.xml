@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="DuplicateStrings">
-    <string name="call_title">Call</string>
     <string name="call_station_name">Station</string>
     <string name="call_status_dialing">Calling…</string>
     <string name="call_status_ringing">Ringing…</string>
@@ -27,7 +26,6 @@
     <string name="call_route_wired">Headset</string>
     <string name="call_route_bluetooth">Bluetooth</string>
     <string name="call_route_bluetooth_named">Bluetooth · %1$s</string>
-    <string name="call_permission_microphone">Microphone permission is required to call the station.</string>
     <string name="call_error_not_configured">The intercom address or the app token is not configured in Connection.</string>
     <string name="call_error_station_offline">The station is offline.</string>
     <string name="call_error_busy">The station is already in a call.</string>
@@ -37,8 +35,6 @@
     <string name="call_error_permission">Microphone permission denied.</string>
     <string name="call_channel_name">Calls</string>
     <string name="call_channel_description">Ongoing station calls</string>
-    <string name="call_quick_action_title">Call the station</string>
-    <string name="call_quick_action_subtitle">Talk through the station speaker and microphone</string>
     <string name="call_status_active_timer">In call · %1$s</string>
     <string name="call_route_selected">✓ %1$s</string>
     <string name="call_quick_tile_title">Call the station</string>

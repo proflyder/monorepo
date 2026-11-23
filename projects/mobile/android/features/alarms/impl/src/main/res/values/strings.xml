@@ -39,7 +39,6 @@
     <string name="alarms_editor_days">Days</string>
     <string name="alarms_editor_name">Name</string>
     <string name="alarms_editor_delete">Delete alarm</string>
-    <string name="alarms_editor_hint">The home server stores this alarm and decides when it fires. This phone does not schedule local alarms.</string>
     <string name="alarms_day_mon">Mon</string>
     <string name="alarms_day_tue">Tue</string>
     <string name="alarms_day_wed">Wed</string>
@@ -49,7 +48,6 @@
     <string name="alarms_day_sun">Sun</string>
     <string name="alarms_today">today %1$s</string>
     <string name="alarms_tomorrow">tomorrow %1$s</string>
-    <string name="alarms_in_days">%1$s %2$s</string>
     <string name="alarms_saved">Alarm saved</string>
     <string name="alarms_deleted">Alarm deleted</string>
     <string name="alarms_upcoming_today">today</string>

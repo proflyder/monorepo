@@ -39,13 +39,6 @@
     <string name="chat_voice_label">Voice message</string>
     <string name="chat_transcript_pending">Recognising…</string>
     <string name="chat_open_image">Open photo</string>
-    <string name="chat_error_chat_attachment_too_large">The attachment is too large.</string>
-    <string name="chat_error_chat_attachment_unsupported">This file type is not supported.</string>
-    <string name="chat_error_chat_attachment_not_found">The attachment is gone.</string>
-    <string name="chat_error_chat_attachment_missing">The file is no longer on the phone.</string>
-    <string name="chat_error_chat_too_many_attachments">Too many attachments in one message.</string>
-    <string name="chat_error_chat_voice_format">The voice recording has an unsupported format.</string>
-    <string name="chat_error_chat_stt_failed">Could not recognise the voice message.</string>
     <string name="chat_alert_firing">Firing</string>
     <string name="chat_alert_resolved">Resolved</string>
     <string name="chat_alert_critical">Critical alert</string>

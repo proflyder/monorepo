@@ -245,6 +245,10 @@ android_sdk_repository_extension.configure(
 )
 use_repo(android_sdk_repository_extension, "androidsdk")
 
+android_lint_sdk = use_repo_rule("//platform/android:lint_sdk.bzl", "android_lint_sdk")
+
+android_lint_sdk(name = "android_lint_sdk")
+
 register_toolchains(
     "@androidsdk//:sdk-toolchain",
     "@androidsdk//:all",

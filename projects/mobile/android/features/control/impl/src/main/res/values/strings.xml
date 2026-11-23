@@ -9,7 +9,6 @@
     <string name="control_speak_send">Say</string>
     <string name="control_on_summary">%1$d of %2$d on</string>
     <string name="control_filter_all">All</string>
-    <string name="control_filter_scenarios">Scenarios</string>
     <string name="control_filter_lights">Lights</string>
     <string name="control_filter_switches">Switches</string>
     <string name="control_empty">Nothing to control yet. Home Assistant exposes no lights, switches or scenes to the app.</string>

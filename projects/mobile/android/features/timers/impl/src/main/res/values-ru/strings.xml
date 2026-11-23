@@ -8,10 +8,7 @@
     <string name="timers_start">Запустить таймер</string>
     <string name="timers_paused">На паузе</string>
     <string name="timers_running">Идёт</string>
-    <string name="timers_remaining">Осталось %1$s</string>
     <string name="timers_duration_error">Введите длительность от 1 секунды до 7 дней.</string>
-    <string name="timers_started">Таймер запущен</string>
-    <string name="timers_cancelled">Таймер отменён</string>
     <string name="timers_cancel_confirm">Отменить этот таймер на домашнем сервере?</string>
     <string name="timers_cancel_yes">Отменить таймер</string>
     <string name="timers_keep">Оставить</string>

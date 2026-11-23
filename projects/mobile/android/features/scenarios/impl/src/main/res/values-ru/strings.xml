@@ -47,8 +47,6 @@
     <string name="scenarios_state_on">Вкл</string>
     <string name="scenarios_state_off">Выкл</string>
 
-    <string name="scenarios_step_catalog">Выполнить «%1$s» для %2$s</string>
-    <string name="scenarios_step_speak">Сказать «%1$s»</string>
     <string name="scenarios_step_speak_detail">«%1$s»</string>
     <string name="scenarios_step_delay">%1$d с</string>
     <string name="scenarios_step_unsupported">Неподдерживаемый шаг</string>

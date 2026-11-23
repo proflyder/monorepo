@@ -217,7 +217,7 @@ class WindowInsetsScreenshotTest {
         idle(activity)
         val root = activity.window.decorView
         val name = root.findViewById<TextView>(PushR.id.push_device_name)
-        name.text = activity.getString(PushR.string.push_device_name_sample)
+        name.text = SAMPLE_DEVICE_NAME
         applyInsets(activity, 0)
         assertHomeStyle(name.parentField())
         assertTitleFits(root.findViewById(R.id.toolbar_title))
@@ -480,3 +480,5 @@ private fun exactly(size: Int): Int = View.MeasureSpec.makeMeasureSpec(size, Vie
 
 private const val CONNECTION_ROUTE = "connection/settings"
 private const val PUSH_SETTINGS_ROUTE = "push/settings"
+
+private const val SAMPLE_DEVICE_NAME = "Stas"

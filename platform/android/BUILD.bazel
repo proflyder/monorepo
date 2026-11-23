@@ -64,6 +64,7 @@ exports_files([
     "defs.bzl",
     "detekt.bzl",
     "lint.bzl",
+    "lint_sdk.bzl",
     "apk_abi_test.sh",
     "apk_manifest_test.sh",
     "apk_runtime_closure.sh",

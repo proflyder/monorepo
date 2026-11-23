@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="DuplicateStrings">
-    <string name="call_title">Звонок</string>
     <string name="call_station_name">Колонка</string>
     <string name="call_status_dialing">Соединение…</string>
     <string name="call_status_ringing">Гудки…</string>
@@ -27,7 +26,6 @@
     <string name="call_route_wired">Наушники</string>
     <string name="call_route_bluetooth">Bluetooth</string>
     <string name="call_route_bluetooth_named">Bluetooth · %1$s</string>
-    <string name="call_permission_microphone">Для звонка на колонку нужен доступ к микрофону.</string>
     <string name="call_error_not_configured">Адрес intercom или общий токен приложения не настроены в разделе «Подключение».</string>
     <string name="call_error_station_offline">Колонка не в сети.</string>
     <string name="call_error_busy">Колонка уже разговаривает.</string>
@@ -37,8 +35,6 @@
     <string name="call_error_permission">Нет доступа к микрофону.</string>
     <string name="call_channel_name">Звонки</string>
     <string name="call_channel_description">Текущие звонки на колонку</string>
-    <string name="call_quick_action_title">Позвонить на колонку</string>
-    <string name="call_quick_action_subtitle">Разговор через динамик и микрофон колонки</string>
     <string name="call_status_active_timer">Разговор · %1$s</string>
     <string name="call_route_selected">✓ %1$s</string>
     <string name="call_quick_tile_title">Позвонить на колонку</string>
