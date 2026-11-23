@@ -310,7 +310,11 @@ platform/android/         Bazel macros, Metro wiring, APK gate, signing, detekt 
 - Pull-to-refresh names its scrolling views: `setupPullToRefresh(list,
   appBar) { }` installs `OnChildScrollUpCallback`, so a `SwipeRefreshLayout`
   whose direct child is a wrapper (`FrameLayout`, `CoordinatorLayout` that does
-  not forward nested scroll) still refreshes only at the top of the list.
+  not forward nested scroll) still refreshes only at the top of the list. A
+  `RecyclerView` is at the top when its first laid-out child is adapter
+  position 0 and starts at `paddingTop` (`isAtTop()`); `canScrollVertically`
+  is not used for lists because a zero-height first row (the empty hub on the
+  home screen) makes its offset estimate positive at the very top.
 - Sticky section headers (`StickySectionHeaders`) pin to the visible top of
   the list (`paddingTop` with `clipToPadding`, otherwise the list edge), fill
   the whole width with the window background and are pushed out by the next

@@ -45,6 +45,15 @@ class PullToRefreshTest {
     }
 
     @Test
+    fun anEmptyFirstRowStillCountsAsTheTop() {
+        list.adapter = Rows(firstHeight = 0)
+        attach()
+        assertFalse(refresh.canChildScrollUp())
+        list.scrollBy(0, SCROLL)
+        assertTrue(refresh.canChildScrollUp())
+    }
+
+    @Test
     fun collapsedHeaderBlocksPullRefresh() {
         val header = View(context)
         refresh.setupPullToRefresh(list, header) { }
@@ -66,16 +75,18 @@ class PullToRefreshTest {
 
     private fun exactly(size: Int) = View.MeasureSpec.makeMeasureSpec(size, View.MeasureSpec.EXACTLY)
 
-    private class Rows : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
+    private class Rows(private val firstHeight: Int = ROW_HEIGHT) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
         override fun getItemCount(): Int = ROWS
 
+        override fun getItemViewType(position: Int): Int = if (position == 0) FIRST else OTHER
+
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder =
-            object : RecyclerView.ViewHolder(row(parent)) {}
+            object : RecyclerView.ViewHolder(row(parent, if (viewType == FIRST) firstHeight else ROW_HEIGHT)) {}
 
         override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) = Unit
 
-        private fun row(parent: ViewGroup) = TextView(parent.context).apply {
-            layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ROW_HEIGHT)
+        private fun row(parent: ViewGroup, height: Int) = TextView(parent.context).apply {
+            layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, height)
         }
     }
 
@@ -85,5 +96,7 @@ class PullToRefreshTest {
         const val ROWS = 50
         const val ROW_HEIGHT = 100
         const val SCROLL = 300
+        const val FIRST = 0
+        const val OTHER = 1
     }
 }

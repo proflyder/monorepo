@@ -4,6 +4,7 @@ import androidx.recyclerview.widget.GridLayoutManager
 import dev.proflyder.home.core.designsystem.RevealBinder
 import dev.proflyder.home.core.designsystem.list.StickySectionHeaders
 import dev.proflyder.home.core.ui.ListStateViews
+import dev.proflyder.home.core.ui.isAtTop
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.core.ui.userMessage
 import dev.proflyder.home.feature.control.ControlItem
@@ -62,7 +63,7 @@ internal class ControlListRenderer(
 
     private fun showContent(state: ControlListInput) {
         states.showContent()
-        val stickToTop = hubWasEmpty && state.hub.cards.isNotEmpty() && !binding.controlList.canScrollVertically(-1)
+        val stickToTop = hubWasEmpty && state.hub.cards.isNotEmpty() && binding.controlList.isAtTop()
         hubWasEmpty = state.hub.cards.isEmpty()
         adapter.submitList(items(state)) { if (stickToTop) binding.controlList.scrollToPosition(0) }
     }

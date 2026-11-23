@@ -1,6 +1,7 @@
 package dev.proflyder.home.core.ui
 
 import android.view.View
+import androidx.recyclerview.widget.RecyclerView
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.google.android.material.color.MaterialColors
 
@@ -18,4 +19,13 @@ fun SwipeRefreshLayout.setupPullToRefresh(scrolling: View, vararg alsoScrolling:
     setOnRefreshListener(onRefresh)
 }
 
-internal fun View.isAwayFromTop(): Boolean = canScrollVertically(-1) || top < 0
+fun RecyclerView.isAtTop(): Boolean {
+    val first = getChildAt(0) ?: return true
+    val manager = layoutManager ?: return !canScrollVertically(-1)
+    return getChildAdapterPosition(first) == 0 && manager.getDecoratedTop(first) >= paddingTop
+}
+
+internal fun View.isAwayFromTop(): Boolean = when (this) {
+    is RecyclerView -> !isAtTop()
+    else -> canScrollVertically(-1) || top < 0
+}

@@ -51,6 +51,7 @@ home_android_local_test(
     test_classes = [
         "dev.proflyder.home.feature.control.AllControlLogicTests",
         "dev.proflyder.home.feature.control.data.ControlTaskPayloadsTest",
+        "dev.proflyder.home.feature.control.presentation.ControlPullToRefreshTest",
         "dev.proflyder.home.feature.control.presentation.ControlRowsTest",
         "dev.proflyder.home.feature.control.presentation.DeviceStateScreenshotTest",
     ],
@@ -71,6 +72,8 @@ home_android_local_test(
         "//projects/mobile/android/core/runtime",
         "//projects/mobile/android/core/testing",
         "@maven//:androidx_recyclerview_recyclerview",
+        "@maven//:androidx_swiperefreshlayout_swiperefreshlayout",
+        "@maven//:androidx_coordinatorlayout_coordinatorlayout",
         "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_core",
         "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_test",
     ],
