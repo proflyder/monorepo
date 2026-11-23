@@ -33,7 +33,8 @@ internal fun shouldAnimateSelection(
     previousAlarmId == alarmId && previousSelected != null && previousSelected != selected
 
 internal class AlarmAdapterCallback(
-    val dispatch: (AlarmsIntent) -> Unit,
+    dispatch: (AlarmsIntent) -> Unit,
+    val act: (AlarmActionIntent) -> Unit,
 ) : AdapterCallback<AlarmRow> by IntentAdapterCallback(
     dispatch = dispatch,
     onClick = { row -> AlarmsIntent.Click(row.alarm.id) },
@@ -73,7 +74,7 @@ internal class AlarmAdapter(
         callback: AlarmAdapterCallback,
     ) : BaseViewHolder<AlarmRow, ItemAlarmBinding, AlarmAdapterCallback>(binding, callback) {
         private val enabledSwitch = SwitchBinder(binding.alarmEnabled) { enabled ->
-            callback.dispatch(AlarmsIntent.Toggle(item.alarm.id, enabled))
+            callback.act(AlarmActionIntent.Toggle(item.alarm.id, enabled))
         }
 
         private var previousAlarmId: String? = null
@@ -84,9 +85,9 @@ internal class AlarmAdapter(
 
         init {
             forwardRowClicks()
-            binding.alarmSnooze.setOnClickListener { callback.dispatch(AlarmsIntent.Snooze(item.alarm.id)) }
-            binding.alarmStop.setOnClickListener { callback.dispatch(AlarmsIntent.Stop(item.alarm.id)) }
-            binding.alarmDelete.setOnClickListener { callback.dispatch(AlarmsIntent.RequestDelete(item.alarm.id)) }
+            binding.alarmSnooze.setOnClickListener { callback.act(AlarmActionIntent.Snooze(item.alarm.id)) }
+            binding.alarmStop.setOnClickListener { callback.act(AlarmActionIntent.Stop(item.alarm.id)) }
+            binding.alarmDelete.setOnClickListener { callback.act(AlarmActionIntent.RequestDelete(item.alarm.id)) }
         }
 
         override fun bind(item: AlarmRow) {

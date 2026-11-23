@@ -25,3 +25,13 @@ fun Schedule.withAlarmDraft(draft: AlarmDraft): Schedule = copy(
     weekdays = if (draft.repeat == RepeatKind.CUSTOM) draft.weekdays.sorted() else emptyList(),
     enabled = draft.enabled,
 )
+
+fun Schedule.toAlarmDraft(): AlarmDraft = AlarmDraft(
+    label = label,
+    hour = at.hour,
+    minute = at.minute,
+    repeat = repeat,
+    weekdays = weekdays,
+    enabled = enabled,
+    onceDate = if (repeat == RepeatKind.ONCE) runCatching { java.time.LocalDate.parse(onceDate) }.getOrNull() else null,
+)

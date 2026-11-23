@@ -14,6 +14,8 @@ import dev.proflyder.home.core.model.ScheduleKind
 import dev.proflyder.home.core.model.Timer
 import dev.proflyder.home.core.model.TimerState
 import dev.proflyder.home.core.model.WallTime
+import dev.proflyder.home.core.time.DueText
+import dev.proflyder.home.core.time.DueTextStrings
 import java.time.LocalDateTime
 import java.time.ZoneOffset
 import org.junit.Assert.assertEquals
@@ -122,7 +124,7 @@ class HomeHubTest {
         assertNull(entry("light.e", title = "Lamp").secondaryName)
     }
 
-    private val strings = object : HubScheduleStrings {
+    private val strings = object : DueTextStrings {
         override fun today() = "сегодня"
         override fun tomorrow() = "завтра"
         override fun dayOfWeek(isoDay: Int) = listOf("пн", "вт", "ср", "чт", "пт", "сб", "вс")[isoDay - 1]
@@ -131,19 +133,14 @@ class HomeHubTest {
 
     @Test
     fun whenTextUsesTodayTomorrowThenWeekday() {
-        assertEquals("сегодня 07:30", HubFormat.whenText(epoch(8, 7, 30), ZoneOffset.UTC, now, strings))
-        assertEquals("завтра 07:30", HubFormat.whenText(epoch(9, 7, 30), ZoneOffset.UTC, now, strings))
-        assertEquals("ср 07:30", HubFormat.whenText(epoch(11, 7, 30), ZoneOffset.UTC, now, strings))
+        assertEquals("сегодня 07:30", DueText.format(epoch(8, 7, 30), ZoneOffset.UTC, now, strings))
+        assertEquals("завтра 07:30", DueText.format(epoch(9, 7, 30), ZoneOffset.UTC, now, strings))
+        assertEquals("ср 07:30", DueText.format(epoch(11, 7, 30), ZoneOffset.UTC, now, strings))
     }
 
     @Test
     fun liveRowsAreMergedAndSortedByTime() {
         val cards = HubCards.build(
-            alarms = listOf(
-                alarm("later", epoch(10, 7, 30)),
-                alarm("next", epoch(9, 7, 30)),
-                alarm("off", epoch(8, 22, 0), enabled = false),
-            ),
             timers = listOf(
                 timer("t1", now + 300),
                 timer("paused", due = 0, state = TimerState.PAUSED, remaining = 120),
@@ -161,7 +158,6 @@ class HomeHubTest {
     @Test
     fun remindersOnlyAppearWithinTheNextDay() {
         val cards = HubCards.build(
-            alarms = emptyList(),
             timers = emptyList(),
             reminders = listOf(
                 alarm("past", now - 60),
@@ -176,25 +172,9 @@ class HomeHubTest {
     }
 
     @Test
-    fun aRingingAlarmLeadsTheRows() {
-        val cards = HubCards.build(
-            alarms = listOf(
-                alarm("next", epoch(9, 7, 30)),
-                alarm("ringing", epoch(8, 21, 0), activeOccurrence = epoch(8, 21, 0), activeUntil = now + 60),
-            ),
-            timers = listOf(timer("t1", now + 30)),
-            reminders = emptyList(),
-            nowUnix = now,
-        )
-        assertEquals(listOf("alarm:ringing", "timer:t1", "alarm:next"), cards.map { it.key })
-        assertTrue((cards.first() as HubCard.Alarm).ringing)
-    }
-
-    @Test
     fun nothingLiveMeansNoHub() {
         assertTrue(
             HubCards.build(
-                alarms = listOf(alarm("off", 0L, enabled = false)),
                 timers = emptyList(),
                 reminders = listOf(alarm("far", now + HubCards.REMINDER_WINDOW_SECONDS + 1)),
                 nowUnix = now,
@@ -267,33 +247,5 @@ class HomeHubTest {
         )
         assertEquals(listOf("provided:call", "provided:vpn", "device:light.a", "action:action.speak", "scenario:s1"), tiles.map { it.key })
         assertFalse(tiles.isEmpty())
-    }
-
-    @Test
-    fun failedHubSourceKeepsItsPreviousRow() {
-        val due = epoch(9, 7, 30)
-        val previous = HubCards.build(
-            alarms = listOf(alarm("a1", due)),
-            timers = listOf(timer("t1", due + 600)),
-            reminders = listOf(alarm("r1", due)),
-            nowUnix = now,
-        )
-        val cards = HubCards.buildOrKeep(
-            alarms = null,
-            timers = listOf(timer("t1", due + 600)),
-            reminders = listOf(alarm("r1", due)),
-            previous = previous,
-            nowUnix = now,
-        )
-        assertEquals(listOf("alarm:a1", "reminder:r1", "timer:t1"), cards.map { it.key })
-
-        val emptied = HubCards.buildOrKeep(
-            alarms = emptyList(),
-            timers = emptyList(),
-            reminders = emptyList(),
-            previous = previous,
-            nowUnix = now,
-        )
-        assertTrue(emptied.isEmpty())
     }
 }

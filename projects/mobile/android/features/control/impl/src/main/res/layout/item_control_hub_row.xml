@@ -40,13 +40,6 @@
         android:textAppearance="?attr/textAppearanceTitleSmall"
         android:textColor="?attr/colorOnSurface" />
 
-    <com.google.android.material.materialswitch.MaterialSwitch
-        android:id="@+id/hub_row_switch"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:contentDescription="@string/control_hub_alarm"
-        android:visibility="gone" />
-
     <ImageButton
         android:id="@+id/hub_row_action"
         android:layout_width="40dp"

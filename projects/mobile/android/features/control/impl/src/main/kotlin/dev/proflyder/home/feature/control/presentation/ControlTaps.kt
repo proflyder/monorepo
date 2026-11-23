@@ -113,7 +113,6 @@ internal fun QuickTile.pinSubject(): PinSubject? = when (this) {
 
 internal val HubCard.featureId: String
     get() = when (this) {
-        is HubCard.Alarm -> "alarms"
         is HubCard.TimerCard -> "timers"
         is HubCard.Reminder -> "reminders"
     }

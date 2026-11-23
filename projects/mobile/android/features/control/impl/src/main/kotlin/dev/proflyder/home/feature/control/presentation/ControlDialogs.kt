@@ -3,7 +3,6 @@ package dev.proflyder.home.feature.control.presentation
 import android.content.Context
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import dev.proflyder.home.core.model.ControlEntry
-import dev.proflyder.home.feature.control.HubCard
 import dev.proflyder.home.feature.control.impl.R
 
 internal class ControlDialogs(
@@ -43,16 +42,6 @@ internal class ControlDialogs(
             .show()
     }
 
-    fun askAlarmDisable(card: HubCard.Alarm) {
-        MaterialAlertDialogBuilder(context())
-            .setTitle(R.string.control_alarm_disable_title)
-            .setMessage(R.string.control_alarm_disable_message)
-            .setNeutralButton(R.string.control_alarm_disable_skip_once) { _, _ -> hub(HubCommand.Skip(card)) }
-            .setPositiveButton(R.string.control_alarm_disable_turn_off) { _, _ -> hub(HubCommand.Disable(card)) }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
-    }
-
     fun dismissAll() {
         lightSheet?.dismiss()
         lightSheet = null
@@ -65,6 +54,4 @@ internal class ControlDialogs(
     private fun pin(entry: ControlEntry) = dispatch(ControlIntent.TogglePin(PinSubject.Entry(entry, entry.devicePin)))
 
     private fun command(command: DeviceCommand) = dispatch(ControlIntent.Command(command))
-
-    private fun hub(command: HubCommand) = dispatch(ControlIntent.Hub(command))
 }

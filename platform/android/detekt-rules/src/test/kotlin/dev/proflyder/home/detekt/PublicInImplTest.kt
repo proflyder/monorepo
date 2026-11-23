@@ -76,6 +76,8 @@ class PublicInImplTest {
                 class ScreenViewModel
                 @ContributesTo(AppScope::class)
                 interface FeatureInjector
+                @GraphExtension(FeatureScope::class)
+                interface FeatureGraph
                 class Helper
                 class InjectedService {
                     @Inject

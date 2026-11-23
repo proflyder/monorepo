@@ -17,6 +17,7 @@ metro_android_library(
     resource_files = glob(["src/main/res/**"]) + [":google_services_resources"],
     view_binding = True,
     deps = [
+        "//projects/mobile/android/core/data",
         "//projects/mobile/android/core/config",
         "//projects/mobile/android/core/model",
         "//projects/mobile/android/core/navigation",

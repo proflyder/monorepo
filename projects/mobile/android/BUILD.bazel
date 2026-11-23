@@ -3,6 +3,7 @@ load("//platform/android:defs.bzl", "home_android_lint", "home_detekt")
 package(default_visibility = ["//visibility:public"])
 
 DETEKT_TEST_TARGETS = [
+    "//projects/mobile/android/core/data:data_test",
     "//projects/mobile/android/app:chat_attach_menu_test",
     "//projects/mobile/android/app:key_screens_screenshot_test",
     "//projects/mobile/android/app:main_activity_smoke_test",
@@ -21,6 +22,7 @@ DETEKT_TEST_TARGETS = [
     "//projects/mobile/android/features/alarms/api:api_test",
     "//projects/mobile/android/features/alarms/impl:adapter_payload_test",
     "//projects/mobile/android/features/alarms/impl:editor_screenshot_test",
+    "//projects/mobile/android/features/alarms/impl:upcoming_section_screenshot_test",
     "//projects/mobile/android/features/alarms/impl:item_layout_test",
     "//projects/mobile/android/features/alarms/impl:selection_animation_test",
     "//projects/mobile/android/features/call/impl:call_test",
@@ -69,6 +71,7 @@ test_suite(
         "//projects/mobile/android/app:apk_abi_test",
         "//projects/mobile/android/app:apk_manifest_test",
         "//projects/mobile/android/app:apk_runtime_closure_test",
+        "//projects/mobile/android/core/data:data_test",
         "//projects/mobile/android/core/config:config_test",
         "//projects/mobile/android/core/designsystem:designsystem_test",
         "//projects/mobile/android/core/config:remote_connection_source_test",
@@ -83,6 +86,7 @@ test_suite(
         "//projects/mobile/android/features/alarms/impl:repeat_sheet_test",
         "//projects/mobile/android/features/alarms/impl:selection_animation_test",
         "//projects/mobile/android/features/alarms/impl:selection_bar_test",
+        "//projects/mobile/android/features/alarms/impl:upcoming_section_screenshot_test",
         "//projects/mobile/android/features/call/impl:call_test",
         "//projects/mobile/android/features/chat/impl:chat_test",
         "//projects/mobile/android/features/control/api:api_test",

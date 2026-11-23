@@ -52,6 +52,10 @@
     <string name="alarms_in_days">%1$s %2$s</string>
     <string name="alarms_saved">Alarm saved</string>
     <string name="alarms_deleted">Alarm deleted</string>
+    <string name="alarms_upcoming_today">today</string>
+    <string name="alarms_upcoming_tomorrow">tomorrow</string>
+    <string name="alarms_upcoming_ringing">Ringing</string>
+    <string name="alarms_upcoming_subtitle">%1$s · %2$s</string>
     <string name="alarms_select_all">Select all</string>
     <string name="alarms_select_none">Clear</string>
     <string name="alarms_selection_close">Exit selection</string>

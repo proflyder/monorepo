@@ -44,20 +44,8 @@
     <string name="control_volume_unmute">Включить звук</string>
     <string name="control_hub_today">сегодня</string>
     <string name="control_hub_tomorrow">завтра</string>
-    <string name="control_hub_alarm">Будильник</string>
     <string name="control_hub_timer">Таймер</string>
     <string name="control_hub_reminder">Напоминание</string>
-    <string name="control_hub_ringing">Звонит</string>
-    <string name="control_hub_repeat_daily">каждый день</string>
-    <string name="control_hub_repeat_weekdays">будни</string>
-    <string name="control_hub_repeat_weekends">выходные</string>
-    <string name="control_hub_repeat_once">один раз</string>
-    <string name="control_hub_repeat_unknown">повтор</string>
-    <string name="control_hub_alarm_subtitle">%1$s · %2$s</string>
-    <string name="control_alarm_disable_title">Выключить будильник?</string>
-    <string name="control_alarm_disable_message">Будильник повторяется. Пропустить только ближайшее срабатывание или отключить его совсем?</string>
-    <string name="control_alarm_disable_skip_once">Пропустить один раз</string>
-    <string name="control_alarm_disable_turn_off">Отключить совсем</string>
 
     <string name="control_wake_false_alarm">Ложное</string>
     <string name="control_wake_missed">Не услышал</string>

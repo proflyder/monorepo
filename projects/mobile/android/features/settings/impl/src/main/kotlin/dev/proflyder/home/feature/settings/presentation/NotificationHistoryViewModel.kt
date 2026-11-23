@@ -1,7 +1,9 @@
 package dev.proflyder.home.feature.settings.presentation
 
 import androidx.lifecycle.ViewModel
+import dev.proflyder.home.core.data.FeatureScope
 import dev.proflyder.home.core.model.Clock
+import dev.proflyder.home.core.presentation.viewModel
 import dev.proflyder.home.core.navigation.Route
 import dev.proflyder.home.core.presentation.StateViewModel
 import dev.proflyder.home.feature.push.NotificationHistoryEntry
@@ -32,7 +34,6 @@ internal sealed interface HistoryEvent {
     data class OpenRoute(val route: Route) : HistoryEvent
 }
 
-@Inject
 internal class NotificationHistoryViewModel(
     private val store: NotificationHistoryStore,
     private val clock: Clock,
@@ -40,7 +41,6 @@ internal class NotificationHistoryViewModel(
     private val zone: ZoneId = ZoneId.systemDefault()
 
     init {
-        launch { store.load() }
         launch { store.entries.collect { stored -> updateState { copy(entries = stored, rows = rowsOf(stored)) } } }
     }
 
@@ -66,7 +66,8 @@ internal class NotificationHistoryViewModel(
 @ClassKey(NotificationHistoryViewModel::class)
 @Inject
 class NotificationHistoryViewModelSource internal constructor(
-    private val viewModel: () -> NotificationHistoryViewModel,
+    private val history: FeatureScope<NotificationHistoryStore>,
+    private val clock: Clock,
 ) : ViewModelSource {
-    override fun create(): ViewModel = viewModel()
+    override fun create(): ViewModel = history.viewModel { NotificationHistoryViewModel(it, clock) }
 }

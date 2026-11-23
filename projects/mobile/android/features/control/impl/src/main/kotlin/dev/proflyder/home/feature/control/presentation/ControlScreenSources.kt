@@ -10,8 +10,10 @@ import dev.proflyder.home.feature.control.ControlFilter
 import dev.proflyder.home.feature.control.HubCard
 import dev.proflyder.home.feature.control.HubCards
 import dev.proflyder.home.feature.control.HubFormat
-import dev.proflyder.home.feature.control.data.HomeHubFeed
-import dev.proflyder.home.feature.control.data.HubData
+import dev.proflyder.home.core.data.RefreshMode
+import dev.proflyder.home.core.data.loadedItems
+import dev.proflyder.home.core.model.Schedule
+import dev.proflyder.home.core.model.Timer
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -24,13 +26,13 @@ import kotlinx.coroutines.flow.map
 
 internal class ControlScreenSources(
     dependencies: ControlScreenDependencies,
-    private val hubFeed: HomeHubFeed,
     private val favorites: ControlFavorites,
     private val tiles: QuickTileLauncher,
 ) {
     private val repository = dependencies.repository
     private val preferences = dependencies.preferences
     private val clock = dependencies.clock
+    private val hub = dependencies.hub
 
     fun state(
         pending: Flow<Set<String>>,
@@ -47,11 +49,15 @@ internal class ControlScreenSources(
 
     fun refresh() {
         repository.refresh()
-        hubFeed.refresh()
+        refreshHub()
+    }
+
+    fun refreshHub() {
+        listOf(hub.timers, hub.reminders, hub.scenarios).forEach { it.refresh(RefreshMode.SOFT) }
     }
 
     private fun remote(): Flow<ControlUiState> {
-        val scenarios = hubFeed.state.map { it.scenarios }.distinctUntilChanged()
+        val scenarios = hub.scenarios.loadedItems()
         return combine(
             repository.catalog,
             hubView(),
@@ -78,17 +84,16 @@ internal class ControlScreenSources(
     )
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    private fun hubView(): Flow<HubView> = hubFeed.state.flatMapLatest { data ->
-        nowUnix(data).map { now -> data.toView(now) }
-    }
+    private fun hubView(): Flow<HubView> = combine(hub.timers.items, hub.reminders.items, ::Pair)
+        .flatMapLatest { (timers, reminders) -> nowUnix(timers).map { now -> hubViewOf(timers, reminders, now) } }
 
-    private fun nowUnix(data: HubData): Flow<Long> = when (data.timers.orEmpty().any { it.state == TimerState.RUNNING }) {
+    private fun nowUnix(timers: List<Timer>): Flow<Long> = when (timers.any { it.state == TimerState.RUNNING }) {
         true -> tickerFlow(TICK).map { clock.nowUnix() }
         false -> flowOf(clock.nowUnix())
     }
 
-    private fun HubData.toView(now: Long): HubView {
-        val cards = HubCards.build(alarms.orEmpty(), timers.orEmpty(), reminders.orEmpty(), now)
+    private fun hubViewOf(timers: List<Timer>, reminders: List<Schedule>, now: Long): HubView {
+        val cards = HubCards.build(timers, reminders, now)
         val remaining = cards.filterIsInstance<HubCard.TimerCard>()
             .associate { it.key to HubFormat.timerRemaining(it.timer, now) }
         return HubView(cards, remaining, now)

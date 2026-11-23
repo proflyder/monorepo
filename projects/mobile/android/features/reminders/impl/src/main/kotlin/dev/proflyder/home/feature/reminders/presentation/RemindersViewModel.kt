@@ -6,24 +6,23 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.model.Schedule
-import dev.proflyder.home.core.presentation.AppEventBus
 import dev.proflyder.home.core.presentation.ExclusiveActions
-import dev.proflyder.home.core.presentation.ListLoadState
-import dev.proflyder.home.core.presentation.ListRefresher
-import dev.proflyder.home.core.presentation.LoadStep
-import dev.proflyder.home.core.presentation.RefreshMode
+import dev.proflyder.home.core.data.ListLoadState
+import dev.proflyder.home.core.data.RefreshMode
 import dev.proflyder.home.core.presentation.StateViewModel
-import dev.proflyder.home.core.presentation.eventsOf
-import dev.proflyder.home.core.presentation.valueOr
+import dev.proflyder.home.core.presentation.viewModel
+import dev.proflyder.home.core.data.backgroundFailures
+import dev.proflyder.home.feature.reminders.di.RemindersFeatureScope
 import dev.proflyder.home.core.ui.ViewModelSource
-import dev.proflyder.home.feature.reminders.ReminderOrder
 import dev.proflyder.home.feature.reminders.ReminderRepository
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ClassKey
 import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.binding
-import kotlinx.coroutines.flow.merge
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 
 internal data class RemindersUiState(
     val load: ListLoadState = ListLoadState(),
@@ -48,9 +47,7 @@ internal sealed interface RemindersEvent {
 
 internal class RemindersViewModel(
     private val repository: ReminderRepository,
-    bus: AppEventBus,
 ) : StateViewModel<RemindersUiState, RemindersIntent, RemindersEvent>(RemindersUiState()) {
-    private val loader = ListRefresher(viewModelScope, repository::list, ::onLoad)
     private val actions = ExclusiveActions(
         scope = viewModelScope,
         onBusy = { id -> updateState { copy(busyId = id) } },
@@ -58,8 +55,9 @@ internal class RemindersViewModel(
     )
 
     init {
-        loader.refresh(RefreshMode.SOFT)
-        loader.refreshOn(merge(visibility.returned, bus.eventsOf<RemindersChanged>()))
+        combine(repository.items, repository.load, ::onStore).launchIn(viewModelScope)
+        repository.backgroundFailures().onEach { emit(RemindersEvent.Failure(it)) }.launchIn(viewModelScope)
+        repository.refreshOn(visibility.returned)
     }
 
     private fun openEditor(id: String?) {
@@ -68,30 +66,17 @@ internal class RemindersViewModel(
 
     override fun handle(intent: RemindersIntent) {
         when (intent) {
-            is RemindersIntent.Refresh -> loader.refresh(intent.mode)
+            is RemindersIntent.Refresh -> repository.refresh(intent.mode)
             RemindersIntent.Add -> openEditor(null)
             is RemindersIntent.Open -> openEditor(intent.id)
-            is RemindersIntent.Toggle -> toggle(intent.id, intent.enabled)
+            is RemindersIntent.Toggle -> actions.run(intent.id, { repository.setEnabled(intent.id, intent.enabled) }) { }
             is RemindersIntent.RequestDelete -> emit(RemindersEvent.ConfirmDelete(intent.id))
-            is RemindersIntent.Delete -> delete(intent.id)
+            is RemindersIntent.Delete -> actions.run(intent.id, { repository.delete(intent.id) }) { }
         }
     }
 
-    private fun onLoad(step: LoadStep<List<Schedule>>) {
-        updateState { copy(load = load.after(step), reminders = step.valueOr(reminders).sortedWith(ReminderOrder)) }
-        if (step is LoadStep.Failed && currentState.reminders.isNotEmpty()) emit(RemindersEvent.Failure(step.failure))
-    }
-
-    private fun toggle(id: String, enabled: Boolean) {
-        actions.run(id, { repository.setEnabled(id, enabled) }) { updated ->
-            updateState { copy(reminders = reminders.map { if (it.id == updated.id) updated else it }) }
-        }
-    }
-
-    private fun delete(id: String) {
-        actions.run(id, { repository.delete(id) }) {
-            updateState { copy(reminders = reminders.filterNot { it.id == id }) }
-        }
+    private fun onStore(reminders: List<Schedule>, load: ListLoadState) = updateState {
+        copy(load = load, reminders = reminders)
     }
 }
 
@@ -99,8 +84,7 @@ internal class RemindersViewModel(
 @ClassKey(RemindersViewModel::class)
 @Inject
 class RemindersViewModelSource internal constructor(
-    private val repository: ReminderRepository,
-    private val bus: AppEventBus,
+    private val scope: RemindersFeatureScope,
 ) : ViewModelSource {
-    override fun create(): ViewModel = RemindersViewModel(repository, bus)
+    override fun create(): ViewModel = scope.viewModel { RemindersViewModel(it.repository) }
 }

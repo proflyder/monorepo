@@ -10,7 +10,15 @@ import dev.proflyder.home.core.model.RepeatKind
 import dev.proflyder.home.core.model.Schedule
 import dev.proflyder.home.core.model.ScheduleKind
 import dev.proflyder.home.core.model.WallTime
-import dev.proflyder.home.core.presentation.AppEventBus
+import dev.proflyder.home.core.presentation.viewModel
+import dev.proflyder.home.feature.reminders.di.RemindersFeatureScope
+import dev.proflyder.home.feature.reminders.di.RemindersGraph
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.flow.dropWhile
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.take
 import dev.proflyder.home.core.presentation.EditorDraftCodec
 import dev.proflyder.home.core.presentation.EditorDraftSession
 import dev.proflyder.home.core.presentation.EditorStatus
@@ -77,7 +85,6 @@ internal typealias ReminderDraftSession = EditorDraftSession<ReminderEditorDraft
 internal class ReminderEditorViewModel(
     private val repository: ReminderRepository,
     private val saveReminder: SaveReminder,
-    private val bus: AppEventBus,
     private val session: ReminderDraftSession,
     reminderId: String?,
 ) : StateViewModel<ReminderEditorUiState, ReminderEditorIntent, ReminderEditorEvent>(
@@ -110,9 +117,23 @@ internal class ReminderEditorViewModel(
     private fun start(reminderId: String?) {
         if (session.restored != null) return
         if (reminderId == null) return session.persist(currentState.toEditorDraft())
+        closeWhenRemoved(reminderId)
+        repository[reminderId]?.let(::loaded) ?: fetch(reminderId)
+    }
+
+    private fun closeWhenRemoved(reminderId: String) {
+        repository.observe(reminderId)
+            .dropWhile { it == null }
+            .filter { it == null && !currentState.status.saving }
+            .take(1)
+            .onEach { emit(ReminderEditorEvent.OpenRoute(Route.Back)) }
+            .launchIn(viewModelScope)
+    }
+
+    private fun fetch(reminderId: String) {
         updateState { copy(status = status.loadingStarted()) }
         launch {
-            when (val result = repository.get(reminderId)) {
+            when (val result = repository.load(reminderId)) {
                 is Outcome.Success -> loaded(result.value)
                 is Outcome.Failure -> updateState { copy(status = status.loadFailed(result.failure)) }
             }
@@ -156,7 +177,6 @@ internal class ReminderEditorViewModel(
         if (failure != null) return
         session.persist(currentState.toEditorDraft())
         session.complete(completion)
-        bus.publish(RemindersChanged)
         emit(ReminderEditorEvent.Completed(completion))
     }
 }
@@ -165,17 +185,14 @@ internal class ReminderEditorViewModel(
 @ClassKey(ReminderEditorViewModel::class)
 @Inject
 class ReminderEditorViewModelSource internal constructor(
-    private val repository: ReminderRepository,
-    private val saveReminder: SaveReminder,
+    private val scope: RemindersFeatureScope,
     private val settings: ConnectionSettingsStore,
-    private val bus: AppEventBus,
 ) : SavedStateViewModelFactory {
-    override fun create(savedState: SavedStateHandle): ViewModel = build(savedState)
+    override fun create(savedState: SavedStateHandle): ViewModel = scope.viewModel { graph -> build(graph, savedState) }
 
-    private fun build(savedState: SavedStateHandle) = ReminderEditorViewModel(
-        repository = repository,
-        saveReminder = saveReminder,
-        bus = bus,
+    private fun build(graph: RemindersGraph, savedState: SavedStateHandle) = ReminderEditorViewModel(
+        repository = graph.repository,
+        saveReminder = graph.saveReminder,
         session = EditorDraftSession(savedState, KEY_PREFIX, ReminderDraftCodec, ReminderEditorCompletion.entries) {
             settings.config.value.endpoint?.baseUrl().orEmpty()
         },

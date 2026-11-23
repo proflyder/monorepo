@@ -1,8 +1,15 @@
-package dev.proflyder.home.core.presentation
+package dev.proflyder.home.core.data
 
-import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RemoteFailure
-import kotlinx.coroutines.CoroutineScope
+
+enum class RefreshMode {
+    SOFT,
+    HARD,
+}
+
+interface Refreshable {
+    fun refresh(mode: RefreshMode)
+}
 
 data class ListLoadState(
     val refreshing: Boolean = true,
@@ -22,23 +29,3 @@ sealed interface LoadStep<out T> {
 }
 
 fun <T> LoadStep<T>.valueOr(current: T): T = (this as? LoadStep.Loaded<T>)?.value ?: current
-
-class ListRefresher<T>(
-    scope: CoroutineScope,
-    private val load: suspend () -> Outcome<T>,
-    private val onStep: (LoadStep<T>) -> Unit,
-) : Refreshable {
-    private val launcher = LatestLauncher(scope)
-
-    val isRefreshing: Boolean get() = launcher.isActive
-
-    override fun refresh(mode: RefreshMode) {
-        onStep(LoadStep.Started(mode))
-        launcher.launch { onStep(load().toStep()) }
-    }
-
-    private fun Outcome<T>.toStep(): LoadStep<T> = when (this) {
-        is Outcome.Success -> LoadStep.Loaded(value)
-        is Outcome.Failure -> LoadStep.Failed(failure)
-    }
-}

@@ -14,7 +14,9 @@ import dev.proflyder.home.core.navigation.ToolbarSlots
 import dev.proflyder.home.feature.control.ControlListDestination
 import dev.proflyder.home.feature.control.VoiceProfileState
 import dev.proflyder.home.feature.control.VoiceProfileSwitch
+import dev.proflyder.home.feature.control.di.ControlFeatureScope
 import dev.proflyder.home.feature.control.impl.R
+import dev.proflyder.home.core.presentation.LeaseRelease
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesIntoSet
 import dev.zacsweers.metro.Inject
@@ -25,8 +27,8 @@ import kotlinx.coroutines.launch
 
 @ContributesIntoSet(AppScope::class, binding = binding<ToolbarContribution>())
 @Inject
-class VoiceProfileToolbarChip(
-    private val profiles: VoiceProfileSwitch,
+class VoiceProfileToolbarChip internal constructor(
+    private val scope: ControlFeatureScope,
 ) : ToolbarContribution {
     override val order: Int = 0
 
@@ -34,7 +36,10 @@ class VoiceProfileToolbarChip(
         val chip = LayoutInflater.from(slots.start.context)
             .inflate(R.layout.control_profile_chip, slots.start, false) as MaterialButton
         slots.start.addView(chip)
-        chip.setOnClickListener { activity.lifecycleScope.launch { switch() } }
+        val lease = scope.acquire()
+        activity.lifecycle.addObserver(LeaseRelease(lease))
+        val profiles = lease.graph.voiceProfile
+        chip.setOnClickListener { activity.lifecycleScope.launch { switch(profiles) } }
         activity.lifecycleScope.launch {
             activity.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 combine(profiles.profile, navigator.chrome, ::visibleProfile).collect { render(chip, it) }
@@ -42,7 +47,7 @@ class VoiceProfileToolbarChip(
         }
     }
 
-    private suspend fun switch() {
+    private suspend fun switch(profiles: VoiceProfileSwitch) {
         profiles.profile.first()?.let { profiles.setWork(!it.work) }
     }
 

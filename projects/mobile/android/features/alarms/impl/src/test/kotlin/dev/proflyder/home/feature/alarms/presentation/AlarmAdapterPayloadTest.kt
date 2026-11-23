@@ -80,7 +80,7 @@ class AlarmAdapterPayloadTest {
         val context = ContextThemeWrapper(RuntimeEnvironment.getApplication(), com.google.android.material.R.style.Theme_Material3_DayNight)
         val list = RecyclerView(context)
         list.layoutManager = LinearLayoutManager(context)
-        list.adapter = AlarmAdapter(AlarmAdapterCallback {})
+        list.adapter = AlarmAdapter(AlarmAdapterCallback({}) {})
         list.measure(exactly(1080), exactly(2400))
         list.layout(0, 0, 1080, 2400)
         return list

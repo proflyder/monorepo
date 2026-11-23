@@ -10,6 +10,8 @@ metro_android_library(
     resource_files = glob(["src/main/res/**"]),
     view_binding = True,
     deps = [
+        "//projects/mobile/android/core/runtime",
+        "//projects/mobile/android/core/data",
         "//packages/kotlin/core",
         "//projects/mobile/android/core/config",
         "//projects/mobile/android/core/model",
@@ -43,6 +45,7 @@ home_android_local_test(
     resources = glob(["src/test/resources/**"]),
     test_class = "dev.proflyder.home.feature.scenarios.AllScenarioImplTests",
     deps = [
+        "//projects/mobile/android/core/data",
         "//projects/mobile/android/core/config",
         "//projects/mobile/android/core/model",
         "//projects/mobile/android/core/network/api",

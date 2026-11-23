@@ -13,17 +13,16 @@ import dev.proflyder.home.core.model.TimerState
 import dev.proflyder.home.core.model.isAmbiguousRetryable
 import dev.proflyder.home.core.operation.IdempotentRequestKey
 import dev.proflyder.home.core.presentation.ExclusiveActions
-import dev.proflyder.home.core.presentation.ListLoadState
-import dev.proflyder.home.core.presentation.ListRefresher
-import dev.proflyder.home.core.presentation.LoadStep
-import dev.proflyder.home.core.presentation.RefreshMode
+import dev.proflyder.home.core.data.ListLoadState
+import dev.proflyder.home.core.data.RefreshMode
 import dev.proflyder.home.core.presentation.StateViewModel
-import dev.proflyder.home.core.presentation.valueOr
+import dev.proflyder.home.core.data.backgroundFailures
+import dev.proflyder.home.core.presentation.viewModel
+import dev.proflyder.home.feature.timers.di.TimersFeatureScope
+import dev.proflyder.home.feature.timers.di.TimersGraph
 import dev.proflyder.home.core.runtime.tickerFlow
 import dev.proflyder.home.core.ui.ViewModelSource
-import dev.proflyder.home.feature.timers.TimerOrder
 import dev.proflyder.home.feature.timers.TimerRepository
-import dev.proflyder.home.feature.timers.domain.LoadTimers
 import dev.proflyder.home.feature.timers.domain.StartTimer
 import dev.proflyder.home.feature.timers.impl.R
 import dev.proflyder.home.feature.timers.toTimerInput
@@ -35,6 +34,7 @@ import dev.zacsweers.metro.binding
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.launchIn
@@ -66,7 +66,6 @@ internal sealed interface TimersEvent {
 }
 
 internal class TimersViewModel(
-    private val loadTimers: LoadTimers,
     private val startTimer: StartTimer,
     private val repository: TimerRepository,
     private val serverClock: ServerClock,
@@ -75,7 +74,6 @@ internal class TimersViewModel(
     clock: Clock,
 ) : StateViewModel<TimersUiState, TimersIntent, TimersEvent>(TimersUiState()) {
     private val refreshPolicy = TimerRefreshPolicy(clock)
-    private val loader = ListRefresher(viewModelScope, { loadTimers() }, ::onLoad)
     private val actions = ExclusiveActions(
         scope = viewModelScope,
         onBusy = { id -> updateState { copy(busyId = id) } },
@@ -86,14 +84,15 @@ internal class TimersViewModel(
     private data class StartPayload(val label: String, val seconds: Long, val endpoint: String)
 
     init {
-        loader.refresh(RefreshMode.SOFT)
-        loader.refreshOn(visibility.returned)
+        combine(repository.items, repository.load, ::onStore).launchIn(viewModelScope)
+        repository.backgroundFailures().onEach { emit(TimersEvent.Failure(it)) }.launchIn(viewModelScope)
+        visibility.returned.onEach { refresh(RefreshMode.SOFT) }.launchIn(viewModelScope)
         countdownWhileVisible()
     }
 
     override fun handle(intent: TimersIntent) {
         when (intent) {
-            is TimersIntent.Refresh -> loader.refresh(intent.mode)
+            is TimersIntent.Refresh -> refresh(intent.mode)
             is TimersIntent.SetLabel -> updateState { copy(form = form.copy(label = intent.value)) }
             is TimersIntent.SetDuration -> updateState { copy(form = form.copy(duration = intent.value, durationInvalid = false)) }
             is TimersIntent.Preset -> updateState { copy(form = form.copy(duration = intent.duration.toTimerInput(), durationInvalid = false)) }
@@ -114,14 +113,15 @@ internal class TimersViewModel(
 
     private fun tick() {
         updateState { copy(rows = timers.toRows()) }
-        if (!loader.isRefreshing && refreshPolicy.due(currentState.rows)) loader.refresh(RefreshMode.SOFT)
+        if (refreshPolicy.due(currentState.rows)) refresh(RefreshMode.SOFT)
     }
 
-    private fun onLoad(step: LoadStep<List<Timer>>) {
-        if (step is LoadStep.Started) refreshPolicy.refreshed()
-        updateState { withTimers(step.valueOr(timers)).copy(load = load.after(step)) }
-        if (step is LoadStep.Failed && currentState.timers.isNotEmpty()) emit(TimersEvent.Failure(step.failure))
+    private fun refresh(mode: RefreshMode) {
+        refreshPolicy.refreshed()
+        repository.refresh(mode)
     }
+
+    private fun onStore(timers: List<Timer>, load: ListLoadState) = updateState { withTimers(timers).copy(load = load) }
 
     private fun start() {
         val form = currentState.form.validated()
@@ -139,26 +139,21 @@ internal class TimersViewModel(
             is Outcome.Success -> startIdentity.markSucceeded()
             is Outcome.Failure -> if (!result.failure.isAmbiguousRetryable()) startIdentity.reset()
         }
-        updateState { (if (result is Outcome.Success) withTimers(timers + result.value) else this).copy(starting = false) }
+        updateState { copy(starting = false) }
         if (result is Outcome.Failure) emit(TimersEvent.Failure(result.failure))
     }
 
     private fun togglePause(id: String) {
         val timer = currentState.timers.firstOrNull { it.id == id } ?: return
         val paused = timer.state == TimerState.PAUSED
-        actions.run(id, { if (paused) repository.resume(id) else repository.pause(id) }) { updated ->
-            updateState { withTimers(timers.map { if (it.id == updated.id) updated else it }) }
-        }
+        actions.run(id, { if (paused) repository.resume(id) else repository.pause(id) }) { }
     }
 
     private fun cancel(id: String) {
-        actions.run(id, { repository.cancel(id) }) { updateState { withTimers(timers.filterNot { it.id == id }) } }
+        actions.run(id, { repository.cancel(id) }) { }
     }
 
-    private fun TimersUiState.withTimers(next: List<Timer>): TimersUiState {
-        val sorted = next.sortedWith(TimerOrder)
-        return copy(timers = sorted, rows = sorted.toRows())
-    }
+    private fun TimersUiState.withTimers(next: List<Timer>): TimersUiState = copy(timers = next, rows = next.toRows())
 
     private fun List<Timer>.toRows(): List<TimerRow> = map { TimerRow(it, serverClock.remainingSeconds(it)) }
 
@@ -171,20 +166,17 @@ internal class TimersViewModel(
 @ClassKey(TimersViewModel::class)
 @Inject
 class TimersViewModelSource internal constructor(
-    private val loadTimers: LoadTimers,
-    private val startTimer: StartTimer,
-    private val repository: TimerRepository,
+    private val scope: TimersFeatureScope,
     private val serverClock: ServerClock,
     private val settings: ConnectionSettingsStore,
     private val clock: Clock,
     private val context: Context,
 ) : ViewModelSource {
-    override fun create(): ViewModel = build()
+    override fun create(): ViewModel = scope.viewModel(::build)
 
-    private fun build() = TimersViewModel(
-        loadTimers = loadTimers,
-        startTimer = startTimer,
-        repository = repository,
+    private fun build(graph: TimersGraph) = TimersViewModel(
+        startTimer = graph.startTimer,
+        repository = graph.repository,
         serverClock = serverClock,
         settings = settings,
         defaultLabel = context.getString(R.string.timers_default_label),

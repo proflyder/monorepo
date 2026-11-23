@@ -16,23 +16,39 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent">
 
-            <LinearLayout
+            <androidx.coordinatorlayout.widget.CoordinatorLayout
                 android:id="@+id/control_content"
                 android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:orientation="vertical">
+                android:layout_height="match_parent">
+
+                <com.google.android.material.appbar.AppBarLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@android:color/transparent"
+                    app:liftOnScroll="false"
+                    app:elevation="0dp">
+
+                    <androidx.fragment.app.FragmentContainerView
+                        android:id="@+id/control_alarms_slot"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:paddingStart="@dimen/ds_space_l"
+                        android:paddingTop="@dimen/ds_space_s"
+                        android:paddingEnd="@dimen/ds_space_l"
+                        app:layout_scrollFlags="scroll|enterAlways" />
+                </com.google.android.material.appbar.AppBarLayout>
 
                 <androidx.recyclerview.widget.RecyclerView
                     android:id="@+id/control_list"
                     android:layout_width="match_parent"
-                    android:layout_height="0dp"
-                    android:layout_weight="1"
+                    android:layout_height="match_parent"
+                    app:layout_behavior="@string/appbar_scrolling_view_behavior"
                     android:clipToPadding="false"
                     android:paddingStart="@dimen/ds_space_l"
                     android:paddingTop="@dimen/ds_space_s"
                     android:paddingEnd="@dimen/ds_space_l"
                     android:paddingBottom="@dimen/ds_space_xl" />
-            </LinearLayout>
+            </androidx.coordinatorlayout.widget.CoordinatorLayout>
 
             <ProgressBar
                 android:id="@+id/control_progress"

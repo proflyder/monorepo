@@ -71,6 +71,7 @@ class PublicInImpl(config: Config = Config.empty) : Rule(config) {
             "ContributesIntoMap",
             "ContributesTo",
             "BindingContainer",
+            "GraphExtension",
         )
     }
 }

@@ -5,13 +5,19 @@ import dev.proflyder.home.core.navigation.destination
 import android.content.Context
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import dev.proflyder.home.core.presentation.viewModel
+import kotlinx.coroutines.flow.dropWhile
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.take
 import dev.proflyder.home.core.config.ConnectionSettingsStore
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RepeatKind
 import dev.proflyder.home.core.model.Schedule
 import dev.proflyder.home.core.model.ScheduleKind
 import dev.proflyder.home.core.model.WallTime
-import dev.proflyder.home.core.presentation.AppEventBus
 import dev.proflyder.home.core.presentation.EditorDraftCodec
 import dev.proflyder.home.core.presentation.EditorDraftSession
 import dev.proflyder.home.core.presentation.EditorStatus
@@ -25,6 +31,8 @@ import dev.proflyder.home.feature.alarms.AlarmEditorDraft
 import dev.proflyder.home.feature.alarms.AlarmEditorDraftCodec
 import dev.proflyder.home.feature.alarms.AlarmRepository
 import dev.proflyder.home.feature.alarms.defaultAlarmTime
+import dev.proflyder.home.feature.alarms.di.AlarmsFeatureScope
+import dev.proflyder.home.feature.alarms.di.AlarmsGraph
 import dev.proflyder.home.feature.alarms.domain.SaveAlarm
 import dev.proflyder.home.feature.alarms.impl.R
 import dev.proflyder.home.feature.alarms.quickOffsetTime
@@ -60,8 +68,6 @@ internal sealed interface AlarmEditorIntent {
     data object PickDate : AlarmEditorIntent
     data object PickRepeat : AlarmEditorIntent
     data object Save : AlarmEditorIntent
-    data object RequestDelete : AlarmEditorIntent
-    data object Delete : AlarmEditorIntent
     data object CompletionShown : AlarmEditorIntent
 }
 
@@ -69,7 +75,6 @@ internal sealed interface AlarmEditorEvent {
     data class PickTime(val hour: Int, val minute: Int) : AlarmEditorEvent
     data class PickDate(val selected: LocalDate) : AlarmEditorEvent
     data class PickRepeat(val repeat: RepeatKind, val days: Set<Int>) : AlarmEditorEvent
-    data object ConfirmDelete : AlarmEditorEvent
     data class Completed(val notice: RouteNotice) : AlarmEditorEvent
     data class OpenRoute(val route: Route) : AlarmEditorEvent
 }
@@ -85,7 +90,6 @@ internal typealias AlarmDraftSession = EditorDraftSession<AlarmEditorDraft, Alar
 internal class AlarmEditorViewModel(
     private val repository: AlarmRepository,
     private val saveAlarm: SaveAlarm,
-    private val bus: AppEventBus,
     private val session: AlarmDraftSession,
     private val defaultLabel: String,
     alarmId: String?,
@@ -107,7 +111,6 @@ internal class AlarmEditorViewModel(
             is AlarmEditorIntent.SetEnabled -> edit { copy(enabled = intent.value) }
             is AlarmEditorIntent.SetDate -> edit { copy(onceDate = intent.value) }
             AlarmEditorIntent.Save -> save()
-            AlarmEditorIntent.Delete -> delete()
             AlarmEditorIntent.CompletionShown -> {
                 session.consumeCompletion()
                 emit(AlarmEditorEvent.OpenRoute(Route.Back))
@@ -122,7 +125,6 @@ internal class AlarmEditorViewModel(
             AlarmEditorIntent.PickTime -> emit(AlarmEditorEvent.PickTime(state.hour, state.minute))
             AlarmEditorIntent.PickDate -> emit(AlarmEditorEvent.PickDate(state.onceDate ?: LocalDate.now()))
             AlarmEditorIntent.PickRepeat -> emit(AlarmEditorEvent.PickRepeat(state.repeat, state.weekdays))
-            AlarmEditorIntent.RequestDelete -> emit(AlarmEditorEvent.ConfirmDelete)
             else -> Unit
         }
     }
@@ -130,13 +132,27 @@ internal class AlarmEditorViewModel(
     private fun start(alarmId: String?) {
         if (session.restored != null) return
         if (alarmId == null) return session.persist(currentState.toEditorDraft())
+        closeWhenRemoved(alarmId)
+        repository[alarmId]?.let(::loaded) ?: fetch(alarmId)
+    }
+
+    private fun fetch(alarmId: String) {
         updateState { copy(status = status.loadingStarted()) }
         launch {
-            when (val result = repository.get(alarmId)) {
+            when (val result = repository.load(alarmId)) {
                 is Outcome.Success -> loaded(result.value)
                 is Outcome.Failure -> updateState { copy(status = status.loadFailed(result.failure)) }
             }
         }
+    }
+
+    private fun closeWhenRemoved(alarmId: String) {
+        repository.observe(alarmId)
+            .dropWhile { it == null }
+            .filter { it == null && !currentState.status.saving }
+            .take(1)
+            .onEach { emit(AlarmEditorEvent.OpenRoute(Route.Back)) }
+            .launchIn(viewModelScope)
     }
 
     private fun loaded(alarm: Schedule) {
@@ -164,26 +180,17 @@ internal class AlarmEditorViewModel(
         finish(result, AlarmEditorCompletion.SAVED, created)
     }
 
-    private fun delete() {
-        val existing = currentState.existing ?: return
-        if (currentState.status.saving) return
-        updateState { copy(status = status.savingStarted()) }
-        launch { finish(repository.delete(existing.id), AlarmEditorCompletion.DELETED) }
-    }
-
     private fun finish(result: Outcome<*>, completion: AlarmEditorCompletion, created: String? = null) {
         val failure = (result as? Outcome.Failure)?.failure
         updateState { copy(status = status.settled(failure)) }
         if (failure != null) return
         session.persist(currentState.toEditorDraft())
         session.complete(completion)
-        bus.publish(AlarmsChanged)
         emit(AlarmEditorEvent.Completed(noticeFor(completion, created)))
     }
 
     private fun noticeFor(completion: AlarmEditorCompletion, created: String?): RouteNotice = when (completion) {
         AlarmEditorCompletion.SAVED -> RouteNotice(R.string.alarms_saved, created?.let { Route.Screen(AlarmEditorDestination(it)) })
-        AlarmEditorCompletion.DELETED -> RouteNotice(R.string.alarms_deleted)
     }
 }
 
@@ -191,18 +198,15 @@ internal class AlarmEditorViewModel(
 @ClassKey(AlarmEditorViewModel::class)
 @Inject
 class AlarmEditorViewModelSource internal constructor(
-    private val repository: AlarmRepository,
-    private val saveAlarm: SaveAlarm,
+    private val scope: AlarmsFeatureScope,
     private val settings: ConnectionSettingsStore,
-    private val bus: AppEventBus,
     private val context: Context,
 ) : SavedStateViewModelFactory {
-    override fun create(savedState: SavedStateHandle): ViewModel = build(savedState)
+    override fun create(savedState: SavedStateHandle): ViewModel = scope.viewModel { graph -> build(graph, savedState) }
 
-    private fun build(savedState: SavedStateHandle) = AlarmEditorViewModel(
-        repository = repository,
-        saveAlarm = saveAlarm,
-        bus = bus,
+    private fun build(graph: AlarmsGraph, savedState: SavedStateHandle) = AlarmEditorViewModel(
+        repository = graph.repository,
+        saveAlarm = graph.saveAlarm,
         session = EditorDraftSession(savedState, KEY_PREFIX, AlarmDraftCodec, AlarmEditorCompletion.entries) {
             settings.config.value.endpoint?.baseUrl().orEmpty()
         },

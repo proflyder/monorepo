@@ -9,7 +9,6 @@ import dev.proflyder.home.core.model.Field
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.model.Scenario
-import dev.proflyder.home.core.presentation.AppEventBus
 import dev.proflyder.home.core.presentation.RouteNotice
 import dev.proflyder.home.core.presentation.StateViewModel
 import dev.proflyder.home.core.ui.SavedStateViewModelFactory
@@ -18,11 +17,12 @@ import dev.proflyder.home.feature.scenarios.ScenarioValidation
 import dev.proflyder.home.feature.scenarios.domain.DeleteScenario
 import dev.proflyder.home.feature.scenarios.domain.LoadScenario
 import dev.proflyder.home.feature.scenarios.domain.LoadScenarioCatalog
-import dev.proflyder.home.feature.scenarios.domain.SaveScenario
 import dev.proflyder.home.feature.scenarios.domain.ScenarioSaveSession
 import dev.proflyder.home.feature.scenarios.impl.R
 import dev.proflyder.home.feature.scenarios.isScenarioConflict
-import dev.proflyder.home.feature.scenarios.presentation.ScenariosChanged
+import dev.proflyder.home.core.presentation.viewModel
+import dev.proflyder.home.feature.scenarios.di.ScenariosFeatureScope
+import dev.proflyder.home.feature.scenarios.di.ScenariosGraph
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ClassKey
 import dev.zacsweers.metro.ContributesIntoMap
@@ -33,7 +33,6 @@ internal class ScenarioEditorViewModel(
     private val loadScenario: LoadScenario,
     private val loadCatalog: LoadScenarioCatalog,
     private val deleteScenario: DeleteScenario,
-    private val appEvents: AppEventBus,
     private val saved: SavedEditorState,
     private val session: ScenarioSaveSession,
 ) : StateViewModel<ScenarioEditorUiState, ScenarioEditorIntent, ScenarioEditorEvent>(ScenarioEditorUiState()),
@@ -198,7 +197,6 @@ internal class ScenarioEditorViewModel(
     }
 
     private fun finish(message: RouteNotice) {
-        appEvents.publish(ScenariosChanged)
         emit(ScenarioEditorEvent.Finished(message))
         emit(ScenarioEditorEvent.OpenRoute(Route.Back))
     }
@@ -213,18 +211,15 @@ internal fun CatalogState.loadedFrom(result: Outcome<ControlCatalog>): CatalogSt
 @ClassKey(ScenarioEditorViewModel::class)
 @Inject
 class ScenarioEditorViewModelSource internal constructor(
-    private val loadScenario: LoadScenario,
+    private val scope: ScenariosFeatureScope,
     private val loadCatalog: LoadScenarioCatalog,
-    private val saveScenario: SaveScenario,
-    private val deleteScenario: DeleteScenario,
     private val settings: ConnectionSettingsStore,
-    private val events: AppEventBus,
 ) : SavedStateViewModelFactory {
-    override fun create(savedState: SavedStateHandle): ViewModel = build(savedState)
+    override fun create(savedState: SavedStateHandle): ViewModel = scope.viewModel { graph -> build(graph, savedState) }
 
-    private fun build(handle: SavedStateHandle): ScenarioEditorViewModel {
+    private fun build(graph: ScenariosGraph, handle: SavedStateHandle): ScenarioEditorViewModel {
         val saved = SavedEditorState(handle)
-        val session = ScenarioSaveSession(saveScenario, settings, saved)
-        return ScenarioEditorViewModel(loadScenario, loadCatalog, deleteScenario, events, saved, session)
+        val session = ScenarioSaveSession(graph.saveScenario, settings, saved)
+        return ScenarioEditorViewModel(graph.loadScenario, loadCatalog, graph.deleteScenario, saved, session)
     }
 }

@@ -11,6 +11,7 @@ import dev.proflyder.home.core.navigation.FeatureEntry
 import dev.proflyder.home.core.navigation.FeatureRegistry
 import dev.proflyder.home.core.navigation.ToolbarAction
 import dev.proflyder.home.core.navigation.ToolbarContribution
+import dev.proflyder.home.core.presentation.ScreenSections
 import dev.proflyder.home.core.runtime.AppStartable
 import dev.proflyder.home.core.runtime.IoDispatcher
 import dev.proflyder.home.core.settings.HomeDataStore
@@ -37,6 +38,8 @@ interface AppGraph {
     val startables: Set<AppStartable>
 
     val viewModelFactory: ViewModelProvider.Factory
+
+    val screenSections: ScreenSections
 
     fun inject(activity: MainActivity)
 

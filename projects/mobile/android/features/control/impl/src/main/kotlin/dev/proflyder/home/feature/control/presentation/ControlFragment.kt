@@ -11,7 +11,9 @@ import dev.proflyder.home.core.ui.applyScrollBottomInset
 import dev.proflyder.home.core.ui.fabClearance
 import dev.proflyder.home.core.ui.liftAboveBottomInsets
 import dev.proflyder.home.core.ui.setupPullToRefresh
+import dev.proflyder.home.feature.alarms.UpcomingAlarmsSection
 import dev.proflyder.home.feature.control.SpeedDialItem
+import dev.proflyder.home.feature.control.impl.R
 import dev.proflyder.home.feature.control.impl.databinding.FragmentControlBinding
 
 internal class ControlFragment :
@@ -25,6 +27,10 @@ internal class ControlFragment :
         override fun handleOnBackPressed() = dispatch(ControlIntent.Dial(open = false))
     }
     private var speedDial: SpeedDialOverlay? = null
+
+    override fun onScreenCreate(savedInstanceState: Bundle?) {
+        section(R.id.control_alarms_slot, UpcomingAlarmsSection)
+    }
 
     override fun onViewReady(binding: FragmentControlBinding, savedInstanceState: Bundle?) {
         binding.controlList.applyScrollBottomInset(binding.controlList.fabClearance())
@@ -54,7 +60,6 @@ internal class ControlFragment :
             is ControlEvent.OpenVolume -> dialogs.openVolume(event.entry, event.announce)
             is ControlEvent.OpenSpeak -> dialogs.openSpeak(event.entry)
             is ControlEvent.ConfirmPin -> dialogs.confirmPin(event.entry, event.pinned)
-            is ControlEvent.AskAlarmDisable -> dialogs.askAlarmDisable(event.card)
             is ControlEvent.OpenRoute -> navigate(event.route)
         }
     }

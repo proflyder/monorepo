@@ -117,11 +117,6 @@ internal sealed interface DeviceCommand {
 internal sealed interface HubCommand {
     data class Primary(val card: HubCard) : HubCommand
 
-    data class Switch(val card: HubCard.Alarm, val enabled: Boolean) : HubCommand
-
-    data class Disable(val card: HubCard.Alarm) : HubCommand
-
-    data class Skip(val card: HubCard.Alarm) : HubCommand
 }
 
 internal sealed interface ControlIntent {
@@ -174,8 +169,6 @@ internal sealed interface ControlEvent {
     data class OpenSpeak(val entry: ControlEntry) : ControlEvent
 
     data class ConfirmPin(val entry: ControlEntry, val pinned: Boolean) : ControlEvent
-
-    data class AskAlarmDisable(val card: HubCard.Alarm) : ControlEvent
 
     data class OpenRoute(val route: Route) : ControlEvent
 }

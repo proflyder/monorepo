@@ -1,15 +1,13 @@
 package dev.proflyder.home.feature.scenarios
 
 import dev.proflyder.home.core.model.FavoritePreferences
+import dev.proflyder.home.feature.scenarios.data.ScenarioRemote
 import dev.proflyder.home.core.model.FavoriteRef
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.Scenario
 import dev.proflyder.home.core.model.ScenarioDraft
-import dev.proflyder.home.core.presentation.SharedFlowAppEventBus
-import dev.proflyder.home.feature.scenarios.domain.LoadScenarios
 import dev.proflyder.home.feature.scenarios.domain.RunScenario
 import dev.proflyder.home.feature.scenarios.domain.SetScenarioEnabled
-import dev.proflyder.home.feature.scenarios.presentation.ScenariosChanged
 import dev.proflyder.home.feature.scenarios.presentation.ScenariosIntent
 import dev.proflyder.home.feature.scenarios.presentation.ScenariosViewModel
 import kotlinx.coroutines.Dispatchers
@@ -31,45 +29,40 @@ class ScenariosViewModelTest {
     fun resetMainDispatcher() = Dispatchers.resetMain()
 
     @Test
-    fun editorChangeRefreshesTheListWithoutTheScreenAsking() = runTest {
+    fun aChangeInTheStoreReachesTheListWithoutAReload() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
-        val repository = CountingRepository()
-        val bus = SharedFlowAppEventBus()
-        val viewModel = ScenariosViewModel(
-            LoadScenarios(repository),
-            SetScenarioEnabled(repository),
-            RunScenario(repository),
-            NoFavorites,
-            bus,
-        )
+        val remote = CountingRemote()
+        val repository = remote.store(Dispatchers.Main)
+        val viewModel = viewModel(repository)
         advanceUntilIdle()
-        assertEquals(1, repository.lists)
+        assertEquals(1, remote.lists)
 
-        bus.publish(ScenariosChanged)
+        repository.create(ScenarioDraft(label = "new"), "key")
         advanceUntilIdle()
-        assertEquals(2, repository.lists)
-        assertEquals(listOf("sc-2"), viewModel.state.value.scenarios.map { it.id })
+        assertEquals(1, remote.lists)
+        assertEquals(listOf("new", "sc-1"), viewModel.state.value.scenarios.map { it.id })
     }
 
     @Test
-    fun toggleRendersOnlyTheServerConfirmedState() = runTest {
+    fun aToggleSettlesInTheSharedStore() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
-        val repository = CountingRepository()
-        val viewModel = ScenariosViewModel(
-            LoadScenarios(repository),
-            SetScenarioEnabled(repository),
-            RunScenario(repository),
-            NoFavorites,
-            SharedFlowAppEventBus(),
-        )
+        val repository = CountingRemote().store(Dispatchers.Main)
+        val viewModel = viewModel(repository)
         advanceUntilIdle()
         val scenario = viewModel.state.value.scenarios.single()
 
         viewModel.dispatch(ScenariosIntent.SetEnabled(scenario, enabled = false))
-        assertEquals(true, viewModel.state.value.scenarios.single().enabled)
         advanceUntilIdle()
         assertEquals(false, viewModel.state.value.scenarios.single().enabled)
+        assertEquals(false, repository["sc-1"]?.enabled)
     }
+
+    private fun viewModel(repository: ScenarioRepository) = ScenariosViewModel(
+        repository,
+        SetScenarioEnabled(repository),
+        RunScenario(repository),
+        NoFavorites,
+    )
 
     private object NoFavorites : FavoritePreferences {
         override val favorites: Flow<List<FavoriteRef>?> = flowOf(null)
@@ -77,14 +70,15 @@ class ScenariosViewModelTest {
         override suspend fun toggle(ref: FavoriteRef): Boolean = false
     }
 
-    private class CountingRepository : ScenarioRepository {
+    private class CountingRemote : ScenarioRemote {
         var lists = 0
 
-        override suspend fun list(): Outcome<List<Scenario>> = Outcome.Success(listOf(scenario("sc-${++lists}")))
+        override suspend fun list(): Outcome<List<Scenario>> = Outcome.Success(listOf(scenario("sc-1"))).also { lists++ }
         override suspend fun get(id: String): Outcome<Scenario> = Outcome.Success(scenario(id))
-        override suspend fun create(draft: ScenarioDraft, idempotencyKey: String) = Outcome.Success(scenario("new"))
-        override suspend fun update(existing: Scenario, draft: ScenarioDraft) = Outcome.Success(existing)
-        override suspend fun setEnabled(id: String, enabled: Boolean) = Outcome.Success(scenario(id).copy(enabled = enabled))
+        override suspend fun create(draft: ScenarioDraft, idempotencyKey: String): Outcome<Scenario> = Outcome.Success(scenario("new"))
+        override suspend fun update(existing: Scenario, draft: ScenarioDraft): Outcome<Scenario> = Outcome.Success(existing)
+        override suspend fun setEnabled(id: String, enabled: Boolean): Outcome<Scenario> =
+            Outcome.Success(scenario(id).copy(enabled = enabled))
         override suspend fun delete(id: String): Outcome<Boolean> = Outcome.Success(true)
         override suspend fun run(id: String, idempotencyKey: String): Outcome<String> = Outcome.Success("evt")
     }
