@@ -269,25 +269,28 @@ its source and its own actions.
    `hide(key)` filters an item from the current state and from every incoming
    page (pending delete); `reveal(key)` restores it. Sync signals dispatch
    `PagingAction.Reload` or `hide`, never a full reset.
-4. The ViewModel creates `UndoableRemoval` (hide + `UndoWindow`, commit on
-   expiry or `close`) and `PagingHandler` (`core/presentation`). The handler
-   owns the shared `PagingIntent` (`Refresh`, `LoadMore`, `Retry`) and
-   `ListItemIntent` (`Remove`, `Undo`); the screen's own sealed intent keeps
-   only Open/ToggleRead/ReadAll/Clear and delegates `Remove`. Intents are not
-   wrapped: the fragment calls `viewModel.paging.dispatch(PagingIntent.*)` for
-   shared actions and `dispatch(ScreenIntent.*)` for its own.
+4. The screen ViewModel extends `PagedStateViewModel<T, S, I, E>` where `S :
+   PagedScreenState<T>` (`pages`, `pendingRemoval`). The base owns
+   `UndoableRemoval` and a private `PagingHandler`, and exposes
+   `dispatch(PagingIntent)`, `dispatch(ListItemIntent)` and the normal
+   `dispatch(I)`; every action enters the ViewModel. The screen intent keeps
+   only its own actions (Open/ToggleRead/ReadAll/Clear). The base copies pages
+   and the pending removal into `S` via `copyPaging`, and maps a failed removal
+   commit (revealed item) to `E` via `pagingFailure`.
 5. The fragment wires the list with one `PagingBinder` call (RecyclerView,
-   `ListStateViews`, content adapter, lifecycle owner, handler, failure text,
-   `PagingIntent` sink, optional `SwipeRefreshLayout`). `PagingBinder` lives in
+   `ListStateViews`, content adapter, failure text, `PagingIntent` sink,
+   optional `SwipeRefreshLayout`) and renders with
+   `render(S::pages, binder::render)`; the binder has no flow subscription and
+   no second state channel. `UndoBinder` renders `pendingRemoval` through
+   `UndoNotice` and sends `ListItemIntent.Undo`. `PagingBinder` lives in
    `core/presentation` next to the shared intents, because `core/ui` cannot
    import them without a dependency cycle; it only uses core-ui views and the
-   footer adapter. The binder installs
-   `ConcatAdapter(content, PagingFooterAdapter)`, `loadMoreNearEnd`, retry and
-   loading/empty/error rendering. Swipes are declared with
-   `SwipeAction(direction, icon, color, iconTint, intentFor)` and
-   `SwipeActions`; it resets the holder after every swipe and draws the
-   background of the active action only, so no plaque remains after a row is
-   removed.
+   footer adapter. It installs `ConcatAdapter(content, PagingFooterAdapter)`,
+   `loadMoreNearEnd`, retry and loading/empty/error rendering. Swipes are
+   declared with `SwipeAction(direction, icon, color, iconTint, intentFor)` and
+   `SwipeActions<L, R>`; left and right dispatch different intent types
+   directly to `viewModel.dispatch`. The callback resets the holder after every
+   swipe and draws only the active action background, so no plaque remains.
 
 The screen state keeps `PagedState<T>` as one field; day sections, counters and
 badges are selectors in `render`.

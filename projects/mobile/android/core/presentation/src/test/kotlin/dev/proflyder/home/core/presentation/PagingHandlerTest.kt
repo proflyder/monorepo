@@ -63,7 +63,7 @@ class PagingHandlerTest {
 
     private fun TestScope.handler(source: PagedSource<Row> = FakeSource(Outcome.Success(Page(listOf(Row("a"), Row("b")), null)))): PagingHandler<Row> {
         val list = PagedList(this, source)
-        val undo = UndoableRemoval(list, this, this, { }, duration = kotlin.time.Duration.parse("100ms"))
+        val undo = UndoableRemoval(list, this, this, { Outcome.Success(Unit) }, { }, duration = kotlin.time.Duration.parse("100ms"))
         return PagingHandler(list, undo)
     }
 

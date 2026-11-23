@@ -58,15 +58,15 @@ class HistorySwipeTest {
         val model = NotificationHistoryViewModel(repository, CoroutineScope(Dispatchers.Main))
         idle()
 
-        model.dispatch(HistoryIntent.Remove("b"))
+        model.dispatch(ListItemIntent.Remove("b"))
         idle()
         assertEquals(listOf("a", "c"), repository.paged.state.value.items.map { it.key })
-        assertEquals("b", model.state.value.undo?.key)
+        assertEquals("b", model.state.value.pendingRemoval?.key)
 
-        model.paging.dispatch(ListItemIntent.Undo)
+        model.dispatch(ListItemIntent.Undo)
         idle()
         assertEquals(listOf("a", "b", "c"), repository.paged.state.value.items.map { it.key })
-        assertNull(model.state.value.undo)
+        assertNull(model.state.value.pendingRemoval)
     }
 
     @Test
@@ -102,10 +102,11 @@ class HistorySwipeTest {
         val calls = mutableListOf<String>()
         val swipe = SwipeActions(
             themed,
-            left = action(ItemTouchHelper.LEFT, R.drawable.settings_ic_delete) { HistoryIntent.Remove(it) },
-            right = action(ItemTouchHelper.RIGHT, R.drawable.settings_ic_mark_unread) { HistoryIntent.ToggleRead(it) },
+            left = action<ListItemIntent>(ItemTouchHelper.LEFT, R.drawable.settings_ic_delete) { ListItemIntent.Remove(it) },
+            right = action<HistoryIntent>(ItemTouchHelper.RIGHT, R.drawable.settings_ic_mark_unread) { HistoryIntent.ToggleRead(it) },
             itemAt = { position -> (binding.historyList.adapter as NotificationHistoryAdapter).currentList.getOrNull(position)?.let { (it as? HistoryRow.Item)?.entry } },
-            dispatch = { calls += it.toString() },
+            dispatchLeft = { calls += it.toString() },
+            dispatchRight = { calls += it.toString() },
         )
         val header = checkNotNull(binding.historyList.findViewHolderForAdapterPosition(0))
         val first = checkNotNull(binding.historyList.findViewHolderForAdapterPosition(1))
@@ -174,10 +175,10 @@ class HistorySwipeTest {
         return bitmap
     }
 
-    private fun action(
+    private fun <T> action(
         direction: Int,
         icon: Int,
-        intent: (String) -> HistoryIntent,
+        intent: (String) -> T,
     ) = SwipeAction(direction, icon, 0, 0) { position ->
         position.takeIf { it > 0 }?.let { intent("entry") }
     }

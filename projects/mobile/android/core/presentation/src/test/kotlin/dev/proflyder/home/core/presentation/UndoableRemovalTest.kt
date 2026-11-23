@@ -8,6 +8,7 @@ import dev.proflyder.home.core.data.PagingAction
 import dev.proflyder.home.core.data.RefreshMode
 import dev.proflyder.home.core.model.Keyed
 import dev.proflyder.home.core.model.Outcome
+import dev.proflyder.home.core.model.RemoteFailure
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
@@ -98,14 +99,19 @@ class UndoableRemovalTest {
         return list
     }
 
-    private fun TestScope.removal(list: PagedList<Row>, commits: MutableList<String> = mutableListOf()) =
-        UndoableRemoval(
-            list = list,
-            timerScope = this,
-            commitScope = this,
-            commit = { commits += it.key },
-            duration = kotlin.time.Duration.parse("100ms"),
-        )
+    private fun TestScope.removal(
+        list: PagedList<Row>,
+        commits: MutableList<String> = mutableListOf(),
+        failures: MutableList<RemoteFailure> = mutableListOf(),
+        result: Outcome<Unit> = Outcome.Success(Unit),
+    ) = UndoableRemoval(
+        list = list,
+        timerScope = this,
+        commitScope = this,
+        commit = { commits += it.key; result },
+        onFailure = { failures += it },
+        duration = kotlin.time.Duration.parse("100ms"),
+    )
 
     private data class Row(override val key: String) : Keyed
 }

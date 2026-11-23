@@ -23,5 +23,6 @@ import org.junit.runners.Suite
     ScreenScopesTest::class,
     UndoableRemovalTest::class,
     PagingHandlerTest::class,
+    PagedStateViewModelTest::class,
 )
 class AllPresentationTests

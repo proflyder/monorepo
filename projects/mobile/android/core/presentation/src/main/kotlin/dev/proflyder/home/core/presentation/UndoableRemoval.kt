@@ -2,6 +2,8 @@ package dev.proflyder.home.core.presentation
 
 import dev.proflyder.home.core.data.PagedList
 import dev.proflyder.home.core.model.Keyed
+import dev.proflyder.home.core.model.Outcome
+import dev.proflyder.home.core.model.RemoteFailure
 import kotlin.time.Duration
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.StateFlow
@@ -11,41 +13,39 @@ class UndoableRemoval<T : Keyed>(
     private val list: PagedList<T>,
     timerScope: CoroutineScope,
     private val commitScope: CoroutineScope,
-    private val commit: suspend (T) -> Unit,
+    private val commit: suspend (T) -> Outcome<Unit>,
+    private val onFailure: (RemoteFailure) -> Unit,
     duration: Duration = DEFAULT_UNDO_WINDOW,
 ) {
     private val window = UndoWindow<T>(timerScope, duration, ::expired)
-    private var current: T? = null
 
     val pending: StateFlow<T?> = window.pending
 
     fun remove(item: T) {
-        current?.let(::commitNow)
-        current = item
+        window.take()?.let(::commitNow)
         list.hide(item.key)
         window.open(item)
     }
 
     fun undo() {
-        val item = current ?: return
-        current = null
-        window.take()
-        list.reveal(item.key)
+        window.take()?.let { list.reveal(it.key) }
     }
 
     fun close() {
-        val item = current ?: return
-        current = null
-        window.take()
-        commitNow(item)
+        window.take()?.let(::commitNow)
     }
 
-    private fun expired(item: T) {
-        if (current?.key == item.key) current = null
-        commitNow(item)
-    }
+    private fun expired(item: T) = commitNow(item)
 
     private fun commitNow(item: T) {
-        commitScope.launch { commit(item) }
+        commitScope.launch {
+            when (val result = commit(item)) {
+                is Outcome.Success -> Unit
+                is Outcome.Failure -> {
+                    list.reveal(item.key)
+                    onFailure(result.failure)
+                }
+            }
+        }
     }
 }

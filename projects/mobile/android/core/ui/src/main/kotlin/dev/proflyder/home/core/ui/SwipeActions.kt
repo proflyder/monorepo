@@ -6,12 +6,13 @@ import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.RecyclerView
 import dev.proflyder.home.core.model.Keyed
 
-class SwipeActions<I>(
+class SwipeActions<L, R>(
     context: Context,
-    private val left: SwipeAction<I>,
-    private val right: SwipeAction<I>,
+    private val left: SwipeAction<L>,
+    private val right: SwipeAction<R>,
     private val itemAt: (Int) -> Keyed?,
-    private val dispatch: (I) -> Unit,
+    private val dispatchLeft: (L) -> Unit,
+    private val dispatchRight: (R) -> Unit,
 ) : ItemTouchHelper.SimpleCallback(0, ItemTouchHelper.LEFT or ItemTouchHelper.RIGHT) {
     private val background = SwipeBackground(context)
 
@@ -24,16 +25,20 @@ class SwipeActions<I>(
     override fun getSwipeDirs(recyclerView: RecyclerView, viewHolder: RecyclerView.ViewHolder): Int {
         val position = viewHolder.bindingAdapterPosition
         if (itemAt(position) == null) return 0
-        return actions().filter { it.intentFor(position) != null }.fold(0) { dirs, action -> dirs or action.direction }
+        val leftDirs = if (left.intentFor(position) != null) ItemTouchHelper.LEFT else 0
+        val rightDirs = if (right.intentFor(position) != null) ItemTouchHelper.RIGHT else 0
+        return leftDirs or rightDirs
     }
 
     override fun getSwipeThreshold(viewHolder: RecyclerView.ViewHolder): Float = SWIPE_THRESHOLD
 
     override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) {
         val position = viewHolder.bindingAdapterPosition
-        val action = actionFor(direction) ?: return
-        val intent = action.intentFor(position) ?: return
-        dispatch(intent)
+        if (direction == ItemTouchHelper.LEFT) {
+            left.intentFor(position)?.let(dispatchLeft)
+        } else {
+            right.intentFor(position)?.let(dispatchRight)
+        }
         recover(viewHolder)
     }
 
@@ -55,16 +60,10 @@ class SwipeActions<I>(
             reset(viewHolder)
             return
         }
-        val action = actionFor(dX) ?: return
+        val action = if (dX < 0) left else right
         background.draw(canvas, viewHolder.itemView, dX, action)
         super.onChildDraw(canvas, recyclerView, viewHolder, dX, dY, actionState, isCurrentlyActive)
     }
-
-    private fun actions(): List<SwipeAction<I>> = listOf(left, right)
-
-    private fun actionFor(direction: Int): SwipeAction<I>? = actions().firstOrNull { it.direction == direction }
-
-    private fun actionFor(dx: Float): SwipeAction<I>? = actionFor(if (dx < 0) ItemTouchHelper.LEFT else ItemTouchHelper.RIGHT)
 
     private fun recover(viewHolder: RecyclerView.ViewHolder) {
         val recyclerView = viewHolder.itemView.parent as? RecyclerView ?: return

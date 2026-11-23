@@ -1,16 +1,13 @@
 package dev.proflyder.home.feature.settings.presentation
 
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
 import dev.proflyder.home.core.data.FeatureScope
 import dev.proflyder.home.core.data.PagedState
 import dev.proflyder.home.core.model.NotificationHistory
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.navigation.Route
-import dev.proflyder.home.core.presentation.ListItemIntent
-import dev.proflyder.home.core.presentation.PagingHandler
-import dev.proflyder.home.core.presentation.StateViewModel
-import dev.proflyder.home.core.presentation.UndoableRemoval
+import dev.proflyder.home.core.presentation.PagedScreenState
+import dev.proflyder.home.core.presentation.PagedStateViewModel
 import dev.proflyder.home.core.presentation.viewModel
 import dev.proflyder.home.core.ui.ViewModelSource
 import dev.proflyder.home.feature.push.NotificationHistoryRepository
@@ -22,16 +19,15 @@ import dev.zacsweers.metro.binding
 import kotlinx.coroutines.CoroutineScope
 
 internal data class NotificationHistoryUiState(
-    val pages: PagedState<NotificationHistory> = PagedState(),
-    val undo: NotificationHistory? = null,
-)
+    override val pages: PagedState<NotificationHistory> = PagedState(),
+    override val pendingRemoval: NotificationHistory? = null,
+) : PagedScreenState<NotificationHistory>
 
 internal sealed interface HistoryIntent {
     data class Open(val entry: NotificationHistory) : HistoryIntent
     data class ToggleRead(val key: String) : HistoryIntent
     data object ReadAll : HistoryIntent
     data object Clear : HistoryIntent
-    data class Remove(val key: String) : HistoryIntent
 }
 
 internal sealed interface HistoryEvent {
@@ -43,23 +39,16 @@ internal sealed interface HistoryEvent {
 internal class NotificationHistoryViewModel(
     private val repository: NotificationHistoryRepository,
     appScope: CoroutineScope,
-) : StateViewModel<NotificationHistoryUiState, HistoryIntent, HistoryEvent>(NotificationHistoryUiState()) {
-    private val undo = UndoableRemoval(
-        list = repository.paged,
-        timerScope = viewModelScope,
-        commitScope = appScope,
-        commit = repository::remove,
-    )
-    val paging = PagingHandler(repository.paged, undo)
+) : PagedStateViewModel<NotificationHistory, NotificationHistoryUiState, HistoryIntent, HistoryEvent>(
+    NotificationHistoryUiState(),
+    repository.paged,
+    appScope,
+    repository::remove,
+) {
+    override fun copyPaging(pages: PagedState<NotificationHistory>, pendingRemoval: NotificationHistory?): NotificationHistoryUiState =
+        NotificationHistoryUiState(pages, pendingRemoval)
 
-    init {
-        launch { paging.state.collect { pages -> updateState { copy(pages = pages) } } }
-        launch { paging.pendingUndo.collect { item -> updateState { copy(undo = item) } } }
-    }
-
-    override fun onCleared() {
-        paging.close()
-    }
+    override fun pagingFailure(failure: RemoteFailure): HistoryEvent = HistoryEvent.Failure(failure)
 
     override fun handle(intent: HistoryIntent) {
         when (intent) {
@@ -67,7 +56,6 @@ internal class NotificationHistoryViewModel(
             is HistoryIntent.ToggleRead -> toggleRead(intent.key)
             HistoryIntent.ReadAll -> readAll()
             HistoryIntent.Clear -> clear()
-            is HistoryIntent.Remove -> paging.dispatch(ListItemIntent.Remove(intent.key))
         }
     }
 

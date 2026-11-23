@@ -7,15 +7,15 @@ import dev.proflyder.home.core.presentation.IntentAdapterCallback
 import dev.proflyder.home.core.presentation.ListItemIntent
 import dev.proflyder.home.core.presentation.PagingBinder
 import dev.proflyder.home.core.presentation.ScreenFragment
-import dev.proflyder.home.core.presentation.UndoNotice
+import dev.proflyder.home.core.presentation.UndoBinder
 import dev.proflyder.home.core.presentation.render
 import dev.proflyder.home.core.presentation.screenViewModel
 import dev.proflyder.home.core.ui.AdapterCallback
 import dev.proflyder.home.core.ui.ListStateViews
 import dev.proflyder.home.core.ui.SwipeActions
-import dev.proflyder.home.core.ui.swipeAction
 import dev.proflyder.home.core.ui.applyScrollBottomInset
 import dev.proflyder.home.core.ui.setVisible
+import dev.proflyder.home.core.ui.swipeAction
 import dev.proflyder.home.core.ui.userMessage
 import dev.proflyder.home.feature.settings.impl.R
 import dev.proflyder.home.feature.settings.impl.databinding.FragmentNotificationHistoryBinding
@@ -30,14 +30,16 @@ internal class NotificationHistoryFragment :
 
     private val callback = object :
         NotificationHistoryAdapterCallback,
-        AdapterCallback<HistoryRow> by IntentAdapterCallback(::dispatch, ::openIntent) {}
+        AdapterCallback<HistoryRow> by IntentAdapterCallback({ viewModel.dispatch(it) }, ::openIntent) {}
 
     private val adapter by lazy { NotificationHistoryAdapter(callback) }
-    private val undo = UndoNotice(::requireView) { viewModel.paging.dispatch(ListItemIntent.Undo) }
+    private val undo by lazy {
+        UndoBinder<NotificationHistory>(::requireView, { getString(R.string.history_deleted) }, viewModel::dispatch)
+    }
 
     override fun onViewReady(binding: FragmentNotificationHistoryBinding, savedInstanceState: Bundle?) {
         binding.historyList.applyScrollBottomInset()
-        PagingBinder(
+        val binder = PagingBinder<NotificationHistory>(
             recyclerView = binding.historyList,
             states = ListStateViews(
                 progress = binding.historyProgress,
@@ -47,21 +49,20 @@ internal class NotificationHistoryFragment :
                 errorText = binding.historyErrorText,
             ),
             content = adapter,
-            lifecycleOwner = viewLifecycleOwner,
-            handler = viewModel.paging,
             failureText = { it.userMessage(requireContext()) },
-            dispatch = { viewModel.paging.dispatch(it) },
+            dispatch = viewModel::dispatch,
         )
         ItemTouchHelper(swipes()).attachToRecyclerView(binding.historyList)
         binding.historyList.addHistoryDecorations()
         binding.historyClear.setOnClickListener { confirmClear() }
-        binding.historyReadAll.setOnClickListener { dispatch(HistoryIntent.ReadAll) }
+        binding.historyReadAll.setOnClickListener { viewModel.dispatch(HistoryIntent.ReadAll) }
         render({ rows(it) }, adapter::submitList)
+        render(NotificationHistoryUiState::pages, binder::render)
+        render(NotificationHistoryUiState::pendingRemoval, undo::render)
         render(NotificationHistoryUiState::pages) { pages ->
             renderCount(pages.items.size)
             binding.historyReadAll.setVisible(pages.items.any { !it.read })
         }
-        render(NotificationHistoryUiState::undo) { item -> undo.render(item?.let { getString(R.string.history_deleted) }) }
     }
 
     override fun onBindingDestroyed() {
@@ -78,18 +79,19 @@ internal class NotificationHistoryFragment :
         historyCount.setVisible(count > 0)
     }
 
-    private fun swipes(): SwipeActions<HistoryIntent> {
+    private fun swipes(): SwipeActions<ListItemIntent, HistoryIntent> {
         val context = requireContext()
         return SwipeActions(
             context,
-            left = swipeAction(context, ItemTouchHelper.LEFT, R.drawable.settings_ic_delete, com.google.android.material.R.attr.colorError, com.google.android.material.R.attr.colorOnError) { position ->
-                entryAt(position)?.let { HistoryIntent.Remove(it.key) }
+            left = swipeAction<ListItemIntent>(context, ItemTouchHelper.LEFT, R.drawable.settings_ic_delete, com.google.android.material.R.attr.colorError, com.google.android.material.R.attr.colorOnError) { position ->
+                entryAt(position)?.let { ListItemIntent.Remove(it.key) }
             },
-            right = swipeAction(context, ItemTouchHelper.RIGHT, R.drawable.settings_ic_mark_unread, androidx.appcompat.R.attr.colorPrimary, com.google.android.material.R.attr.colorOnPrimary) { position ->
+            right = swipeAction<HistoryIntent>(context, ItemTouchHelper.RIGHT, R.drawable.settings_ic_mark_unread, androidx.appcompat.R.attr.colorPrimary, com.google.android.material.R.attr.colorOnPrimary) { position ->
                 entryAt(position)?.let { HistoryIntent.ToggleRead(it.key) }
             },
             itemAt = { position -> (adapter.currentList.getOrNull(position) as? HistoryRow.Item)?.entry },
-            dispatch = ::dispatch,
+            dispatchLeft = viewModel::dispatch,
+            dispatchRight = viewModel::dispatch,
         )
     }
 
@@ -111,6 +113,6 @@ internal class NotificationHistoryFragment :
             message = R.string.history_clear_message,
             positive = R.string.history_clear,
             negative = android.R.string.cancel,
-        ) { dispatch(HistoryIntent.Clear) }
+        ) { viewModel.dispatch(HistoryIntent.Clear) }
     }
 }
