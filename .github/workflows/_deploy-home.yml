@@ -29,6 +29,8 @@ on:
         required: false
       OPENBAO_ROLE:
         required: false
+      NEXUS_CI_PASSWORD:
+        required: false
     outputs:
       units:
         value: ${{ jobs.plan.outputs.units }}
