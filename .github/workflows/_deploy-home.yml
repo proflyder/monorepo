@@ -88,34 +88,62 @@ jobs:
       - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: ~/.cache/bazel-disk
-          key: bazel-android-${{ runner.os }}-warm-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'projects/mobile/android/maven_install.json') }}
+          key: bazel-android-${{ runner.os }}-shared-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'projects/mobile/android/maven_install.json') }}
           restore-keys: |
-            bazel-android-${{ runner.os }}-warm-
+            bazel-android-${{ runner.os }}-shared-
 
       - name: Warm the Android Bazel caches
+        env:
+          DISK_CACHE_LIMIT: 4G
         run: |
           set -euo pipefail
-          mapfile -t android_targets < <(node --input-type=module -e '
-            const { config } = await import(process.cwd() + "/platform/ci/units.mjs");
-            const seen = new Set();
-            for (const unit of config.units) {
-              if (unit.platform !== "android" || !unit.bazel) continue;
-              for (const t of [...(unit.bazel.build_targets ?? []), ...(unit.bazel.test_targets ?? [])]) seen.add(t);
-            }
-            console.log([...seen].join("\n"));
-          ')
-          echo "warming ${#android_targets[@]} Android targets"
-          bazel build --config=android --keep_going \
-            "${android_targets[@]}" \
-            --experimental_disk_cache_gc_max_size=5G
+          select_targets() {
+            node --input-type=module -e '
+              const { config } = await import(process.cwd() + "/platform/ci/units.mjs");
+              const seen = new Set();
+              for (const unit of config.units) {
+                if (unit.platform !== "android" || !unit.bazel) continue;
+                for (const t of unit.bazel[process.argv[1]] ?? []) seen.add(t);
+              }
+              console.log([...seen].join("\n"));
+            ' "$1"
+          }
+          mapfile -t build_targets < <(select_targets build_targets)
+          mapfile -t test_targets < <(select_targets test_targets)
+          echo "warming ${#build_targets[@]} build and ${#test_targets[@]} test Android targets"
+          gc_flags=(
+            "--experimental_disk_cache_gc_max_size=$DISK_CACHE_LIMIT"
+            --experimental_disk_cache_gc_max_age=7d
+            --experimental_disk_cache_gc_idle_delay=0s
+          )
+          bazel build --config=android --keep_going "${gc_flags[@]}" "${build_targets[@]}"
+          bazel test --config=android --keep_going "${gc_flags[@]}" "${test_targets[@]}" --test_output=errors
 
-      - name: Stop the Bazel server
-        run: bazel shutdown
+      - name: Collect garbage in the Bazel disk cache
+        env:
+          DISK_CACHE_LIMIT_BYTES: "4294967296"
+        run: |
+          set -euo pipefail
+          du -sh ~/.cache/bazel-disk
+          for _ in $(seq 1 60); do
+            size="$(du -sb ~/.cache/bazel-disk | cut -f1)"
+            if [ "$size" -le "$DISK_CACHE_LIMIT_BYTES" ]; then
+              break
+            fi
+            sleep 5
+          done
+          bazel shutdown
+          du -sh ~/.cache/bazel-disk
+          size="$(du -sb ~/.cache/bazel-disk | cut -f1)"
+          if [ "$size" -gt "$DISK_CACHE_LIMIT_BYTES" ]; then
+            echo "::error title=Android disk cache::$size bytes after GC, limit $DISK_CACHE_LIMIT_BYTES"
+            exit 1
+          fi
 
       - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: ~/.cache/bazel-disk
-          key: bazel-android-${{ runner.os }}-warm-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'projects/mobile/android/maven_install.json') }}-${{ github.run_id }}-${{ github.run_attempt }}
+          key: bazel-android-${{ runner.os }}-shared-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'projects/mobile/android/maven_install.json') }}-${{ github.run_id }}-${{ github.run_attempt }}
 
   warm-rust:
     if: inputs.mode == 'push'

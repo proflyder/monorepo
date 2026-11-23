@@ -37,13 +37,15 @@ metro_android_library(
 )
 
 home_android_local_test(
-    name = "scenario_use_cases_test",
+    name = "robolectric_test",
     srcs = glob(["src/test/kotlin/**/*.kt"]),
     associates = [":impl"],
     custom_package = "dev.proflyder.home.feature.scenarios.impl",
     manifest = "src/test/AndroidManifest.xml",
     resources = glob(["src/test/resources/**"]),
-    test_class = "dev.proflyder.home.feature.scenarios.AllScenarioImplTests",
+    test_classes = [
+        "dev.proflyder.home.feature.scenarios.AllScenarioImplTests",
+    ],
     deps = [
         "//projects/mobile/android/core/data",
         "//projects/mobile/android/core/config",

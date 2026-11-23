@@ -72,3 +72,4 @@ build:android --keep_going
 
 build:android --extra_toolchains=//platform/android:kotlin_toolchain
 build:android --@rules_jvm_external//settings:stamp_manifest=false
+build:android --modify_execution_info=JavaDeployJar=+no-cache

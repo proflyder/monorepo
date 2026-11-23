@@ -1,5 +1,4 @@
 load("//platform/android:defs.bzl", "home_android_local_test", "metro_android_library")
-load(":robolectric_android_all.bzl", "android_all_dir")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -38,28 +37,21 @@ metro_android_library(
 )
 
 home_android_local_test(
-    name = "selection_animation_test",
-    srcs = [
-        "src/test/kotlin/dev/proflyder/home/feature/alarms/domain/SaveAlarmLabelTest.kt",
-        "src/test/kotlin/dev/proflyder/home/feature/alarms/presentation/AlarmCardModeTest.kt",
-        "src/test/kotlin/dev/proflyder/home/feature/alarms/presentation/AlarmEditorDefaultsTest.kt",
-        "src/test/kotlin/dev/proflyder/home/feature/alarms/presentation/AlarmQuickOffsetStateTest.kt",
-        "src/test/kotlin/dev/proflyder/home/feature/alarms/presentation/AlarmRepeatRulesTest.kt",
-        "src/test/kotlin/dev/proflyder/home/feature/alarms/presentation/AlarmSelectionActionsTest.kt",
-        "src/test/kotlin/dev/proflyder/home/feature/alarms/presentation/AlarmSelectionAnimationTest.kt",
-        "src/test/kotlin/dev/proflyder/home/feature/alarms/presentation/AllAlarmImplTests.kt",
-        "src/test/kotlin/dev/proflyder/home/feature/alarms/presentation/AlarmEditorViewModelTest.kt",
-        "src/test/kotlin/dev/proflyder/home/feature/alarms/presentation/AlarmsViewModelTest.kt",
-        "src/test/kotlin/dev/proflyder/home/feature/alarms/presentation/AlarmsActionsViewModelTest.kt",
-        "src/test/kotlin/dev/proflyder/home/feature/alarms/presentation/AlarmsScopeTest.kt",
-        "src/test/kotlin/dev/proflyder/home/feature/alarms/presentation/UpcomingAlarmRulesTest.kt",
-        "src/test/kotlin/dev/proflyder/home/feature/alarms/presentation/FakeAlarmRepository.kt",
-    ],
+    name = "robolectric_test",
+    srcs = glob(["src/test/kotlin/**/*.kt"]),
     associates = [":impl"],
     custom_package = "dev.proflyder.home.feature.alarms.impl",
     kotlinc_opts = "//platform/android:jvm17_options",
     manifest = "src/test/AndroidManifest.xml",
-    test_class = "dev.proflyder.home.feature.alarms.presentation.AllAlarmImplTests",
+    test_classes = [
+        "dev.proflyder.home.feature.alarms.presentation.AlarmAdapterPayloadTest",
+        "dev.proflyder.home.feature.alarms.presentation.AlarmEditorScreenshotTest",
+        "dev.proflyder.home.feature.alarms.presentation.AlarmItemLayoutTest",
+        "dev.proflyder.home.feature.alarms.presentation.AlarmRepeatSheetTest",
+        "dev.proflyder.home.feature.alarms.presentation.AlarmSelectionBarTest",
+        "dev.proflyder.home.feature.alarms.presentation.AllAlarmImplTests",
+        "dev.proflyder.home.feature.alarms.presentation.UpcomingAlarmsScreenshotTest",
+    ],
     deps = [
         "@maven//:androidx_lifecycle_lifecycle_viewmodel",
         "//projects/mobile/android/core/navigation",
@@ -74,225 +66,12 @@ home_android_local_test(
         "@maven//:junit_junit",
         "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_core",
         "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_test",
-    ],
-)
-
-android_all_dir(
-    name = "robolectric_android_all_sdk35",
-    jar = "@maven//:org_robolectric_android_all_instrumented",
-    jar_name = "android-all-instrumented-15-robolectric-13954326-i7.jar",
-)
-
-home_android_local_test(
-    name = "item_layout_test",
-    srcs = ["src/test/kotlin/dev/proflyder/home/feature/alarms/presentation/AlarmItemLayoutTest.kt"],
-    associates = [":impl"],
-    custom_package = "dev.proflyder.home.feature.alarms.impl",
-    data = [
-        "robolectric-deps.properties",
-        ":robolectric_android_all_sdk35",
-    ],
-    jvm_flags = [
-        "-Drobolectric.offline=true",
-        "--add-opens=java.base/java.lang=ALL-UNNAMED",
-        "--add-opens=java.base/java.io=ALL-UNNAMED",
-        "--add-opens=java.base/java.net=ALL-UNNAMED",
-        "--add-opens=java.base/java.security=ALL-UNNAMED",
-        "--add-opens=java.base/java.text=ALL-UNNAMED",
-        "--add-opens=java.base/java.util=ALL-UNNAMED",
-        "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
-        "--add-opens=java.base/jdk.internal.util=ALL-UNNAMED",
-    ],
-    manifest = "src/test/AndroidManifest.xml",
-    robolectric_properties_file = "robolectric-deps.properties",
-    test_class = "dev.proflyder.home.feature.alarms.presentation.AlarmItemLayoutTest",
-    deps = [
-        "//projects/mobile/android/core/data",
-        "//projects/mobile/android/core/model",
-        "//projects/mobile/android/features/alarms/api",
         "@maven//:androidx_appcompat_appcompat",
         "@maven//:androidx_constraintlayout_constraintlayout",
         "@maven//:com_google_android_material_material",
-        "@maven//:junit_junit",
         "@maven//:org_robolectric_robolectric",
-    ],
-)
-
-home_android_local_test(
-    name = "adapter_payload_test",
-    srcs = ["src/test/kotlin/dev/proflyder/home/feature/alarms/presentation/AlarmAdapterPayloadTest.kt"],
-    associates = [":impl"],
-    custom_package = "dev.proflyder.home.feature.alarms.impl",
-    data = [
-        "robolectric-deps.properties",
-        ":robolectric_android_all_sdk35",
-    ],
-    jvm_flags = [
-        "-Drobolectric.offline=true",
-        "--add-opens=java.base/java.lang=ALL-UNNAMED",
-        "--add-opens=java.base/java.io=ALL-UNNAMED",
-        "--add-opens=java.base/java.net=ALL-UNNAMED",
-        "--add-opens=java.base/java.security=ALL-UNNAMED",
-        "--add-opens=java.base/java.text=ALL-UNNAMED",
-        "--add-opens=java.base/java.util=ALL-UNNAMED",
-        "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
-        "--add-opens=java.base/jdk.internal.util=ALL-UNNAMED",
-    ],
-    manifest = "src/test/AndroidManifest.xml",
-    robolectric_properties_file = "robolectric-deps.properties",
-    test_class = "dev.proflyder.home.feature.alarms.presentation.AlarmAdapterPayloadTest",
-    deps = [
-        "//projects/mobile/android/core/data",
-        "//projects/mobile/android/core/model",
-        "//projects/mobile/android/core/ui",
         "@maven//:androidx_recyclerview_recyclerview",
-        "//projects/mobile/android/features/alarms/api",
-        "@maven//:androidx_appcompat_appcompat",
-        "@maven//:androidx_constraintlayout_constraintlayout",
-        "@maven//:com_google_android_material_material",
-        "@maven//:junit_junit",
-        "@maven//:org_robolectric_robolectric",
-    ],
-)
-
-home_android_local_test(
-    name = "selection_bar_test",
-    srcs = ["src/test/kotlin/dev/proflyder/home/feature/alarms/presentation/AlarmSelectionBarTest.kt"],
-    associates = [":impl"],
-    custom_package = "dev.proflyder.home.feature.alarms.impl",
-    data = [
-        "robolectric-deps.properties",
-        ":robolectric_android_all_sdk35",
-    ],
-    jvm_flags = [
-        "-Drobolectric.offline=true",
-        "--add-opens=java.base/java.lang=ALL-UNNAMED",
-        "--add-opens=java.base/java.io=ALL-UNNAMED",
-        "--add-opens=java.base/java.net=ALL-UNNAMED",
-        "--add-opens=java.base/java.security=ALL-UNNAMED",
-        "--add-opens=java.base/java.text=ALL-UNNAMED",
-        "--add-opens=java.base/java.util=ALL-UNNAMED",
-        "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
-        "--add-opens=java.base/jdk.internal.util=ALL-UNNAMED",
-    ],
-    manifest = "src/test/AndroidManifest.xml",
-    robolectric_properties_file = "robolectric-deps.properties",
-    test_class = "dev.proflyder.home.feature.alarms.presentation.AlarmSelectionBarTest",
-    deps = [
-        "//projects/mobile/android/core/data",
-        "//projects/mobile/android/core/model",
-        "//projects/mobile/android/features/alarms/api",
-        "@maven//:androidx_appcompat_appcompat",
-        "@maven//:com_google_android_material_material",
-        "@maven//:junit_junit",
-        "@maven//:org_robolectric_robolectric",
-    ],
-)
-
-home_android_local_test(
-    name = "repeat_sheet_test",
-    srcs = ["src/test/kotlin/dev/proflyder/home/feature/alarms/presentation/AlarmRepeatSheetTest.kt"],
-    associates = [":impl"],
-    custom_package = "dev.proflyder.home.feature.alarms.impl",
-    data = [
-        "robolectric-deps.properties",
-        ":robolectric_android_all_sdk35",
-    ],
-    jvm_flags = [
-        "-Drobolectric.offline=true",
-        "--add-opens=java.base/java.lang=ALL-UNNAMED",
-        "--add-opens=java.base/java.io=ALL-UNNAMED",
-        "--add-opens=java.base/java.net=ALL-UNNAMED",
-        "--add-opens=java.base/java.security=ALL-UNNAMED",
-        "--add-opens=java.base/java.text=ALL-UNNAMED",
-        "--add-opens=java.base/java.util=ALL-UNNAMED",
-        "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
-        "--add-opens=java.base/jdk.internal.util=ALL-UNNAMED",
-    ],
-    manifest = "src/test/AndroidManifest.xml",
-    robolectric_properties_file = "robolectric-deps.properties",
-    test_class = "dev.proflyder.home.feature.alarms.presentation.AlarmRepeatSheetTest",
-    deps = [
-        "//projects/mobile/android/core/data",
-        "//projects/mobile/android/core/model",
-        "//projects/mobile/android/core/presentation",
-        "//projects/mobile/android/core/ui",
-        "//projects/mobile/android/features/alarms/api",
-        "@maven//:androidx_appcompat_appcompat",
-        "@maven//:androidx_lifecycle_lifecycle_viewmodel_savedstate",
-        "@maven//:com_google_android_material_material",
-        "@maven//:junit_junit",
-        "@maven//:org_robolectric_robolectric",
-    ],
-)
-
-home_android_local_test(
-    name = "editor_screenshot_test",
-    srcs = ["src/test/kotlin/dev/proflyder/home/feature/alarms/presentation/AlarmEditorScreenshotTest.kt"],
-    associates = [":impl"],
-    custom_package = "dev.proflyder.home.feature.alarms.impl",
-    data = [
-        "robolectric-deps.properties",
-        ":robolectric_android_all_sdk35",
-    ],
-    jvm_flags = [
-        "-Drobolectric.offline=true",
-        "--add-opens=java.base/java.lang=ALL-UNNAMED",
-        "--add-opens=java.base/java.io=ALL-UNNAMED",
-        "--add-opens=java.base/java.net=ALL-UNNAMED",
-        "--add-opens=java.base/java.security=ALL-UNNAMED",
-        "--add-opens=java.base/java.text=ALL-UNNAMED",
-        "--add-opens=java.base/java.util=ALL-UNNAMED",
-        "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
-        "--add-opens=java.base/jdk.internal.util=ALL-UNNAMED",
-    ],
-    manifest = "src/test/AndroidManifest.xml",
-    robolectric_properties_file = "robolectric-deps.properties",
-    test_class = "dev.proflyder.home.feature.alarms.presentation.AlarmEditorScreenshotTest",
-    deps = [
-        "//projects/mobile/android/core/data",
-        "//projects/mobile/android/core/model",
         "//projects/mobile/android/core/theme",
-        "//projects/mobile/android/features/alarms/api",
-        "@maven//:androidx_appcompat_appcompat",
-        "@maven//:com_google_android_material_material",
-        "@maven//:junit_junit",
-        "@maven//:org_robolectric_robolectric",
     ],
 )
 
-home_android_local_test(
-    name = "upcoming_section_screenshot_test",
-    srcs = ["src/test/kotlin/dev/proflyder/home/feature/alarms/presentation/UpcomingAlarmsScreenshotTest.kt"],
-    associates = [":impl"],
-    custom_package = "dev.proflyder.home.feature.alarms.impl",
-    data = [
-        "robolectric-deps.properties",
-        ":robolectric_android_all_sdk35",
-    ],
-    jvm_flags = [
-        "-Drobolectric.offline=true",
-        "--add-opens=java.base/java.lang=ALL-UNNAMED",
-        "--add-opens=java.base/java.io=ALL-UNNAMED",
-        "--add-opens=java.base/java.net=ALL-UNNAMED",
-        "--add-opens=java.base/java.security=ALL-UNNAMED",
-        "--add-opens=java.base/java.text=ALL-UNNAMED",
-        "--add-opens=java.base/java.util=ALL-UNNAMED",
-        "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
-        "--add-opens=java.base/jdk.internal.util=ALL-UNNAMED",
-    ],
-    manifest = "src/test/AndroidManifest.xml",
-    robolectric_properties_file = "robolectric-deps.properties",
-    test_class = "dev.proflyder.home.feature.alarms.presentation.UpcomingAlarmsScreenshotTest",
-    deps = [
-        "//projects/mobile/android/core/data",
-        "//projects/mobile/android/core/model",
-        "//projects/mobile/android/core/testing",
-        "//projects/mobile/android/core/theme",
-        "//projects/mobile/android/features/alarms/api",
-        "@maven//:androidx_appcompat_appcompat",
-        "@maven//:com_google_android_material_material",
-        "@maven//:junit_junit",
-        "@maven//:org_robolectric_robolectric",
-    ],
-)
