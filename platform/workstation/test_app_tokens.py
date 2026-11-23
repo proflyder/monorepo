@@ -118,7 +118,9 @@ class IssueTests(unittest.TestCase):
         bao = FakeBao({"token": "mama"})
         app_tokens.issue(bao, app_tokens.PATH, "owner", "hidden", dry_run=True)
         self.assertEqual([call[0] for call in bao.calls], ["GET"])
-        with mock.patch.object(ws, "operator", return_value=bao):
+        with mock.patch.object(ws, "operator", return_value=bao), mock.patch.object(
+            app_tokens, "preflight", return_value=[]
+        ):
             output = io.StringIO()
             with redirect_stdout(output):
                 app_tokens.main(["--dry-run"])
@@ -127,7 +129,9 @@ class IssueTests(unittest.TestCase):
 
     def test_main_prints_the_token_once_and_never_the_service_token(self):
         bao = FakeBao({"token": "mama"})
-        with mock.patch.object(ws, "operator", return_value=bao):
+        with mock.patch.object(ws, "operator", return_value=bao), mock.patch.object(
+            app_tokens, "preflight", return_value=[]
+        ):
             output = io.StringIO()
             with redirect_stdout(output):
                 app_tokens.main([])
