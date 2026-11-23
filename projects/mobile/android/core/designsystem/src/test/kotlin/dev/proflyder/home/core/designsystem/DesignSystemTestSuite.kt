@@ -13,6 +13,7 @@ import org.junit.runners.Suite
     LightParamsEditorScreenshotTest::class,
     RevealBinderTest::class,
     SectionsTest::class,
+    SliderStylesTest::class,
     StickyHeadersScreenshotTest::class,
 )
 class DesignSystemTestSuite
