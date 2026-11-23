@@ -265,7 +265,7 @@ jobs:
         working-directory: .
         run: >-
           node platform/ci/step_report.mjs --title "native / $UNIT"
-          --check "test=Test $UNIT"
+          --check "test?=Test $UNIT"
 
       - name: Checksums ${{ inputs.unit }}
         if: inputs.checksums != ''

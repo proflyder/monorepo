@@ -24,6 +24,8 @@ export const FAILED_TEST_STATUSES = new Set([
 
 export const LOG_TAIL_LINES = 60;
 
+export const SKIPPED_ABORT_REASONS = new Set(["SKIPPED", "NO_BUILD"]);
+
 export function checkKind(label, isTest) {
   const name = String(label).split(":").pop() ?? "";
   for (const { kind, pattern } of CHECK_KINDS) {
@@ -91,7 +93,7 @@ export function collect(events) {
           entry.isTest = true;
         }
       }
-      if (event.aborted) {
+      if (event.aborted && !SKIPPED_ABORT_REASONS.has(event.aborted.reason)) {
         entry.built = false;
         entry.abortReason = event.aborted.description || event.aborted.reason || "aborted";
       }

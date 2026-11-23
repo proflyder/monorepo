@@ -177,14 +177,13 @@ jobs:
         if: inputs.kind == 'bazel' && (inputs.build_targets != '' || inputs.test_targets != '')
         continue-on-error: true
         env:
-          BAZEL_TARGETS: ${{ inputs.build_targets }} ${{ inputs.test_targets }}
+          BAZEL_BUILD_TARGETS: ${{ inputs.build_targets }}
+          BAZEL_TEST_TARGETS: ${{ inputs.test_targets }}
           BAZEL_EXTRA_ARGS: >-
             ${{ inputs.images != '' && '--platforms=//platform/bazel:linux_amd64' || '' }}
-            --keep_going
             --build_event_json_file=${{ runner.temp }}/bazel-events.json
-          COMMAND: ${{ inputs.test_targets != '' && 'test' || 'build' }}
           UNIT: ${{ inputs.unit }}
-        run: mise run "$COMMAND" "$UNIT"
+        run: mise run ci:unit "$UNIT"
 
       - name: Report every failing build, test, clippy and rustfmt target
         if: steps.bazel.outcome != 'skipped'

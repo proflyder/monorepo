@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -13,6 +14,10 @@ import {
   formatTable,
   isDeployable,
   runCommands,
+  buildOnlyQuery,
+  ciPlan,
+  isTargetPattern,
+  runCi,
   suggestIds,
   testCommands,
   unitHint,
@@ -330,4 +335,95 @@ test("runCommands stops at the first failure without keepGoing", () => {
   );
   assert.equal(status, 3);
   assert.deepEqual(calls, ["a"]);
+});
+
+test("isTargetPattern tells patterns from labels", () => {
+  assert.equal(isTargetPattern("//packages/rust/..."), true);
+  assert.equal(isTargetPattern("//a:all"), true);
+  assert.equal(isTargetPattern("//a:*"), true);
+  assert.equal(isTargetPattern("//apps/one:app"), false);
+});
+
+test("buildOnlyQuery keeps the tests under a build pattern out of the run", () => {
+  assert.equal(
+    buildOnlyQuery(["//a/...", "//b/..."]),
+    "set(//a/... //b/...) except tests(set(//a/... //b/...))",
+  );
+});
+
+test("ciPlan splits tests, explicit build labels and build patterns", () => {
+  const plan = ciPlan(byId("proto"));
+  assert.equal(plan.command, "test");
+  assert.deepEqual(plan.config, []);
+  assert.deepEqual(plan.tests, ["//packages/rust/home-proto:unit_tests"]);
+  assert.deepEqual(plan.explicitBuilds, []);
+  assert.deepEqual(plan.patternBuilds, ["//packages/proto/..."]);
+  const android = ciPlan(byId("app-one"));
+  assert.deepEqual(android.config, ["--config=android"]);
+  assert.deepEqual(android.explicitBuilds, ["//apps/one:app"]);
+  assert.throws(() => ciPlan(byId("ha-voice")), /Bazel units only/);
+});
+
+test("runCi runs one keep-going bazel test over tests and build-only labels", () => {
+  const calls = [];
+  let targets = "";
+  const spawn = (command, args) => {
+    calls.push([command, ...args]);
+    if (args[0] === "query") {
+      return { status: 0, stdout: "//packages/proto:home_proto\n//packages/proto:lib\n" };
+    }
+    const file = args.find((arg) => arg.startsWith("--target_pattern_file=")).split("=")[1];
+    targets = fs.readFileSync(file, "utf8");
+    return { status: 0 };
+  };
+  const saved = process.env.BAZEL_EXTRA_ARGS;
+  process.env.BAZEL_EXTRA_ARGS = "--build_event_json_file=/tmp/x.json";
+  try {
+    const status = runCi(byId("proto"), { spawn, log: { write: () => {} } });
+    assert.equal(status, 0);
+  } finally {
+    if (saved === undefined) {
+      delete process.env.BAZEL_EXTRA_ARGS;
+    } else {
+      process.env.BAZEL_EXTRA_ARGS = saved;
+    }
+  }
+  assert.deepEqual(calls[0], [
+    "bazel",
+    "query",
+    "--output=label",
+    "set(//packages/proto/...) except tests(set(//packages/proto/...))",
+  ]);
+  assert.deepEqual(calls[1].slice(0, 4), [
+    "bazel",
+    "test",
+    "--build_event_json_file=/tmp/x.json",
+    "--keep_going",
+  ]);
+  assert.equal(
+    targets,
+    "//packages/rust/home-proto:unit_tests\n//packages/proto:home_proto\n//packages/proto:lib\n",
+  );
+});
+
+test("runCi honours the CI target lists and fails when the query fails", () => {
+  const saved = { tests: process.env.BAZEL_TEST_TARGETS, builds: process.env.BAZEL_BUILD_TARGETS };
+  process.env.BAZEL_TEST_TARGETS = "";
+  process.env.BAZEL_BUILD_TARGETS = "//x/...";
+  try {
+    const status = runCi(byId("proto"), {
+      spawn: () => ({ status: 7 }),
+      log: { write: () => {} },
+    });
+    assert.equal(status, 7);
+    assert.equal(ciPlan(byId("proto")).command, "build");
+  } finally {
+    for (const [key, name] of [["tests", "BAZEL_TEST_TARGETS"], ["builds", "BAZEL_BUILD_TARGETS"]]) {
+      if (saved[key] === undefined) {
+        delete process.env[name];
+      } else {
+        process.env[name] = saved[key];
+      }
+    }
+  }
 });

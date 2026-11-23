@@ -17,14 +17,20 @@ export const OUTCOME_ICONS = {
 export function parseCheck(spec) {
   const index = String(spec).indexOf("=");
   if (index <= 0) {
-    throw new Error(`--check expects <step-id>=<title>, got '${spec}'`);
+    throw new Error(`--check expects <step-id>[?]=<title>, got '${spec}'`);
   }
-  return { id: spec.slice(0, index), title: spec.slice(index + 1) || spec.slice(0, index) };
+  const key = spec.slice(0, index);
+  const optional = key.endsWith("?");
+  const id = optional ? key.slice(0, -1) : key;
+  if (!id) {
+    throw new Error(`--check expects <step-id>[?]=<title>, got '${spec}'`);
+  }
+  return { id, title: spec.slice(index + 1) || id, optional };
 }
 
 export function evaluate(steps, checks) {
-  const rows = checks.map(({ id, title }) => {
-    const outcome = steps?.[id]?.outcome ?? "missing";
+  const rows = checks.map(({ id, title, optional = false }) => {
+    const outcome = steps?.[id]?.outcome ?? (optional ? "skipped" : "missing");
     return { id, title, outcome, ok: PASSING_OUTCOMES.has(outcome) };
   });
   return { rows, failed: rows.filter((row) => !row.ok) };

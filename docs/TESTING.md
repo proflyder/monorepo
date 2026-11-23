@@ -248,9 +248,12 @@ Push в `develop` CI не запускает: туда попадают толь
   Fail-fast нет: упавшая проверка не останавливает соседние.
 - Bazel не запускается параллельными шагами на один output base (сервер
   держит блокировку): параллелизм — внутри одного вызова. Android и
-  Bazel-юниты собирают и тестируют всё одним `bazel test --keep_going
-  --build_event_json_file=…` (сборочные цели — в том же вызове, `bazel test`
-  их строит). `platform/ci/bazel_report.mjs` читает BEP и группирует упавшие
+  Bazel-юниты собирают и тестируют всё одним `mise run ci:unit <unit>`:
+  `bazel test --keep_going --target_pattern_file=…` над тестами юнита и его
+  сборочными целями; сборочный паттерн (`//packages/rust/...`) раскрывается
+  `bazel query 'set(P) except tests(set(P))'`, так что чужие тесты под ним
+  только собираются, как в отдельном `bazel build`. Цели, несовместимые с
+  платформой хоста (BEP `aborted: SKIPPED`), не считаются ошибкой. `platform/ci/bazel_report.mjs` читает BEP и группирует упавшие
   цели по виду проверки (`build`, `test`, `lint`, `detekt`, `clippy`,
   `format` — по имени цели) с хвостом `test.log`/stderr каждой.
 - Не больше 10 фоновых шагов одновременно, у каждого `id`, каждый закрыт

@@ -56,7 +56,10 @@ adb install -r bazel-bin/projects/mobile/android/app/app.apk
   `Overdraw` path ignores in `lint.xml` exist because the Overdraw detector
   reads the application theme only from a manifest visited in the same Lint
   process; per-module analysis of a library cannot see the app manifest and
-  falls back to `Theme.Holo`.
+  falls back to `Theme.Holo`. The `UnusedResources` ignore covers only the
+  generated `app/res/values/google_services.xml`: CI lints the app with the
+  real `google-services.json` (same job as the release APK), and the Firebase
+  SDK reads those strings by name at runtime, so Lint cannot see their use.
 - **detekt** (`android / android-app`, same Bazel call): `detekt.yml` plus the first-party
   `home-rules` plug-in in `platform/android/detekt-rules`. There is no
   baseline; every finding fails.

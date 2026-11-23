@@ -129,6 +129,19 @@ test("report is green when every target passed", () => {
   assert.match(outcome.summary, /All 1 test targets and 1 built targets passed/);
 });
 
+test("targets skipped as incompatible with the host platform are not failures", () => {
+  const text = [
+    {
+      id: { targetCompleted: { label: "//station:station_binary" } },
+      aborted: { reason: "SKIPPED", description: "incompatible with the target platform" },
+    },
+    { id: { buildFinished: {} }, finished: { exitCode: { name: "SUCCESS" } } },
+  ]
+    .map(line)
+    .join("\n");
+  assert.deepEqual(bazelReport.report({ text, title: "t" }).failed, []);
+});
+
 test("report says so when there is no event file", () => {
   const outcome = bazelReport.report({ text: "", title: "t" });
   assert.deepEqual(outcome.failed, []);

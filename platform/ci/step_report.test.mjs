@@ -12,7 +12,14 @@ test("parseCheck splits id and title", () => {
   assert.deepEqual(stepReport.parseCheck("audit=Repository audit"), {
     id: "audit",
     title: "Repository audit",
+    optional: false,
   });
+  assert.deepEqual(stepReport.parseCheck("signing?=Signing"), {
+    id: "signing",
+    title: "Signing",
+    optional: true,
+  });
+  assert.throws(() => stepReport.parseCheck("?=x"), /step-id/);
   assert.throws(() => stepReport.parseCheck("=x"), /step-id/);
 });
 
@@ -70,4 +77,12 @@ test("main is green when every step passed or was skipped", () => {
   } finally {
     console.log = log;
   }
+});
+
+test("an optional step that a false if: left out of the steps context counts as skipped", () => {
+  const { rows, failed } = stepReport.evaluate({}, [
+    { id: "signing", title: "Signing", optional: true },
+  ]);
+  assert.equal(rows[0].outcome, "skipped");
+  assert.deepEqual(failed, []);
 });
