@@ -31,7 +31,7 @@ internal class ConnectionFragment :
         binding.connectionScroll.applyScrollBottomInset()
         binding.connectionScroll.keepFocusedVisible()
         val tokenBinder = bindText(binding.connectionToken, ConnectionIntent::EditToken)
-        binding.connectionRefresh.setupPullToRefresh { dispatch(ConnectionIntent.Test) }
+        binding.connectionRefresh.setupPullToRefresh(binding.connectionScroll) { dispatch(ConnectionIntent.Test) }
         binding.connectionTest.setOnClickListener { dispatch(ConnectionIntent.Test) }
         binding.connectionRefreshConfig.setOnClickListener { dispatch(ConnectionIntent.RefreshConfig) }
         binding.connectionClearToken.setOnClickListener { dispatch(ConnectionIntent.ClearToken) }

@@ -2,8 +2,11 @@ package dev.proflyder.home.feature.alarms.data
 
 import dev.proflyder.home.core.data.EntitySource
 import dev.proflyder.home.core.data.EntityStore
+import dev.proflyder.home.core.data.EntitySync
 import dev.proflyder.home.core.data.FeatureLifetime
 import dev.proflyder.home.core.data.RefreshMode
+import dev.proflyder.home.core.data.SyncEntity
+import dev.proflyder.home.core.data.SyncSignals
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.Schedule
 import dev.proflyder.home.core.model.map
@@ -20,8 +23,10 @@ internal class StoreAlarmRepository private constructor(
     private val store: EntityStore<String, Schedule>,
 ) : AlarmRepository, EntitySource<String, Schedule> by store {
     @Inject
-    constructor(remote: AlarmRemote, lifetime: FeatureLifetime) :
-        this(remote, EntityStore(lifetime.scope, Schedule::id, AlarmOrder, remote::list))
+    constructor(remote: AlarmRemote, lifetime: FeatureLifetime, signals: SyncSignals) :
+        this(remote, EntityStore(lifetime.scope, Schedule::id, AlarmOrder, remote::list)) {
+        EntitySync(store, SyncEntity.ALARMS, remote::get).follow(signals, lifetime.scope)
+    }
 
     init {
         store.refresh(RefreshMode.SOFT)

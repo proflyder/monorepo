@@ -17,6 +17,9 @@ spec:
         - podSelector:
             matchLabels:
               app.kubernetes.io/name: mcp-gateway
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: scheduler
         - ipBlock:
             cidr: ${NODE_LAN_IP}/32
       ports:

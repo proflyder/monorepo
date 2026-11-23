@@ -108,6 +108,7 @@ class ConnectSchedulerClientTest {
         assertEquals("1", request.getHeader("Connect-Protocol-Version"))
         assertEquals("Bearer test-token", request.getHeader("Authorization"))
         assertEquals(ZoneId.systemDefault().id, request.getHeader("Time-Zone"))
+        assertEquals(TestIdentity.ID, request.getHeader(DeviceOriginInterceptor.HEADER))
         assertEquals("{}", request.body.readUtf8())
         assertFalse(request.path!!.contains("test-token"))
     }

@@ -31,7 +31,7 @@ internal class TimersFragment :
             chip.setOnClickListener { dispatch(TimersIntent.Preset(preset)) }
         }
         binding.timersStart.setOnClickListener { dispatch(TimersIntent.Start) }
-        binding.timersRefresh.setupPullToRefresh { dispatch(TimersIntent.Refresh(RefreshMode.HARD)) }
+        binding.timersRefresh.setupPullToRefresh(binding.timersContent) { dispatch(TimersIntent.Refresh(RefreshMode.HARD)) }
         binding.timersRetry.setOnClickListener { dispatch(TimersIntent.Refresh(RefreshMode.HARD)) }
         render({ it.form.label }, label::render)
         render({ it.form.duration }, duration::render)

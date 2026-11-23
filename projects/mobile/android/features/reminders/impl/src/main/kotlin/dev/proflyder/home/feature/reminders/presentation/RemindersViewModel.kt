@@ -57,7 +57,6 @@ internal class RemindersViewModel(
     init {
         combine(repository.items, repository.load, ::onStore).launchIn(viewModelScope)
         repository.backgroundFailures().onEach { emit(RemindersEvent.Failure(it)) }.launchIn(viewModelScope)
-        repository.refreshOn(visibility.returned)
     }
 
     private fun openEditor(id: String?) {

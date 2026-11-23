@@ -1,5 +1,6 @@
 package dev.proflyder.home.feature.alarms.presentation
 
+import dev.proflyder.home.core.testing.FakeSyncSignals
 import androidx.lifecycle.ViewModelStore
 import dev.proflyder.home.core.data.RefCountedScope
 import dev.proflyder.home.core.presentation.viewModel
@@ -29,7 +30,7 @@ class AlarmsScopeTest {
     private val dispatcher = StandardTestDispatcher()
     private val host = TestScope(dispatcher)
     private val remote = FakeAlarmRemote(listOf(schedule("a1")))
-    private val scope = RefCountedScope(host, MutableStateFlow(false), 5.seconds) { StoreAlarmRepository(remote, it) }
+    private val scope = RefCountedScope(host, MutableStateFlow(false), 5.seconds) { StoreAlarmRepository(remote, it, FakeSyncSignals()) }
 
     @Before
     fun setUp() = Dispatchers.setMain(dispatcher)

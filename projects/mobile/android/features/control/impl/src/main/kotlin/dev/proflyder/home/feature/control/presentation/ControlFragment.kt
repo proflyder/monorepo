@@ -40,7 +40,7 @@ internal class ControlFragment :
         val dial = SpeedDialOverlay(binding.controlRoot, binding.controlQuickFab, ::dispatch).also { speedDial = it }
         binding.controlList.addOnScrollListener(FabOnScroll())
         addBackCallback(dialBack)
-        binding.controlRefresh.setupPullToRefresh { dispatch(ControlIntent.Refresh) }
+        binding.controlRefresh.setupPullToRefresh(binding.controlList, binding.controlAppbar) { dispatch(ControlIntent.Refresh) }
         binding.controlRetry.setOnClickListener { dispatch(ControlIntent.Refresh) }
         binding.controlOpenConnection.setOnClickListener { dispatch(ControlIntent.OpenConnection) }
         render(::controlListInputOf, list::render)

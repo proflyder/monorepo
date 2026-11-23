@@ -3,7 +3,8 @@
 FCM-доставка на телефон владельца (поиск телефона, уведомления). Flux
 (`Kustomization/app-phone-push`, образ `PHONE_PUSH_IMAGE` из pins). Один
 stateless Deployment в namespace `home-assistant`, ClusterIP `:8095`.
-Наружу не публикуется: единственный вызывающий — `mcp-gateway`.
+Наружу не публикуется: вызывающие — `mcp-gateway` (поиск, уведомления) и
+scheduler (тихие sync-пуши об изменении сущностей, `POST /v1/push/sync`).
 
 ## Что нужно от владельца (один раз)
 
@@ -64,13 +65,23 @@ curl -fsS -X POST "$PHONE_PUSH_URL/v1/push/find" \
 `sent: 0, devices: 0` — телефон ещё не зарегистрировался: открыть приложение
 и экран «Уведомления и поиск телефона» → «Обновить регистрацию».
 
+## Sync-пуши
+
+`POST /v1/push/sync` с телом `{"entity","op","id","originDeviceId"}` шлёт
+data-only FCM без уведомления: `{type:"sync", entity, op, id}`. `entity` —
+`alarms|reminders|timers|scenarios`, `op` — `upsert|delete`; содержимое
+сущности в пуш не попадает, приложение забирает его само. Устройство из
+`originDeviceId` (заголовок `Home-Device-Id` исходного запроса к scheduler)
+пуш не получает. Scheduler вызывает endpoint после своих мутаций и тиков
+движка, если задан `SCHEDULER_PUSH_URL`, с тем же токеном `scheduler-auth`.
+
 ## Секреты и сеть
 
 - `secret/k8s/home-assistant/scheduler-auth#token` → `phone-push#token`
   (общий токен приложения: его же предъявляет mcp-gateway и scheduler API).
 - `secret/k8s/home-assistant/phone-push#service_account_json` →
   `phone-push#service_account_json` (FCM).
-- NetworkPolicy: ingress только от `mcp-gateway` и kubelet; egress —
+- NetworkPolicy: ingress только от `mcp-gateway`, scheduler и kubelet; egress —
   scheduler `:8098`, CoreDNS `:53`, HTTPS `:443` (OAuth/FCM).
 - Откат — revert pins-коммита `PHONE_PUSH_IMAGE` или `flux suspend`
   Kustomization `app-phone-push`; своего состояния у сервиса нет.

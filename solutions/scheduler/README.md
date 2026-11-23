@@ -306,7 +306,16 @@ SCHEDULER_CONSUMERS=ha-bridge,android       (optional allowlist)
 SCENARIO_EXECUTION=false                    (GetStatus.scenario_execution_supported)
 SCHEDULER_VPN_SETTINGS_FILE=...             (optional, без него /v1/vpn/* → 503)
 SCHEDULER_VPN_SYNC_TOKEN_FILE=...           (optional, bearer /v1/vpn/peers)
+SCHEDULER_PUSH_URL=http://phone-push:8095   (optional, sync-пуши)
 ```
+
+Sync-пуши: если задан `SCHEDULER_PUSH_URL`, после каждой мутации будильника,
+напоминания, таймера и сценария (RPC и тик движка) scheduler фоном шлёт
+`POST {url}/v1/push/sync` `{entity, op, id, originDeviceId}` с тем же
+bearer-токеном. `entity` — `alarms|reminders|timers|scenarios` (по `kind`
+расписания), `op` — `upsert|delete`. `originDeviceId` берётся из заголовка
+`Home-Device-Id` запроса; phone-push этому устройству пуш не шлёт. Ошибка
+доставки только логируется и не влияет на ответ RPC.
 
 Токен обязателен: без него процесс не стартует; `SCHEDULER_TOKEN` побеждает
 `SCHEDULER_TOKEN_FILE`. Временная зона из env не читается — она приходит в

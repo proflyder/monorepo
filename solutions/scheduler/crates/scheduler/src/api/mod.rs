@@ -4,6 +4,8 @@ mod convert;
 mod error;
 pub mod push;
 mod service;
+#[cfg(test)]
+mod sync_tests;
 mod text;
 pub mod vpn;
 mod zone;

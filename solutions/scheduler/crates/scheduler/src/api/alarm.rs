@@ -2,7 +2,7 @@ use connectrpc::{ConnectError, RequestContext, Response, ServiceRequest, Service
 use home_proto::v1 as proto;
 use proto::AlarmService;
 
-use crate::domain::{Repeat, Schedule, ScheduleKind};
+use crate::domain::{Repeat, Schedule, ScheduleKind, SyncChange, SyncOp};
 
 use super::convert::{alarm_to_schedule, schedule_to_alarm};
 use super::service::Service;
@@ -92,6 +92,10 @@ impl AlarmService for AlarmFacade {
             .inner
             .store_call(move |store| store.create_schedule(&schedule, "", now))
             .await?;
+        self.inner.announce(
+            &ctx,
+            SyncChange::schedule(created.kind, SyncOp::Upsert, &created.id),
+        );
         response(proto::CreateAlarmResponse {
             alarm: schedule_to_alarm(&created, &zone).into(),
             ..proto::CreateAlarmResponse::default()
@@ -159,6 +163,10 @@ impl AlarmService for AlarmFacade {
             .inner
             .store_call(move |store| store.update_schedule(&schedule, revision, now))
             .await?;
+        self.inner.announce(
+            &ctx,
+            SyncChange::schedule(updated.kind, SyncOp::Upsert, &updated.id),
+        );
         response(proto::UpdateAlarmResponse {
             alarm: schedule_to_alarm(&updated, &zone).into(),
             ..proto::UpdateAlarmResponse::default()
@@ -167,17 +175,12 @@ impl AlarmService for AlarmFacade {
 
     async fn delete_alarm<'a>(
         &'a self,
-        _ctx: RequestContext,
+        ctx: RequestContext,
         request: ServiceRequest<'_, proto::DeleteAlarmRequest>,
     ) -> ServiceResult<impl connectrpc::Encodable<proto::DeleteAlarmResponse> + Send + use<'a>>
     {
         let schedule = self.get_alarm_schedule(request.id).await?;
-        let id = schedule.id.clone();
-        let now = self.inner.now_unix();
-        let deleted = self
-            .inner
-            .store_call(move |store| store.delete_schedule(&id, now))
-            .await?;
+        let deleted = self.inner.delete_schedule_synced(&ctx, schedule.id).await?;
         response(proto::DeleteAlarmResponse {
             deleted,
             ..proto::DeleteAlarmResponse::default()
@@ -199,6 +202,10 @@ impl AlarmService for AlarmFacade {
             .inner
             .store_call(move |store| store.set_schedule_enabled(&id, enabled, now))
             .await?;
+        self.inner.announce(
+            &ctx,
+            SyncChange::schedule(updated.kind, SyncOp::Upsert, &updated.id),
+        );
         response(proto::SetAlarmEnabledResponse {
             alarm: schedule_to_alarm(&updated, &zone).into(),
             ..proto::SetAlarmEnabledResponse::default()
@@ -220,6 +227,10 @@ impl AlarmService for AlarmFacade {
             .inner
             .store_call(move |store| store.snooze_schedule(&id, minutes, now))
             .await?;
+        self.inner.announce(
+            &ctx,
+            SyncChange::schedule(updated.kind, SyncOp::Upsert, &updated.id),
+        );
         response(proto::SnoozeAlarmResponse {
             alarm: schedule_to_alarm(&updated, &zone).into(),
             ..proto::SnoozeAlarmResponse::default()
@@ -239,6 +250,10 @@ impl AlarmService for AlarmFacade {
             .inner
             .store_call(move |store| store.stop_schedule(&id, now))
             .await?;
+        self.inner.announce(
+            &ctx,
+            SyncChange::schedule(updated.kind, SyncOp::Upsert, &updated.id),
+        );
         response(proto::StopAlarmResponse {
             alarm: schedule_to_alarm(&updated, &zone).into(),
             ..proto::StopAlarmResponse::default()

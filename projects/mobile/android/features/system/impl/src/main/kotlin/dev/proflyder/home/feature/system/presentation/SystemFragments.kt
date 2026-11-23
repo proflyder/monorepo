@@ -24,7 +24,7 @@ internal abstract class SystemScreenFragment :
 
     override fun onViewReady(binding: FragmentSystemBinding, savedInstanceState: Bundle?) {
         binding.systemList.adapter = adapter
-        binding.systemRefresh.setupPullToRefresh { dispatch(SystemIntent.Refresh) }
+        binding.systemRefresh.setupPullToRefresh(binding.systemList) { dispatch(SystemIntent.Refresh) }
         binding.systemRetry.setOnClickListener { dispatch(SystemIntent.Refresh) }
         render(SystemState::snapshot) { snapshot -> adapter.submitList(snapshot?.let { rows(it) }.orEmpty()) }
         render({ SystemStatus(it.loading, it.error, it.snapshot != null) }, ::renderStatus)

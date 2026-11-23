@@ -1,5 +1,6 @@
 package dev.proflyder.home.core.runtime
 
+import dev.proflyder.home.core.data.StalenessPolicy
 import dev.proflyder.home.core.model.AnalyticsBackend
 import dev.proflyder.home.core.model.AnalyticsTracker
 import dev.proflyder.home.core.model.AppEnvironment
@@ -43,6 +44,9 @@ abstract class RuntimeBindings {
         @Provides
         @SingleIn(AppScope::class)
         fun provideClock(): Clock = AndroidClock
+
+        @Provides
+        fun provideStalenessPolicy(): StalenessPolicy = StalenessPolicy()
 
         @Provides
         @SingleIn(AppScope::class)

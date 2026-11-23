@@ -95,7 +95,6 @@ internal class AlarmsViewModel(
     init {
         combine(repository.items, repository.load, ::onStore).launchIn(viewModelScope)
         repository.backgroundFailures().onEach { emit(AlarmsEvent.Failure(it)) }.launchIn(viewModelScope)
-        repository.refreshOn(visibility.returned)
     }
 
     override fun derive(previous: AlarmsUiState, next: AlarmsUiState): AlarmsUiState = next.derivedFrom(previous)

@@ -34,18 +34,18 @@ class StickySectionHeaders : RecyclerView.ItemDecoration() {
         pinned.setEmpty()
         val (adapter, sections) = parent.sectionedAdapter() ?: return
         observe(adapter)
-        val top = parent.getChildAt(0) ?: return
-        val position = parent.getChildAdapterPosition(top).takeIf { it != RecyclerView.NO_POSITION } ?: return
+        val edge = parent.visibleTop()
+        val position = parent.firstPositionBelow(edge) ?: return
         val headerPosition = sections.headerAtOrBefore(position) ?: return
         val header = headerView(parent, adapter, headerPosition)
-        val y = parent.paddingTop + pushOffset(parent, sections, header.height)
-        pinned.set(parent.paddingLeft, y, parent.paddingLeft + header.width, y + header.height)
-        canvas.withClip(pinned) { drawPinned(this, header, MaterialColors.getColor(parent, android.R.attr.colorBackground)) }
+        val y = edge + pushOffset(parent, sections, edge, edge + header.height)
+        pinned.set(0, maxOf(y, edge), parent.width, y + header.height)
+        canvas.withClip(pinned) { drawPinned(this, parent, header, y) }
     }
 
-    private fun drawPinned(canvas: Canvas, header: View, background: Int) {
-        canvas.drawColor(background)
-        canvas.withTranslation(pinned.left.toFloat(), pinned.top.toFloat()) { header.draw(this) }
+    private fun drawPinned(canvas: Canvas, parent: RecyclerView, header: View, top: Int) {
+        canvas.drawColor(MaterialColors.getColor(parent, android.R.attr.colorBackground))
+        canvas.withTranslation(parent.paddingLeft.toFloat(), top.toFloat()) { header.draw(this) }
     }
 
     private fun observe(adapter: RecyclerView.Adapter<*>) {
@@ -60,11 +60,9 @@ class StickySectionHeaders : RecyclerView.ItemDecoration() {
         cached = null
     }
 
-    private fun pushOffset(parent: RecyclerView, sections: SectionedAdapter, height: Int): Int {
-        val limit = parent.paddingTop + height
-        val next = (1 until parent.childCount).map(parent::getChildAt).firstOrNull { child ->
-            val position = parent.getChildAdapterPosition(child)
-            position != RecyclerView.NO_POSITION && sections.isSectionHeader(position) && child.top < limit
+    private fun pushOffset(parent: RecyclerView, sections: SectionedAdapter, edge: Int, limit: Int): Int {
+        val next = (0 until parent.childCount).map(parent::getChildAt).firstOrNull { child ->
+            child.top in (edge + 1) until limit && parent.isHeaderView(child, sections)
         }
         return next?.let { (it.top - limit).coerceAtMost(0) } ?: 0
     }
@@ -100,4 +98,18 @@ class StickySectionHeaders : RecyclerView.ItemDecoration() {
             }
         }
     }
+}
+
+internal fun RecyclerView.visibleTop(): Int = if (clipToPadding) paddingTop else 0
+
+internal fun RecyclerView.firstPositionBelow(edge: Int): Int? = (0 until childCount)
+    .map(::getChildAt)
+    .filter { it.bottom > edge }
+    .minByOrNull { it.top }
+    ?.let(::getChildAdapterPosition)
+    ?.takeIf { it != RecyclerView.NO_POSITION }
+
+internal fun RecyclerView.isHeaderView(child: View, sections: SectionedAdapter): Boolean {
+    val position = getChildAdapterPosition(child)
+    return position != RecyclerView.NO_POSITION && sections.isSectionHeader(position)
 }

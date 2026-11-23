@@ -1,5 +1,6 @@
 package dev.proflyder.home.feature.timers.presentation
 
+import dev.proflyder.home.core.testing.FakeSyncSignals
 import dev.proflyder.home.core.config.ConnectionConfig
 import dev.proflyder.home.core.config.ConnectionSettingsStore
 import dev.proflyder.home.core.config.TokenStatus
@@ -11,6 +12,9 @@ import dev.proflyder.home.core.testing.FakeClock
 import dev.proflyder.home.core.testing.ScheduleFixtures.timer
 import dev.proflyder.home.feature.timers.TIMER_PRESETS
 import dev.proflyder.home.core.data.FeatureLifetime
+import dev.proflyder.home.core.data.SyncEntity
+import dev.proflyder.home.core.data.SyncOp
+import dev.proflyder.home.core.data.SyncSignal
 import dev.proflyder.home.feature.timers.data.StoreTimerRepository
 import dev.proflyder.home.feature.timers.data.TimerRemote
 import kotlinx.coroutines.CoroutineScope
@@ -41,9 +45,10 @@ import org.junit.Test
 class TimersViewModelTest {
     private val dispatcher = StandardTestDispatcher()
     private val clock = FakeClock(wallMillis = 1_000_000L)
+    private val signals = FakeSyncSignals()
     private val remote = FakeTimerRemote(listOf(timer("tea", dueUnix = 1_060L)))
     private val repository by lazy {
-        StoreTimerRepository(remote, FeatureLifetime(CoroutineScope(Dispatchers.Main + SupervisorJob())))
+        StoreTimerRepository(remote, FeatureLifetime(CoroutineScope(Dispatchers.Main + SupervisorJob())), signals)
     }
 
     @Before
@@ -58,7 +63,6 @@ class TimersViewModelTest {
         serverClock = ServerClock(clock),
         settings = NoSettings,
         defaultLabel = "Timer",
-        clock = clock,
     )
 
     @Test
@@ -78,16 +82,29 @@ class TimersViewModelTest {
     }
 
     @Test
-    fun anExpiredTimerTriggersARefresh() = runTest(dispatcher) {
+    fun showingTheScreenAgainMakesNoRequest() = runTest(dispatcher) {
         val viewModel = viewModel()
         viewModel.visibility.started()
         runCurrent()
         val loads = remote.listCalls
+        viewModel.visibility.stopped()
+        viewModel.visibility.started()
         clock.advanceMillis(61_000)
-        advanceTimeBy(1_100)
+        advanceTimeBy(61_000)
         viewModel.visibility.stopped()
         runCurrent()
-        assertTrue(remote.listCalls > loads)
+        assertEquals(loads, remote.listCalls)
+    }
+
+    @Test
+    fun aSyncSignalReloadsTimersOnce() = runTest(dispatcher) {
+        val viewModel = viewModel()
+        runCurrent()
+        val loads = remote.listCalls
+        signals.publish(SyncSignal.Changed(SyncEntity.TIMERS, SyncOp.UPSERT, "tea"))
+        runCurrent()
+        assertEquals(loads + 1, remote.listCalls)
+        assertEquals(1, viewModel.state.value.rows.size)
     }
 
     @Test

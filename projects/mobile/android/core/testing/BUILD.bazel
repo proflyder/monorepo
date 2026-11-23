@@ -7,5 +7,9 @@ kt_jvm_library(
     testonly = True,
     srcs = glob(["src/main/kotlin/**/*.kt"]),
     kotlinc_opts = "//platform/android:jvm17_options",
-    deps = ["//projects/mobile/android/core/model"],
+    deps = [
+        "//projects/mobile/android/core/data",
+        "//projects/mobile/android/core/model",
+        "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_core",
+    ],
 )

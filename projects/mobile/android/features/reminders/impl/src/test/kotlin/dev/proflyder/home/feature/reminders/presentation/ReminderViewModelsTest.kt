@@ -1,5 +1,6 @@
 package dev.proflyder.home.feature.reminders.presentation
 
+import dev.proflyder.home.core.testing.FakeSyncSignals
 import androidx.lifecycle.SavedStateHandle
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RemoteFailure
@@ -39,7 +40,7 @@ class ReminderViewModelsTest {
         ),
     )
     private val repository by lazy {
-        StoreReminderRepository(remote, FeatureLifetime(CoroutineScope(Dispatchers.Unconfined + SupervisorJob())))
+        StoreReminderRepository(remote, FeatureLifetime(CoroutineScope(Dispatchers.Unconfined + SupervisorJob())), FakeSyncSignals())
     }
 
     @Before
