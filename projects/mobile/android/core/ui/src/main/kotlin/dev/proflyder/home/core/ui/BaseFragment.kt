@@ -68,7 +68,11 @@ abstract class BaseFragment<VB : ViewBinding>(
     }
 
     protected fun showError(@StringRes message: Int) {
-        Notices.show(binding.root, getString(message), NoticeKind.Error, long = true)
+        showError(getString(message))
+    }
+
+    protected fun showError(message: CharSequence) {
+        Notices.show(binding.root, message, NoticeKind.Error, long = true)
     }
 
     fun showFailure(failure: RemoteFailure) {

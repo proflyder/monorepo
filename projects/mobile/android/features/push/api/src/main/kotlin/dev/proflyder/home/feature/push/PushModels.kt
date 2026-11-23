@@ -1,5 +1,6 @@
 package dev.proflyder.home.feature.push
 
+import dev.proflyder.home.core.model.RemoteFailure
 import kotlinx.coroutines.flow.StateFlow
 
 object PushIntents {
@@ -57,17 +58,29 @@ interface PushRegistrationStore {
 interface PushTokenSource {
     val token: StateFlow<String?>
 
+    suspend fun fetch(): String?
+
     fun refreshed(token: String)
 
     fun revoked(token: String)
 }
 
+sealed interface PushRegistrationResult {
+    data object Done : PushRegistrationResult
+
+    data object NoPushToken : PushRegistrationResult
+
+    data object NotConfigured : PushRegistrationResult
+
+    data class Rejected(val failure: RemoteFailure) : PushRegistrationResult
+}
+
 interface PushRegistrar {
     val status: StateFlow<PushSyncStatus>
 
-    suspend fun registerNow(): Boolean
+    suspend fun registerNow(): PushRegistrationResult
 
-    suspend fun saveDeviceName(name: String): Boolean
+    suspend fun saveDeviceName(name: String): PushRegistrationResult
 }
 
 interface PushPermissionProbe {

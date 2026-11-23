@@ -482,6 +482,15 @@ navigate by route string, not by an impl destination.
   phone. The DataStore key stays `push_device_id`; the VPN profile uses the
   same id. Registration (`POST /v1/push/devices` on the scheduler URL) is
   reactive on token, server, name and version, plus every 24 h.
+  «Update registration» re-requests a missing FCM token (a failed fetch at
+  start is not final) and reports a typed result: no FCM token, server or
+  token not set, or the server failure text; never a generic error.
+- **Call foreground service** claims `phoneCall|microphone` (microphone only
+  when `RECORD_AUDIO` is granted, Android 11+): with only `phoneCall` the
+  microphone is cut once the call screen stops, e.g. when the proximity
+  sensor blanks it. The proximity lock is held only on the earpiece route.
+  If Telecom refuses the self-managed connection, the call is placed
+  directly instead of hanging in «Dialing».
 - **Find phone.** A high-priority FCM data message is the case Android allows
   a killed app to start a foreground service from. The ring uses
   `USAGE_ALARM` at max alarm volume and restores it; the ringer mode is never

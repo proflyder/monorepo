@@ -1,6 +1,7 @@
 package dev.proflyder.home.feature.push
 
 import dev.proflyder.home.core.config.ConnectionConfig
+import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.text.takeUtf8Bytes
 
 internal data class PushRegistrationRequest(
@@ -30,6 +31,11 @@ internal object PushRegistrationPolicy {
 
     fun serverOf(config: ConnectionConfig): String? =
         config.endpoint?.baseUrl()?.takeIf { config.hasToken }
+
+    fun resultOf(published: Outcome<Unit>): PushRegistrationResult = when (published) {
+        is Outcome.Success -> PushRegistrationResult.Done
+        is Outcome.Failure -> PushRegistrationResult.Rejected(published.failure)
+    }
 
     fun cleanName(raw: String, fallback: String): String =
         raw.trim().takeUtf8Bytes(NAME_BYTES).trim().ifEmpty { fallback }

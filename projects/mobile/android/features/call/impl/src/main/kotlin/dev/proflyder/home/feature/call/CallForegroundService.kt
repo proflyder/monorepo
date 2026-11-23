@@ -1,8 +1,13 @@
 package dev.proflyder.home.feature.call
 
+import android.Manifest
+import android.annotation.SuppressLint
+import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.os.Build
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.lifecycleScope
 import dev.proflyder.home.core.runtime.appGraph
@@ -55,13 +60,27 @@ class CallForegroundService : LifecycleService() {
     private fun post(state: CallSnapshot) {
         val notification = notifications.build(state)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(CallNotifications.NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL)
+            startForeground(CallNotifications.NOTIFICATION_ID, notification, callServiceTypes(this))
         } else {
             startForeground(CallNotifications.NOTIFICATION_ID, notification)
         }
     }
 
     companion object {
+        internal fun callServiceTypes(context: Context): Int =
+            callServiceTypes(Build.VERSION.SDK_INT, microphoneGranted(context))
+
+        @SuppressLint("InlinedApi")
+        internal fun callServiceTypes(sdk: Int, microphoneGranted: Boolean): Int {
+            val microphone = sdk >= Build.VERSION_CODES.R && microphoneGranted
+            val extra = if (microphone) ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE else 0
+            return ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL or extra
+        }
+
+        private fun microphoneGranted(context: Context): Boolean =
+            ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
+                PackageManager.PERMISSION_GRANTED
+
         const val ACTION_HANGUP = "dev.proflyder.home.call.HANGUP"
     }
 }

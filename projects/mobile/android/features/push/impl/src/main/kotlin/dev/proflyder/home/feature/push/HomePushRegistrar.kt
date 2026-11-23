@@ -4,6 +4,7 @@ import dev.proflyder.home.core.config.ConnectionSettingsStore
 import dev.proflyder.home.core.model.Clock
 import dev.proflyder.home.core.model.DeviceIdentity
 import dev.proflyder.home.core.model.Outcome
+import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.operation.suspendRunCatching
 import dev.proflyder.home.core.runtime.AppStartable
 import dev.proflyder.home.core.runtime.AppVersion
@@ -56,15 +57,19 @@ class HomePushRegistrar(
         }
     }
 
-    override suspend fun registerNow(): Boolean {
-        val request = current()
-        return request != null && register(request, force = true)
+    override suspend fun registerNow(): PushRegistrationResult {
+        val server = PushRegistrationPolicy.serverOf(settings.config.value)
+            ?: return PushRegistrationResult.NotConfigured
+        val token = tokens.token.value ?: tokens.fetch()
+        val request = request(token, server, store.registration.value.deviceName)
+            ?: return markFailed(PushRegistrationResult.NoPushToken)
+        return register(request, force = true)
     }
 
-    override suspend fun saveDeviceName(name: String): Boolean {
+    override suspend fun saveDeviceName(name: String): PushRegistrationResult {
         store.savedName(PushRegistrationPolicy.cleanName(name, identity.defaultName()))
-        val request = current()
-        return request == null || register(request, force = false)
+        val request = current() ?: return PushRegistrationResult.Done
+        return register(request, force = false)
     }
 
     internal fun unregister(token: String) {
@@ -92,16 +97,26 @@ class HomePushRegistrar(
         return PushRegistrationRequest(token, name, appVersion, server)
     }
 
-    private suspend fun register(request: PushRegistrationRequest, force: Boolean): Boolean =
+    private suspend fun register(request: PushRegistrationRequest, force: Boolean): PushRegistrationResult =
         registering.withLock { registerLocked(request, force) }
 
-    private suspend fun registerLocked(request: PushRegistrationRequest, force: Boolean): Boolean {
+    private suspend fun registerLocked(request: PushRegistrationRequest, force: Boolean): PushRegistrationResult {
         val now = clock.wallMillis()
-        if (!force && !PushRegistrationPolicy.isDue(store.registration.value, request, now)) return true
-        val published = inFlight.run { suspendRunCatching { publisher.publish(request) }.getOrNull() }
-        val ok = published is Outcome.Success
-        failed.value = !ok
-        if (ok) store.saved(request.record(now))
-        return ok
+        if (!force && !PushRegistrationPolicy.isDue(store.registration.value, request, now)) {
+            return PushRegistrationResult.Done
+        }
+        val published = inFlight.run { suspendRunCatching { publisher.publish(request) }.getOrElse(::unexpected) }
+        val result = PushRegistrationPolicy.resultOf(published)
+        failed.value = result != PushRegistrationResult.Done
+        if (result == PushRegistrationResult.Done) store.saved(request.record(now))
+        return result
     }
+
+    private fun markFailed(result: PushRegistrationResult): PushRegistrationResult {
+        failed.value = true
+        return result
+    }
+
+    private fun unexpected(failure: Throwable): Outcome<Unit> =
+        Outcome.Failure(RemoteFailure.ProtocolFailure(failure.javaClass.simpleName))
 }

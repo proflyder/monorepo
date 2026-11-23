@@ -58,7 +58,7 @@ internal fun callScreenState(
     muted = call.muted,
     routes = routes,
     routeSheetVisible = flags.routeSheetVisible && call.isLive,
-    proximityLock = call.phase == CallPhase.ACTIVE,
+    proximityLock = call.phase == CallPhase.ACTIVE && routes.selected == CallAudioRoute.EARPIECE,
 )
 
 internal fun shouldClose(call: CallSnapshot, flags: CallScreenFlags): Boolean =
