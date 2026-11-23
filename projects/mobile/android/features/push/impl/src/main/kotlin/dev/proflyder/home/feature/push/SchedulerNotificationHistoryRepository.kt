@@ -108,7 +108,7 @@ internal class SchedulerNotificationHistoryRepository(
     private suspend fun changed(signal: SyncSignal.Changed) {
         val id = signal.id?.takeIf { it.isNotBlank() }
         if (signal.op == SyncOp.DELETE && id != null) {
-            paged.hide(id)
+            paged.drop(id)
             refreshUnread()
             return
         }
@@ -128,9 +128,10 @@ internal class SchedulerNotificationHistoryRepository(
     }
 
     private fun RemoteFailure.isMissingDevice(): Boolean =
-        this is RemoteFailure.Server && httpStatus == HTTP_BAD_REQUEST
+        this is RemoteFailure.Server && httpStatus == HTTP_BAD_REQUEST && reason == DEVICE_REQUIRED
 
     private companion object {
         const val HTTP_BAD_REQUEST = 400
+        const val DEVICE_REQUIRED = "device_required"
     }
 }

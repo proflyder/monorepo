@@ -106,19 +106,14 @@ class PagedStateViewModelTest {
         list,
         appScope,
         commit,
+        derive = { pages, pendingRemoval -> TestState(pages, pendingRemoval) },
     ) {
         val handled = mutableListOf<TestIntent>()
-
-        override fun copyPaging(pages: PagedState<Row>, pendingRemoval: Row?): TestState = TestState(pages, pendingRemoval)
 
         override fun pagingFailure(failure: RemoteFailure): TestEvent = TestEvent.Failure(failure)
 
         override fun handle(intent: TestIntent) {
             handled += intent
-        }
-
-        init {
-            startPaging()
         }
     }
 

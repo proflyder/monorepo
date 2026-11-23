@@ -18,6 +18,7 @@ import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.binding
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 import kotlinx.coroutines.CoroutineScope
 
@@ -43,30 +44,22 @@ internal sealed interface HistoryEvent {
 
 internal class NotificationHistoryViewModel(
     private val repository: NotificationHistoryRepository,
-    private val clock: Clock,
+    clock: Clock,
     appScope: CoroutineScope,
 ) : PagedStateViewModel<NotificationHistory, NotificationHistoryUiState, HistoryIntent, HistoryEvent>(
     NotificationHistoryUiState(),
     repository.paged,
     appScope,
     repository::remove,
-) {
-    private val zone: ZoneId = ZoneId.systemDefault()
-
-    init {
-        startPaging()
-    }
-
-    override fun copyPaging(pages: PagedState<NotificationHistory>, pendingRemoval: NotificationHistory?): NotificationHistoryUiState =
+    derive = { pages, pendingRemoval ->
         NotificationHistoryUiState(
             pages = pages,
             pendingRemoval = pendingRemoval,
-            rows = HistoryRows.of(pages.items, today(), zone),
+            rows = HistoryRows.of(pages.items, historyToday(clock, historyZone), historyZone),
             hasUnread = pages.items.any { !it.read },
         )
-
-    private fun today() = Instant.ofEpochMilli(clock.wallMillis()).atZone(zone).toLocalDate()
-
+    },
+) {
     override fun pagingFailure(failure: RemoteFailure): HistoryEvent = HistoryEvent.Failure(failure)
 
     override fun handle(intent: HistoryIntent) {
@@ -114,3 +107,8 @@ class NotificationHistoryViewModelSource internal constructor(
 ) : ViewModelSource {
     override fun create(): ViewModel = history.viewModel { NotificationHistoryViewModel(it, clock, appScope) }
 }
+
+private val historyZone: ZoneId = ZoneId.systemDefault()
+
+private fun historyToday(clock: Clock, zone: ZoneId): LocalDate =
+    Instant.ofEpochMilli(clock.wallMillis()).atZone(zone).toLocalDate()

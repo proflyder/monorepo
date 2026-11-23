@@ -98,6 +98,24 @@ class PagedListTest {
     }
 
     @Test
+    fun aDroppedItemIsNotHiddenFromLaterPages() = runTest {
+        val source = FakeSource(
+            Outcome.Success(Page(rows("a", "b"), "next")),
+            Outcome.Success(Page(rows("a", "c"), null)),
+        )
+        val list = list(source)
+        list.dispatch(PagingAction.Refresh(RefreshMode.HARD))
+        advanceUntilIdle()
+
+        list.drop("a")
+        list.reveal("a")
+        list.dispatch(PagingAction.LoadMore)
+        advanceUntilIdle()
+
+        assertEquals(listOf("b", "a", "c"), list.state.value.items.map { it.key })
+    }
+
+    @Test
     fun aHiddenItemComesBackAtItsPlace() = runTest {
         val source = FakeSource(Outcome.Success(Page(rows("a", "b", "c"), null)))
         val list = list(source)

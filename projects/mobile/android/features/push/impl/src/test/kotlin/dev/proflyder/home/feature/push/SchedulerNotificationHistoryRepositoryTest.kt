@@ -127,6 +127,7 @@ class SchedulerNotificationHistoryRepositoryTest {
         withRepository(api, signals) { repository ->
             advanceUntilIdle()
 
+            api.entries = listOf(entry("b"))
             signals.emit(SyncSignal.Changed(SyncEntity.NOTIFICATIONS, SyncOp.DELETE, "a"))
             advanceUntilIdle()
 
@@ -139,13 +140,24 @@ class SchedulerNotificationHistoryRepositoryTest {
 
     @Test
     fun aMissingDeviceHeaderReadsAsAnEmptyHistoryInsteadOfAnError() = runTest {
-        val api = FakeApi(entries = listOf(entry("a")), rejectWithoutDevice = true)
+        val api = FakeApi(entries = listOf(entry("a")), rejection = ServerError(deviceRequired = true))
         withRepository(api) { repository ->
             advanceUntilIdle()
 
             assertTrue(repository.paged.state.value.items.isEmpty())
             assertFalse(repository.paged.state.value.refresh is LoadState.Failed)
             assertEquals(0, repository.unread.value)
+        }
+    }
+
+    @Test
+    fun anotherBadRequestStillSurfacesAsAFailure() = runTest {
+        val api = FakeApi(entries = listOf(entry("a")), rejection = ServerError(deviceRequired = false))
+        withRepository(api) { repository ->
+            advanceUntilIdle()
+
+            assertTrue(repository.paged.state.value.items.isEmpty())
+            assertTrue(repository.paged.state.value.refresh is LoadState.Failed)
         }
     }
 
@@ -168,13 +180,13 @@ class SchedulerNotificationHistoryRepositoryTest {
     private class FakeApi(
         var entries: List<NotificationHistory> = emptyList(),
         var failRead: Boolean = false,
-        private val rejectWithoutDevice: Boolean = false,
+        private val rejection: RemoteFailure? = null,
     ) : NotificationHistoryApi {
         var requestedCursor: String? = null
         val removed = mutableListOf<String>()
 
         override suspend fun page(cursor: String?, limit: Int): Outcome<NotificationHistoryPage> {
-            if (rejectWithoutDevice) return Outcome.Failure(ServerError)
+            rejection?.let { return Outcome.Failure(it) }
             requestedCursor = cursor
             val start = cursor?.toIntOrNull() ?: 0
             val page = entries.drop(start).take(20)
@@ -183,7 +195,7 @@ class SchedulerNotificationHistoryRepositoryTest {
         }
 
         override suspend fun unread(): Outcome<Int> =
-            if (rejectWithoutDevice) Outcome.Failure(ServerError) else Outcome.Success(entries.count { !it.read })
+            rejection?.let { Outcome.Failure(it) } ?: Outcome.Success(entries.count { !it.read })
 
         override suspend fun setRead(id: String, read: Boolean): Outcome<Unit> {
             if (failRead) return Outcome.Failure(RemoteFailure.Offline("offline"))
@@ -203,10 +215,11 @@ class SchedulerNotificationHistoryRepositoryTest {
     }
 
     private companion object {
-        val ServerError = RemoteFailure.Server(
+        fun ServerError(deviceRequired: Boolean) = RemoteFailure.Server(
             httpStatus = 400,
             code = ConnectCode.INVALID_ARGUMENT,
-            message = "invalid argument",
+            message = if (deviceRequired) "device_required" else "invalid argument",
+            reason = if (deviceRequired) "device_required" else "invalid argument",
         )
 
         fun entry(id: String, read: Boolean = false): NotificationHistory = NotificationHistory(

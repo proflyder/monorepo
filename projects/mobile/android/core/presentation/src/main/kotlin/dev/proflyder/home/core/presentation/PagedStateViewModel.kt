@@ -19,16 +19,14 @@ abstract class PagedStateViewModel<T : Keyed, S : PagedScreenState<T>, I : Any, 
     list: PagedList<T>,
     appScope: CoroutineScope,
     commitRemoval: suspend (T) -> Outcome<Unit>,
+    private val derive: (PagedState<T>, T?) -> S,
 ) : StateViewModel<S, I, E>(initialState) {
     private val undo = UndoableRemoval(list, viewModelScope, appScope, commitRemoval, ::dispatchFailure)
     private val paging = PagingHandler(list, undo)
-    private var started = false
 
-    protected fun startPaging() {
-        if (started) return
-        started = true
-        launch { paging.state.collect { pages -> updateState { copyPaging(pages, pendingRemoval) } } }
-        launch { paging.pendingUndo.collect { item -> updateState { copyPaging(pages, item) } } }
+    init {
+        launch { paging.state.collect { pages -> updateState { derive(pages, pendingRemoval) } } }
+        launch { paging.pendingUndo.collect { item -> updateState { derive(pages, item) } } }
     }
 
     fun dispatch(intent: PagingIntent) = paging.dispatch(intent)
@@ -38,8 +36,6 @@ abstract class PagedStateViewModel<T : Keyed, S : PagedScreenState<T>, I : Any, 
     override fun onCleared() {
         paging.close()
     }
-
-    protected abstract fun copyPaging(pages: PagedState<T>, pendingRemoval: T?): S
 
     protected abstract fun pagingFailure(failure: RemoteFailure): E
 
