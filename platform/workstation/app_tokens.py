@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
 import json
 import secrets
+import subprocess
 import sys
 
 import workstation as ws
@@ -26,6 +28,7 @@ MODULES = [
     "admin",
 ]
 SERVICE_MODULES: list[str] = []
+KUBECTL_NAMESPACE = "home-assistant"
 
 
 def digest(token: str) -> str:
@@ -63,6 +66,55 @@ def merge_token(seed: dict, name: str, token: str) -> dict:
     tokens.append(entry)
     return {"revision": 0, "tokens": sorted(tokens, key=lambda item: item.get("id", ""))}
 
+
+
+def legacy_consumers(legacy: str, secrets_doc: dict, configmaps_doc: dict) -> list[str]:
+    if not legacy:
+        return []
+    found = []
+    for item in secrets_doc.get("items", []):
+        name = item.get("metadata", {}).get("name", "")
+        if name == "scheduler-auth":
+            continue
+        for key, value in (item.get("data") or {}).items():
+            try:
+                raw = base64.b64decode(value)
+            except (ValueError, TypeError):
+                continue
+            if legacy.encode() in raw:
+                found.append(f"Secret/{name}:{key}")
+    for item in configmaps_doc.get("items", []):
+        name = item.get("metadata", {}).get("name", "")
+        for key, value in (item.get("data") or {}).items():
+            if isinstance(value, str) and legacy in value:
+                found.append(f"ConfigMap/{name}:{key}")
+    return sorted(found)
+
+
+def preflight(bao: ws.Bao, path: str, run=None) -> list[str]:
+    if run is None:
+        run = subprocess.run
+    values, _ = read_secret(bao, path)
+    legacy = values.get("token", "")
+    if not legacy:
+        return []
+    secrets_doc = json.loads(
+        run(
+            ["mise", "run", "kubectl", "--", "-n", KUBECTL_NAMESPACE, "get", "secrets", "-o", "json"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+    )
+    configmaps_doc = json.loads(
+        run(
+            ["mise", "run", "kubectl", "--", "-n", KUBECTL_NAMESPACE, "get", "configmaps", "-o", "json"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+    )
+    return legacy_consumers(legacy, secrets_doc, configmaps_doc)
 
 def issue(bao: ws.Bao, path: str, name: str, token: str, dry_run: bool = False) -> dict:
     values, version = read_secret(bao, path)
@@ -104,6 +156,7 @@ def main(argv: list[str] | None = None, out=print) -> int:
     parser.add_argument("--path", default=PATH)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--finalize", action="store_true")
+    parser.add_argument("--skip-preflight", action="store_true")
     args = parser.parse_args(argv)
     if not args.name.strip() or "/" in args.name:
         raise SystemExit("name must be a non-empty plain string")
@@ -115,6 +168,18 @@ def main(argv: list[str] | None = None, out=print) -> int:
             raise SystemExit(str(error)) from None
         out("previous service token removed from OpenBao")
         return 0
+    if not args.skip_preflight:
+        try:
+            consumers = preflight(bao, args.path)
+        except (subprocess.CalledProcessError, ValueError) as error:
+            raise SystemExit(f"preflight failed; no rotation was made: {error}") from None
+        if consumers:
+            raise SystemExit(
+                "legacy service token is still referenced by: "
+                + ", ".join(consumers)
+                + "; update these consumers to scheduler-auth#service_token "
+                "(or run with --skip-preflight at your own risk)"
+            )
     token = new_token()
     try:
         issue(bao, args.path, args.name.strip(), token, args.dry_run)

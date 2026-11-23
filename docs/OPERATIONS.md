@@ -58,12 +58,35 @@ mcp-gateway, intercom, ha-control/ha-bridge/ha-scenario, hermes/voice-proxy,
 «Мама», service-прав у него нет.
 
 Команда пишет в OpenBao `secret/k8s/home-assistant/scheduler-auth` только
-sha256 owner-токена (поле `app_tokens`) и `service_token`; старый `token`
-остаётся токеном «Мама» с обычными модулями; `service_token` при первом
-запуске копирует legacy-значение, чтобы старые сервисы не сломались, и
-ротируется отдельно. После рестарта scheduler импортирует seed, остальные
-сервисы подхватят snapshot в течение 30 с.
+sha256 owner-токена (поле `app_tokens`) и **новый случайный** `service_token`;
+старый service-token (или legacy `token` при первом запуске) сохраняется как
+`service_token_previous` только на время ротации. После рестарта scheduler
+импортирует seed, остальные сервисы подхватят snapshot в течение 30 с.
 Дальнейшие токены — через admin API (`/v1/access/tokens`) из приложения.
+
+### Внешние потребители legacy-токена
+
+Bootstrap обновляет только workloads в `home-assistant`. До запуска проверь и
+переведи на `scheduler-auth#service_token`:
+
+- Home Assistant `secrets.yaml` → `scheduler_bearer` (`rest_command.scheduler_rpc`);
+  доставка HA secrets идёт через `ha-config-sync`/ручное обновление, не через
+  этот bootstrap.
+- Hermes и voice-proxy private values → `HERMES_SCHEDULER_TOKEN[_FILE]`
+  (`Secret/runtime-values`/private Helm values), вне Git.
+- локальные admin-файлы: `secrets/home/scheduler.token` (после обновления
+  каталога это уже `service_token`) и `fnox`-профиль `ingress`;
+  перечитай `mise run secrets:file home/scheduler.token`.
+- seed сценариев, `scheduler/deploy.sh`, ingress-verify и разовые
+  `SCHEDULER_TOKEN_FILE` на рабочей машине — тот же локальный файл.
+- ручные e2e/отладочные окружения с `SCHEDULER_TOKEN_FILE`/`SCHEDULER_TOKEN`,
+  если они ходят в service-only RPC.
+
+Автоматический preflight bootstrap читает k8s Secrets/ConfigMaps в
+`home-assistant` (кроме самого `scheduler-auth`) и останавливает ротацию, если
+находит legacy-значение, печатая `Secret/<name>:<key>` или
+`ConfigMap/<name>:<key>`. HAOS secrets и файлы вне кластера он не видит — их
+проверяй по чек-листу. Аварийный обход — `--skip-preflight`.
 
 Скрипты с секретами — только `mise run admin:*` (`mise tasks | grep admin:`),
 kubectl/helm — `mise run kubectl|helm -- …`. Разовая команда с kubeconfig:

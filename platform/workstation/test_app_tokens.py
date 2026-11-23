@@ -29,6 +29,61 @@ class FakeBao:
         raise AssertionError((method, path))
 
 
+class PreflightTests(unittest.TestCase):
+    def test_legacy_value_is_found_everywhere_except_scheduler_auth(self):
+        import base64
+
+        legacy = "legacy-token"
+        secrets_doc = {
+            "items": [
+                {
+                    "metadata": {"name": "scheduler-auth"},
+                    "data": {"token": base64.b64encode(legacy.encode()).decode()},
+                },
+                {
+                    "metadata": {"name": "runtime-values"},
+                    "data": {
+                        "values": base64.b64encode(
+                            f"env: {{HERMES_SCHEDULER_TOKEN: {legacy}}}".encode()
+                        ).decode()
+                    },
+                },
+            ]
+        }
+        configmaps = {"items": [{"metadata": {"name": "ha-config"}, "data": {"token": legacy}}]}
+        found = app_tokens.legacy_consumers(legacy, secrets_doc, configmaps)
+        self.assertEqual(
+            found,
+            ["ConfigMap/ha-config:token", "Secret/runtime-values:values"],
+        )
+
+    def test_preflight_stops_before_issue(self):
+        import base64
+
+        values = {"token": "legacy-token-value", "service_token": "old"}
+        bao = FakeBao(values)
+        stdout = json.dumps(
+            {
+                "items": [
+                    {
+                        "metadata": {"name": "runtime-values"},
+                        "data": {"values": base64.b64encode(b"legacy-token-value").decode()},
+                    }
+                ]
+            }
+        )
+        output = io.StringIO()
+        with mock.patch.object(ws, "operator", return_value=bao), mock.patch.object(
+            app_tokens.subprocess,
+            "run",
+            return_value=mock.Mock(stdout=stdout, returncode=0),
+        ), redirect_stdout(output):
+            with self.assertRaises(SystemExit) as error:
+                app_tokens.main([])
+        self.assertIn("runtime-values", str(error.exception))
+        self.assertEqual([call[0] for call in bao.calls], ["GET"])
+
+
 class IssueTests(unittest.TestCase):
     def test_issue_stores_only_the_hash_and_keeps_the_other_fields(self):
         bao = FakeBao({"token": "mama", "vpn.json": "{}"})
