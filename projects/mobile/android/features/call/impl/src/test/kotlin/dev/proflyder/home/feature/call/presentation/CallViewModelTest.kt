@@ -12,6 +12,8 @@ import dev.proflyder.home.feature.call.audio.CallAudioRoute
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
@@ -51,6 +53,47 @@ internal class CallViewModelTest {
         controller.mutableState.value = CallSnapshot(phase = CallPhase.ENDED, endReason = IntercomEndReason.HANGUP)
         viewModel.dispatch(CallIntent.HangupOrClose)
         assertEquals(CallEvent.Finish, viewModel.events.first())
+    }
+
+    @Test
+    fun startingACallKeepsTheScreenOpenWhileTheCallDials() = runTest {
+        val viewModel = viewModel()
+        val events = mutableListOf<CallEvent>()
+        backgroundScope.launch { viewModel.events.toList(events) }
+        viewModel.dispatch(CallIntent.Open(startCall = true))
+        runCurrent()
+        controller.mutableState.value = CallSnapshot(phase = CallPhase.DIALING)
+        runCurrent()
+        controller.mutableState.value = CallSnapshot(phase = CallPhase.RINGING)
+        runCurrent()
+        assertEquals(emptyList<CallEvent>(), events)
+    }
+
+    @Test
+    fun aRepeatedCallAfterAnEndedOneKeepsTheScreenOpen() = runTest {
+        controller.mutableState.value = CallSnapshot(phase = CallPhase.ENDED, endReason = IntercomEndReason.HANGUP)
+        val viewModel = viewModel()
+        val events = mutableListOf<CallEvent>()
+        backgroundScope.launch { viewModel.events.toList(events) }
+        runCurrent()
+        viewModel.dispatch(CallIntent.Open(startCall = true))
+        runCurrent()
+        controller.mutableState.value = CallSnapshot(phase = CallPhase.DIALING)
+        runCurrent()
+        assertEquals(emptyList<CallEvent>(), events)
+    }
+
+    @Test
+    fun theScreenClosesWhenTheCallItShowedIsReset() = runTest {
+        val viewModel = viewModel()
+        val events = mutableListOf<CallEvent>()
+        backgroundScope.launch { viewModel.events.toList(events) }
+        viewModel.dispatch(CallIntent.Open(startCall = true))
+        controller.mutableState.value = CallSnapshot(phase = CallPhase.DIALING)
+        runCurrent()
+        controller.mutableState.value = CallSnapshot()
+        runCurrent()
+        assertEquals(listOf<CallEvent>(CallEvent.Finish), events)
     }
 
     @Test
