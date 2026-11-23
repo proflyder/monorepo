@@ -8,18 +8,21 @@ import dev.proflyder.home.core.model.ScheduleKind
 import dev.proflyder.home.core.model.WallTime
 import dev.proflyder.home.core.network.SchedulerClient
 import dev.proflyder.home.feature.reminders.ReminderDraft
-import dev.proflyder.home.feature.reminders.ReminderRepository
-import dev.zacsweers.metro.AppScope
-import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
-import dev.zacsweers.metro.SingleIn
 
-@SingleIn(AppScope::class)
-@ContributesBinding(AppScope::class)
+internal interface ReminderRemote {
+    suspend fun list(): Outcome<List<Schedule>>
+    suspend fun get(id: String): Outcome<Schedule>
+    suspend fun create(draft: ReminderDraft, idempotencyKey: String): Outcome<Schedule>
+    suspend fun update(existing: Schedule, draft: ReminderDraft): Outcome<Schedule>
+    suspend fun setEnabled(id: String, enabled: Boolean): Outcome<Schedule>
+    suspend fun delete(id: String): Outcome<Boolean>
+}
+
 @Inject
-class ConnectReminderRepository(
+internal class ConnectReminderRemote(
     private val client: SchedulerClient,
-) : ReminderRepository {
+) : ReminderRemote {
     override suspend fun list(): Outcome<List<Schedule>> =
         client.listSchedules(includeDisabled = true, kind = ScheduleKind.REMINDER)
 

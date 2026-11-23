@@ -69,5 +69,4 @@ object AlarmEditorDraftCodec {
 
 enum class AlarmEditorCompletion {
     SAVED,
-    DELETED,
 }

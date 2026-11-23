@@ -24,7 +24,7 @@ import dev.proflyder.home.core.model.LightParams
 import dev.proflyder.home.core.model.LightRanges
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.model.ScenarioStep
-import dev.proflyder.home.core.presentation.SharedFlowAppEventBus
+import dev.proflyder.home.feature.scenarios.data.ScenarioRemote
 import dev.proflyder.home.feature.scenarios.data.CatalogStepParams
 import dev.proflyder.home.feature.scenarios.domain.ScenarioSaveSession
 import dev.proflyder.home.feature.scenarios.presentation.editor.DelayForm
@@ -167,19 +167,18 @@ class ScenarioEditorViewModelTest {
         scenarioId: String? = "sc-1",
     ): ScenarioEditorViewModel {
         scenarioId?.let { handle[RouteArgs.KEY] = RouteArgs(ScenarioEditorDestination(it).route) }
-        val repository = FakeScenarioRepository(scenarioDelayMillis)
+        val repository = FakeScenarioRemote(scenarioDelayMillis).store(Dispatchers.Main)
         val saved = SavedEditorState(handle)
         return ScenarioEditorViewModel(
             loadScenario = LoadScenario(repository),
             loadCatalog = LoadScenarioCatalog(FakeCatalogClient(catalogDelayMillis, catalogFailure, entry)),
             deleteScenario = DeleteScenario(repository),
-            appEvents = SharedFlowAppEventBus(),
             saved = saved,
             session = ScenarioSaveSession(SaveScenario(repository), FakeSettings(), saved),
         )
     }
 
-    private class FakeScenarioRepository(private val delayMillis: Long) : ScenarioRepository {
+    private class FakeScenarioRemote(private val delayMillis: Long) : ScenarioRemote {
         override suspend fun list(): Outcome<List<Scenario>> = Outcome.Success(listOf(scenario()))
         override suspend fun get(id: String): Outcome<Scenario> {
             if (delayMillis > 0) delay(delayMillis)

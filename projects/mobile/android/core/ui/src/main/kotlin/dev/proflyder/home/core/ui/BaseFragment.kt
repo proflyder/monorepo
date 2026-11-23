@@ -71,13 +71,13 @@ abstract class BaseFragment<VB : ViewBinding>(
         Notices.show(binding.root, getString(message), NoticeKind.Error, long = true)
     }
 
-    protected fun showFailure(failure: RemoteFailure) {
+    fun showFailure(failure: RemoteFailure) {
         val policy = (activity as? FailureNoticePolicyProvider)?.failureNoticePolicy
         if (policy?.shouldShow(failure) == false) return
         Notices.show(binding.root, failure.userMessage(requireContext()), NoticeKind.Error, long = true)
     }
 
-    protected fun confirm(
+    fun confirm(
         @StringRes message: Int,
         @StringRes positive: Int,
         @StringRes negative: Int,
@@ -85,7 +85,7 @@ abstract class BaseFragment<VB : ViewBinding>(
         onConfirm: () -> Unit,
     ) = confirm(getString(message), positive, negative, destructive, onConfirm)
 
-    protected fun confirm(
+    fun confirm(
         message: CharSequence,
         @StringRes positive: Int,
         @StringRes negative: Int,

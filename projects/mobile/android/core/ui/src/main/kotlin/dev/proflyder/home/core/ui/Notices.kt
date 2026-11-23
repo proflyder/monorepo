@@ -21,12 +21,13 @@ object Notices {
         kind: NoticeKind = NoticeKind.Info,
         long: Boolean = false,
         action: NoticeAction? = null,
+        indefinite: Boolean = false,
     ): Snackbar {
         val context = view.context
         val snackbar = Snackbar.make(
             view,
             message,
-            if (long) Snackbar.LENGTH_LONG else Snackbar.LENGTH_SHORT,
+            noticeDuration(long, indefinite),
         )
         val accent = MaterialColors.getColor(
             view,
@@ -61,4 +62,10 @@ object Notices {
         view.context,
         if (kind == NoticeKind.Error) R.drawable.ui_ic_notice_error else R.drawable.ui_ic_notice_success,
     )?.mutate()?.also { DrawableCompat.setTint(it, accent) }
+}
+
+internal fun noticeDuration(long: Boolean, indefinite: Boolean): Int = when {
+    indefinite -> Snackbar.LENGTH_INDEFINITE
+    long -> Snackbar.LENGTH_LONG
+    else -> Snackbar.LENGTH_SHORT
 }

@@ -33,8 +33,6 @@ object NotificationHistoryRules {
 interface NotificationHistoryStore {
     val entries: StateFlow<List<NotificationHistoryEntry>>
 
-    suspend fun load()
-
     suspend fun record(entry: NotificationHistoryEntry)
 
     suspend fun clear()

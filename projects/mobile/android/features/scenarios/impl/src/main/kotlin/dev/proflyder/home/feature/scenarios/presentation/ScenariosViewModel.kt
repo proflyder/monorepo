@@ -10,12 +10,14 @@ import dev.proflyder.home.core.model.FavoriteRef
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.model.Scenario
-import dev.proflyder.home.core.presentation.AppEventBus
-import dev.proflyder.home.core.presentation.RefreshMode
+import dev.proflyder.home.core.data.ListLoadState
+import dev.proflyder.home.core.data.backgroundFailures
+import dev.proflyder.home.core.presentation.viewModel
+import dev.proflyder.home.feature.scenarios.ScenarioRepository
+import dev.proflyder.home.feature.scenarios.di.ScenariosFeatureScope
+import dev.proflyder.home.core.data.RefreshMode
 import dev.proflyder.home.core.presentation.StateViewModel
-import dev.proflyder.home.core.presentation.eventsOf
 import dev.proflyder.home.core.ui.ViewModelSource
-import dev.proflyder.home.feature.scenarios.domain.LoadScenarios
 import dev.proflyder.home.feature.scenarios.domain.RunScenario
 import dev.proflyder.home.feature.scenarios.domain.SetScenarioEnabled
 import dev.zacsweers.metro.AppScope
@@ -24,6 +26,7 @@ import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.binding
 import java.util.UUID
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 
@@ -61,25 +64,24 @@ internal sealed interface ScenariosEvent {
 }
 
 internal class ScenariosViewModel(
-    private val loadScenarios: LoadScenarios,
+    private val repository: ScenarioRepository,
     private val setScenarioEnabled: SetScenarioEnabled,
     private val runScenario: RunScenario,
     private val favorites: FavoritePreferences,
-    events: AppEventBus,
 ) : StateViewModel<ScenariosUiState, ScenariosIntent, ScenariosEvent>(ScenariosUiState()) {
-    private val loads by latest()
 
     override fun derive(previous: ScenariosUiState, next: ScenariosUiState): ScenariosUiState = next.derivedFrom(previous)
 
     init {
-        refresh(RefreshMode.HARD)
+        combine(repository.items, repository.load, ::onStore).launchIn(viewModelScope)
+        repository.backgroundFailures().onEach { emit(ScenariosEvent.Failure(it)) }.launchIn(viewModelScope)
+        repository.refreshOn(visibility.returned)
         favorites.favorites.onEach { stored -> updateState { copy(favorites = stored.orEmpty()) } }.launchIn(viewModelScope)
-        events.eventsOf<ScenariosChanged>().onEach { refresh(RefreshMode.SOFT) }.launchIn(viewModelScope)
     }
 
     override fun handle(intent: ScenariosIntent) {
         when (intent) {
-            is ScenariosIntent.Refresh -> refresh(intent.mode)
+            is ScenariosIntent.Refresh -> repository.refresh(intent.mode)
             is ScenariosIntent.SetEnabled -> setEnabled(intent.scenario, intent.enabled)
             is ScenariosIntent.Run -> run(intent.scenario)
             is ScenariosIntent.Open -> openEditor(intent.scenario.id)
@@ -94,30 +96,14 @@ internal class ScenariosViewModel(
         emit(ScenariosEvent.OpenRoute(Route.Screen(ScenarioEditorDestination(scenarioId))))
     }
 
-    private fun refresh(mode: RefreshMode) {
-        updateState { copy(refreshing = refreshing || mode == RefreshMode.HARD, loadError = null) }
-        loads.launch { reload() }
-    }
-
-    private suspend fun reload() {
-        val result = loadScenarios()
-        updateState { loaded(result) }
-        if (result is Outcome.Failure && currentState.scenarios.isNotEmpty()) emit(ScenariosEvent.Failure(result.failure))
-    }
-
-    private fun ScenariosUiState.loaded(result: Outcome<List<Scenario>>): ScenariosUiState = when (result) {
-        is Outcome.Success -> copy(refreshing = false, scenarios = result.value.sortedWith(ORDER), loadError = null)
-        is Outcome.Failure -> copy(refreshing = false, loadError = result.failure)
+    private fun onStore(scenarios: List<Scenario>, load: ListLoadState) = updateState {
+        copy(refreshing = load.refreshing, scenarios = scenarios, loadError = load.failure)
     }
 
     private fun setEnabled(scenario: Scenario, enabled: Boolean) = act {
-        when (val result = setScenarioEnabled(scenario.id, enabled)) {
-            is Outcome.Success -> updateState { copy(scenarios = scenarios.replaced(result.value)) }
-            is Outcome.Failure -> emit(ScenariosEvent.Failure(result.failure))
-        }
+        val result = setScenarioEnabled(scenario.id, enabled)
+        if (result is Outcome.Failure) emit(ScenariosEvent.Failure(result.failure))
     }
-
-    private fun List<Scenario>.replaced(updated: Scenario): List<Scenario> = map { if (it.id == updated.id) updated else it }
 
     private fun run(scenario: Scenario) = act {
         when (val result = runScenario(scenario.id, UUID.randomUUID().toString())) {
@@ -139,23 +125,17 @@ internal class ScenariosViewModel(
         }
     }
 
-    private companion object {
-        val ORDER: Comparator<Scenario> = compareBy({ !it.enabled }, { it.label.lowercase() })
-    }
 }
 
 @ContributesIntoMap(AppScope::class, binding = binding<ViewModelSource>())
 @ClassKey(ScenariosViewModel::class)
 @Inject
 class ScenariosViewModelSource internal constructor(
-    private val loadScenarios: LoadScenarios,
-    private val setScenarioEnabled: SetScenarioEnabled,
-    private val runScenario: RunScenario,
+    private val scope: ScenariosFeatureScope,
     private val favorites: FavoritePreferences,
-    private val events: AppEventBus,
 ) : ViewModelSource {
-    override fun create(): ViewModel = run {
-        ScenariosViewModel(loadScenarios, setScenarioEnabled, runScenario, favorites, events)
+    override fun create(): ViewModel = scope.viewModel { graph ->
+        ScenariosViewModel(graph.repository, graph.setScenarioEnabled, graph.runScenario, favorites)
     }
 }
 

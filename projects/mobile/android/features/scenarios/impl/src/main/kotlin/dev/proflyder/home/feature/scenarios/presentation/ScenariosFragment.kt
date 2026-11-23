@@ -2,7 +2,7 @@ package dev.proflyder.home.feature.scenarios.presentation
 
 import android.os.Bundle
 import dev.proflyder.home.core.model.RemoteFailure
-import dev.proflyder.home.core.presentation.RefreshMode
+import dev.proflyder.home.core.data.RefreshMode
 import dev.proflyder.home.core.presentation.ScreenFragment
 import dev.proflyder.home.core.ui.ListStateViews
 import dev.proflyder.home.core.ui.Notices

@@ -10,6 +10,7 @@ metro_android_library(
     resource_files = glob(["src/main/res/**"]),
     view_binding = True,
     deps = [
+        "//projects/mobile/android/core/data",
         "//packages/kotlin/core",
         "//projects/mobile/android/core/config",
         "//projects/mobile/android/core/model",
@@ -42,6 +43,7 @@ home_android_local_test(
     manifest = "src/test/AndroidManifest.xml",
     test_class = "dev.proflyder.home.feature.timers.presentation.TimersViewModelTest",
     deps = [
+        "//projects/mobile/android/core/data",
         "//packages/kotlin/core",
         "//projects/mobile/android/core/config",
         "//projects/mobile/android/core/model",

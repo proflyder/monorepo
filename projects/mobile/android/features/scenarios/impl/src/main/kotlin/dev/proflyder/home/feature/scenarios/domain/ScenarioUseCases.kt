@@ -9,16 +9,11 @@ import dev.proflyder.home.feature.scenarios.ScenarioRepository
 import dev.proflyder.home.feature.scenarios.ScenarioValidation
 import dev.zacsweers.metro.Inject
 
-@Inject class LoadScenarios(
-    private val repository: ScenarioRepository,
-) {
-    suspend operator fun invoke(): Outcome<List<Scenario>> = repository.list()
-}
-
 @Inject class LoadScenario(
     private val repository: ScenarioRepository,
 ) {
-    suspend operator fun invoke(id: String): Outcome<Scenario> = repository.get(id)
+    suspend operator fun invoke(id: String): Outcome<Scenario> =
+        repository[id]?.let { Outcome.Success(it) } ?: repository.load(id)
 }
 
 @Inject class SaveScenario(
@@ -44,7 +39,7 @@ import dev.zacsweers.metro.Inject
 @Inject class DeleteScenario(
     private val repository: ScenarioRepository,
 ) {
-    suspend operator fun invoke(id: String): Outcome<Boolean> = repository.delete(id)
+    suspend operator fun invoke(id: String): Outcome<Unit> = repository.delete(id)
 }
 
 @Inject class RunScenario(

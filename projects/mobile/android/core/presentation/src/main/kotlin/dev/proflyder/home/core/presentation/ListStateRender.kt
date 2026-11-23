@@ -1,5 +1,6 @@
 package dev.proflyder.home.core.presentation
 
+import dev.proflyder.home.core.data.ListLoadState
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.ui.ListStateViews
 

@@ -20,5 +20,6 @@ import org.junit.runners.Suite
     ScreenEventsTest::class,
     SheetsScreenshotTest::class,
     ScreenResultsTest::class,
+    ScreenScopesTest::class,
 )
 class AllPresentationTests

@@ -52,6 +52,10 @@
     <string name="alarms_in_days">%1$s %2$s</string>
     <string name="alarms_saved">Будильник сохранён</string>
     <string name="alarms_deleted">Будильник удалён</string>
+    <string name="alarms_upcoming_today">сегодня</string>
+    <string name="alarms_upcoming_tomorrow">завтра</string>
+    <string name="alarms_upcoming_ringing">Звонит</string>
+    <string name="alarms_upcoming_subtitle">%1$s · %2$s</string>
     <string name="alarms_select_all">Выбрать все</string>
     <string name="alarms_select_none">Снять</string>
     <string name="alarms_selection_close">Выйти из выбора</string>

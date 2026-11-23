@@ -2,8 +2,8 @@ package dev.proflyder.home.feature.timers.presentation
 
 import dev.proflyder.home.core.presentation.bindText
 import android.os.Bundle
-import dev.proflyder.home.core.presentation.ListLoadState
-import dev.proflyder.home.core.presentation.RefreshMode
+import dev.proflyder.home.core.data.ListLoadState
+import dev.proflyder.home.core.data.RefreshMode
 import dev.proflyder.home.core.presentation.ScreenFragment
 import dev.proflyder.home.core.ui.applyScrollBottomInset
 import dev.proflyder.home.core.presentation.tabViewModels

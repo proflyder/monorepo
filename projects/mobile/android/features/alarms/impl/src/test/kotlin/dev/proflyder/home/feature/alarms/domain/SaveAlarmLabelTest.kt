@@ -8,7 +8,9 @@ import dev.proflyder.home.core.model.Schedule
 import dev.proflyder.home.core.model.ScheduleKind
 import dev.proflyder.home.core.model.WallTime
 import dev.proflyder.home.feature.alarms.AlarmDraft
-import dev.proflyder.home.feature.alarms.AlarmRepository
+import dev.proflyder.home.feature.alarms.data.AlarmRemote
+import dev.proflyder.home.feature.alarms.data.StoreAlarmRepository
+import dev.proflyder.home.feature.alarms.presentation.testLifetime
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -46,23 +48,23 @@ class SaveAlarmLabelTest {
 
     @Test
     fun emptyAndWhitespaceLabelsAreSentWithTheDefault() = runBlocking {
-        val repository = RecordingRepository()
-        SaveAlarm(repository)(null, draft(""), "k", defaultLabel)
-        SaveAlarm(repository)(existing(), draft("   "), "", defaultLabel)
+        val repository = RecordingRemote()
+        repository.saving()(null, draft(""), "k", defaultLabel)
+        repository.saving()(existing(), draft("   "), "", defaultLabel)
         assertEquals(listOf("Будильник"), repository.created)
         assertEquals(listOf("Будильник"), repository.updated)
     }
 
     @Test
     fun typedLabelIsSentUnchangedOnCreateAndUpdate() = runBlocking {
-        val repository = RecordingRepository()
-        SaveAlarm(repository)(null, draft("Gym"), "k", defaultLabel)
-        SaveAlarm(repository)(existing(), draft("Gym"), "", defaultLabel)
+        val repository = RecordingRemote()
+        repository.saving()(null, draft("Gym"), "k", defaultLabel)
+        repository.saving()(existing(), draft("Gym"), "", defaultLabel)
         assertEquals(listOf("Gym"), repository.created)
         assertEquals(listOf("Gym"), repository.updated)
     }
 
-    private class RecordingRepository : AlarmRepository {
+    private class RecordingRemote : AlarmRemote {
         val created = mutableListOf<String>()
         val updated = mutableListOf<String>()
 
@@ -86,4 +88,6 @@ class SaveAlarmLabelTest {
 
         private fun <T> unused(): Outcome<T> = Outcome.Failure(RemoteFailure.Storage(StorageReason.SETTINGS_WRITE))
     }
+
+    private fun RecordingRemote.saving(): SaveAlarm = SaveAlarm(StoreAlarmRepository(this, testLifetime()))
 }

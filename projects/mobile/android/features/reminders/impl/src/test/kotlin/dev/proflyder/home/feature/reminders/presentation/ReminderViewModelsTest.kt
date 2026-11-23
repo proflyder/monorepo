@@ -6,12 +6,15 @@ import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.model.Schedule
 import dev.proflyder.home.core.model.ScheduleKind
 import dev.proflyder.home.core.presentation.EditorDraftSession
-import dev.proflyder.home.core.presentation.RefreshMode
-import dev.proflyder.home.core.presentation.SharedFlowAppEventBus
+import dev.proflyder.home.core.data.RefreshMode
+import dev.proflyder.home.core.data.FeatureLifetime
+import dev.proflyder.home.feature.reminders.data.ReminderRemote
+import dev.proflyder.home.feature.reminders.data.StoreReminderRepository
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
 import dev.proflyder.home.core.testing.ScheduleFixtures.schedule
 import dev.proflyder.home.feature.reminders.ReminderDraft
 import dev.proflyder.home.feature.reminders.ReminderEditorCompletion
-import dev.proflyder.home.feature.reminders.ReminderRepository
 import dev.proflyder.home.feature.reminders.domain.SaveReminder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -28,14 +31,16 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ReminderViewModelsTest {
-    private val repository = FakeReminderRepository(
+    private val remote = FakeReminderRemote(
         listOf(
             reminder("late", "2026-11-23", hour = 10),
             reminder("early", "2026-11-23", hour = 9),
             reminder("first", "2026-11-22", hour = 18),
         ),
     )
-    private val bus = SharedFlowAppEventBus()
+    private val repository by lazy {
+        StoreReminderRepository(remote, FeatureLifetime(CoroutineScope(Dispatchers.Unconfined + SupervisorJob())))
+    }
 
     @Before
     fun setUp() = Dispatchers.setMain(UnconfinedTestDispatcher())
@@ -44,17 +49,16 @@ class ReminderViewModelsTest {
     fun tearDown() = Dispatchers.resetMain()
 
     @Test
-    fun remindersAreOrderedByDateThenTimeAndRefreshOnEditorChanges() {
-        val viewModel = RemindersViewModel(repository, bus)
-        bus.publish(RemindersChanged)
+    fun remindersAreOrderedByDateThenTimeFromTheStore() {
+        val viewModel = RemindersViewModel(repository)
         assertEquals(listOf("first", "early", "late"), viewModel.state.value.reminders.map { it.id })
     }
 
     @Test
-    fun aToggleIsAppliedOnlyFromTheServerAnswer() = runTest {
-        val viewModel = RemindersViewModel(repository, bus)
+    fun aFailedToggleRollsBack() = runTest {
+        val viewModel = RemindersViewModel(repository)
         viewModel.dispatch(RemindersIntent.Refresh(RefreshMode.HARD))
-        repository.failure = RemoteFailure.Timeout
+        remote.failure = RemoteFailure.Timeout
         viewModel.dispatch(RemindersIntent.Toggle("early", enabled = false))
         assertEquals(RemindersEvent.Failure(RemoteFailure.Timeout), viewModel.events.first())
         assertEquals(true, viewModel.state.value.reminders.first { it.id == "early" }.enabled)
@@ -70,12 +74,12 @@ class ReminderViewModelsTest {
         restored.dispatch(ReminderEditorIntent.Delete)
         assertEquals(ReminderEditorEvent.Completed(ReminderEditorCompletion.DELETED), restored.events.first())
         assertFalse(restored.state.value.status.busy)
+        assertEquals(null, repository["early"])
     }
 
     private fun editor(state: SavedStateHandle, id: String?) = ReminderEditorViewModel(
         repository = repository,
         saveReminder = SaveReminder(repository),
-        bus = bus,
         session = EditorDraftSession(state, "reminder", ReminderDraftCodec, ReminderEditorCompletion.entries) { "https://home" },
         reminderId = id,
     )
@@ -84,7 +88,7 @@ class ReminderViewModelsTest {
         schedule(id, hour = hour, kind = ScheduleKind.REMINDER, onceDate = date)
 }
 
-internal class FakeReminderRepository(private var reminders: List<Schedule>) : ReminderRepository {
+internal class FakeReminderRemote(private var reminders: List<Schedule>) : ReminderRemote {
     var failure: RemoteFailure? = null
 
     override suspend fun list(): Outcome<List<Schedule>> = answer(reminders)

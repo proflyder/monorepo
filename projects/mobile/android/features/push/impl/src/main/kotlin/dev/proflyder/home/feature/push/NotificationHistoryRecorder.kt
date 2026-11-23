@@ -1,6 +1,7 @@
 package dev.proflyder.home.feature.push
 
 import android.content.Context
+import dev.proflyder.home.core.data.FeatureScope
 import dev.proflyder.home.feature.push.impl.R
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.Inject
@@ -11,14 +12,14 @@ import java.util.UUID
 @Inject
 internal class NotificationHistoryRecorder(
     private val context: Context,
-    private val store: NotificationHistoryStore,
+    private val history: FeatureScope<NotificationHistoryStore>,
 ) {
     suspend fun record(message: PushMessage) {
         val entry = when (message) {
             is PushMessage.Find -> findEntry(message.reason)
             is PushMessage.Notify -> notifyEntry(message)
         }
-        store.record(entry)
+        history.acquire().use { it.graph.record(entry) }
     }
 
     private fun findEntry(reason: String): NotificationHistoryEntry = entry(

@@ -9,6 +9,7 @@ metro_android_library(
     custom_package = "dev.proflyder.home.core.presentation",
     manifest = "src/main/AndroidManifest.xml",
     deps = [
+        "//projects/mobile/android/core/data",
         "//packages/kotlin/core",
         "//projects/mobile/android/core/designsystem",
         "//projects/mobile/android/core/model",
@@ -60,6 +61,7 @@ home_android_local_test(
     robolectric_properties_file = "robolectric-deps.properties",
     test_class = "dev.proflyder.home.core.presentation.AllPresentationTests",
     deps = [
+        "//projects/mobile/android/core/data",
         "//packages/kotlin/core",
         "//projects/mobile/android/core/designsystem",
         "//projects/mobile/android/core/model",

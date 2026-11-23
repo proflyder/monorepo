@@ -4,7 +4,12 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
+import dev.proflyder.home.core.data.FeatureLifetime
+import dev.proflyder.home.core.data.FeatureScope
+import dev.proflyder.home.core.data.Lease
 import dev.proflyder.home.feature.push.impl.R
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeout
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -26,15 +31,14 @@ class NotificationHistoryStoreTest {
     fun theNewestMessageIsFirstAndSurvivesARestart() = runBlocking {
         val context = RuntimeEnvironment.getApplication()
         val dataStore = store(context, "history-order")
-        val store = DataStoreNotificationHistoryStore(dataStore)
+        val store = DataStoreNotificationHistoryStore(dataStore, lifetime())
 
         store.record(entry("first", NotificationHistoryType.FIND, 1_000))
         store.record(entry("second", NotificationHistoryType.NOTIFY, 2_000))
 
-        val reloaded = DataStoreNotificationHistoryStore(dataStore)
-        reloaded.load()
+        val reloaded = DataStoreNotificationHistoryStore(dataStore, lifetime())
 
-        assertEquals(listOf("second", "first"), reloaded.entries.value.map { it.id })
+        assertEquals(listOf("second", "first"), reloaded.settled(2).map { it.id })
         assertEquals(NotificationHistoryType.FIND, reloaded.entries.value.last().type)
     }
 
@@ -42,27 +46,26 @@ class NotificationHistoryStoreTest {
     fun anUnloadedStoreDoesNotOverwriteEarlierMessages() = runBlocking {
         val context = RuntimeEnvironment.getApplication()
         val dataStore = store(context, "history-unloaded")
-        DataStoreNotificationHistoryStore(dataStore)
+        DataStoreNotificationHistoryStore(dataStore, lifetime())
             .record(entry("earlier", NotificationHistoryType.NOTIFY, 1_000))
 
-        val writer = DataStoreNotificationHistoryStore(dataStore)
+        val writer = DataStoreNotificationHistoryStore(dataStore, lifetime())
         writer.record(entry("later", NotificationHistoryType.NOTIFY, 2_000))
 
-        val reader = DataStoreNotificationHistoryStore(dataStore)
-        reader.load()
+        val reader = DataStoreNotificationHistoryStore(dataStore, lifetime())
 
-        assertEquals(listOf("later", "earlier"), reader.entries.value.map { it.id })
+        assertEquals(listOf("later", "earlier"), reader.settled(2).map { it.id })
     }
 
     @Test
     fun onlyTheNewestTwoHundredMessagesAreKept() = runBlocking {
         val context = RuntimeEnvironment.getApplication()
-        val store = DataStoreNotificationHistoryStore(store(context, "history-limit"))
+        val store = DataStoreNotificationHistoryStore(store(context, "history-limit"), lifetime())
         repeat(NotificationHistoryRules.MAX_ENTRIES + 5) { index ->
             store.record(entry("m-$index", NotificationHistoryType.NOTIFY, index.toLong()))
         }
 
-        assertEquals(NotificationHistoryRules.MAX_ENTRIES, store.entries.value.size)
+        assertEquals(NotificationHistoryRules.MAX_ENTRIES, store.settled(NotificationHistoryRules.MAX_ENTRIES, "m-204").size)
         assertEquals("m-204", store.entries.value.first().id)
         assertTrue(store.entries.value.none { it.id == "m-0" })
     }
@@ -71,25 +74,24 @@ class NotificationHistoryStoreTest {
     fun clearingRemovesEveryMessage() = runBlocking {
         val context = RuntimeEnvironment.getApplication()
         val dataStore = store(context, "history-clear")
-        val store = DataStoreNotificationHistoryStore(dataStore)
+        val store = DataStoreNotificationHistoryStore(dataStore, lifetime())
         store.record(entry("kept", NotificationHistoryType.NOTIFY, 1_000))
 
         store.clear()
 
-        val reloaded = DataStoreNotificationHistoryStore(dataStore)
-        reloaded.load()
-        assertTrue(reloaded.entries.value.isEmpty())
+        val reloaded = DataStoreNotificationHistoryStore(dataStore, lifetime())
+        assertTrue(reloaded.settled(0).isEmpty())
     }
 
     @Test
     fun aFindRequestIsRecordedWithTheLocalizedTitle() = runBlocking {
         val context = RuntimeEnvironment.getApplication()
-        val store = DataStoreNotificationHistoryStore(store(context, "history-find"))
-        val recorder = NotificationHistoryRecorder(context, store)
+        val store = DataStoreNotificationHistoryStore(store(context, "history-find"), lifetime())
+        val recorder = NotificationHistoryRecorder(context, FixedHistory(store))
 
         recorder.record(PushMessage.Find(reason = " "))
 
-        val recorded = store.entries.value.single()
+        val recorded = store.settled(1).single()
         assertEquals(NotificationHistoryType.FIND, recorded.type)
         assertEquals(context.getString(R.string.push_find_title), recorded.title)
         assertEquals(context.getString(R.string.push_find_default_reason), recorded.body)
@@ -99,8 +101,8 @@ class NotificationHistoryStoreTest {
     @Test
     fun aNotificationKeepsItsTextAndDeepLink() = runBlocking {
         val context = RuntimeEnvironment.getApplication()
-        val store = DataStoreNotificationHistoryStore(store(context, "history-notify"))
-        val recorder = NotificationHistoryRecorder(context, store)
+        val store = DataStoreNotificationHistoryStore(store(context, "history-notify"), lifetime())
+        val recorder = NotificationHistoryRecorder(context, FixedHistory(store))
 
         recorder.record(
             PushMessage.Notify(
@@ -110,10 +112,23 @@ class NotificationHistoryStoreTest {
             ),
         )
 
-        val recorded = store.entries.value.single()
+        val recorded = store.settled(1).single()
         assertEquals(NotificationHistoryType.NOTIFY, recorded.type)
         assertEquals("Front door", recorded.title)
         assertEquals("alarms", recorded.deepLink)
+    }
+
+    private fun lifetime() = FeatureLifetime(CoroutineScope(Dispatchers.Unconfined + SupervisorJob()))
+
+    private suspend fun NotificationHistoryStore.settled(size: Int, first: String? = null): List<NotificationHistoryEntry> =
+        withTimeout(TIMEOUT_MILLIS) { entries.first { it.size == size && (first == null || it.first().id == first) } }
+
+    private class FixedHistory(private val store: NotificationHistoryStore) : FeatureScope<NotificationHistoryStore> {
+        override val owners: Int = 0
+
+        override val instance: NotificationHistoryStore = store
+
+        override fun acquire(): Lease<NotificationHistoryStore> = Lease(store) { }
     }
 
     private fun entry(id: String, type: NotificationHistoryType, millis: Long): NotificationHistoryEntry =
@@ -130,4 +145,8 @@ class NotificationHistoryStoreTest {
             scope = CoroutineScope(Dispatchers.IO + SupervisorJob()),
             produceFile = { File(context.filesDir, "$name.preferences_pb") },
         )
+
+    private companion object {
+        const val TIMEOUT_MILLIS = 5_000L
+    }
 }

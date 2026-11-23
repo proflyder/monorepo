@@ -5,7 +5,6 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import dev.proflyder.home.core.model.TimerState
-import dev.proflyder.home.core.presentation.SwitchBinder
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.feature.control.ControlItem
 import dev.proflyder.home.feature.control.HubCard
@@ -37,7 +36,6 @@ internal class HubRowBinder(
     private val dispatch: (ControlIntent) -> Unit,
 ) {
     private var card: HubCard? = null
-    private val alarmSwitch = SwitchBinder(row.hubRowSwitch) { enabled -> switchAlarm(enabled) }
 
     init {
         row.root.setOnClickListener { card?.let { dispatch(ControlIntent.Tap(TapTarget.Hub(it))) } }
@@ -49,18 +47,11 @@ internal class HubRowBinder(
         row.hubRowIcon.setImageResource(card.icon)
         row.hubRowTime.text = texts.timeText(card, hub.remaining[card.key], hub.nowUnix)
         row.hubRowLabel.text = texts.label(card)
-        row.hubRowSwitch.setVisible(card is HubCard.Alarm)
         row.hubRowAction.setVisible(card is HubCard.TimerCard)
         when (card) {
-            is HubCard.Alarm -> bindAlarm(card)
             is HubCard.TimerCard -> bindTimer(card)
             is HubCard.Reminder -> Unit
         }
-    }
-
-    private fun bindAlarm(card: HubCard.Alarm) {
-        row.hubRowSwitch.contentDescription = texts.title(card)
-        alarmSwitch.render(card.schedule.enabled)
     }
 
     private fun bindTimer(card: HubCard.TimerCard) {
@@ -70,16 +61,10 @@ internal class HubRowBinder(
             if (paused) DesignR.string.ds_action_resume else DesignR.string.ds_action_pause,
         )
     }
-
-    private fun switchAlarm(enabled: Boolean) {
-        val alarm = card as? HubCard.Alarm ?: return
-        dispatch(ControlIntent.Hub(HubCommand.Switch(alarm, enabled)))
-    }
 }
 
 internal val HubCard.icon: Int
     get() = when (this) {
-        is HubCard.Alarm -> R.drawable.control_ic_alarm
         is HubCard.TimerCard -> R.drawable.control_ic_timer
         is HubCard.Reminder -> R.drawable.control_ic_bell
     }

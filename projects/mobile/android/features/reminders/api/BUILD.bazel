@@ -6,6 +6,7 @@ kt_jvm_library(
     name = "api",
     srcs = glob(["src/main/kotlin/**/*.kt"]),
     deps = [
+        "//projects/mobile/android/core/data",
         "//packages/kotlin/core",
         "//projects/mobile/android/core/model",
     ],
@@ -16,6 +17,7 @@ kt_jvm_test(
     srcs = glob(["src/test/kotlin/**/*.kt"]),
     test_class = "dev.proflyder.home.feature.reminders.AllReminderApiTests",
     deps = [
+        "//projects/mobile/android/core/data",
         ":api",
         "//projects/mobile/android/core/model",
         "@maven//:junit_junit",

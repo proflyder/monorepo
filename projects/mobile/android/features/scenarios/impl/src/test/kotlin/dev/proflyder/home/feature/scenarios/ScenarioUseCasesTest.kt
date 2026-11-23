@@ -13,6 +13,7 @@ import dev.proflyder.home.feature.scenarios.domain.DeleteScenario
 import dev.proflyder.home.feature.scenarios.domain.RunScenario
 import dev.proflyder.home.feature.scenarios.domain.SaveScenario
 import dev.proflyder.home.feature.scenarios.domain.SetScenarioEnabled
+import dev.proflyder.home.feature.scenarios.data.ScenarioRemote
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -20,7 +21,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ScenarioUseCasesTest {
-    private class FakeRepository : ScenarioRepository {
+    private class FakeRepository : ScenarioRemote {
         var created: Pair<ScenarioDraft, String>? = null
         var updated: Pair<Scenario, ScenarioDraft>? = null
         var runKey: String? = null
@@ -61,7 +62,7 @@ class ScenarioUseCasesTest {
     @Test
     fun createUsesIdempotencyKeyAndValidatedDraft() = runBlocking {
         val repository = FakeRepository()
-        val result = SaveScenario(repository)(existing = null, draft = draft(), idempotencyKey = "key-1")
+        val result = SaveScenario(repository.store())(existing = null, draft = draft(), idempotencyKey = "key-1")
         assertTrue(result is Outcome.Success)
         assertEquals("key-1", repository.created!!.second)
         assertEquals("Evening", repository.created!!.first.label)
@@ -71,7 +72,7 @@ class ScenarioUseCasesTest {
     fun updateReusesTheExistingRevision() = runBlocking {
         val repository = FakeRepository()
         val existing = scenario().copy(revision = 6)
-        SaveScenario(repository)(existing, draft().copy(label = "New"), idempotencyKey = "")
+        SaveScenario(repository.store())(existing, draft().copy(label = "New"), idempotencyKey = "")
         assertEquals(existing, repository.updated!!.first)
         assertEquals("New", repository.updated!!.second.label)
     }
@@ -79,7 +80,7 @@ class ScenarioUseCasesTest {
     @Test
     fun invalidDraftNeverReachesTheRepository() = runBlocking {
         val repository = FakeRepository()
-        val result = SaveScenario(repository)(
+        val result = SaveScenario(repository.store())(
             existing = null,
             draft = draft().copy(label = "a".repeat(81)),
             idempotencyKey = "key",
@@ -91,7 +92,7 @@ class ScenarioUseCasesTest {
     @Test
     fun unknownPartsNeverReachTheRepository() = runBlocking {
         val repository = FakeRepository()
-        val result = SaveScenario(repository)(
+        val result = SaveScenario(repository.store())(
             existing = scenario(),
             draft = draft().copy(triggers = listOf(ScenarioTrigger.Unknown(TestFixtures.read("unknown_empty.json")))),
             idempotencyKey = "",
@@ -103,11 +104,11 @@ class ScenarioUseCasesTest {
     @Test
     fun simpleDelegationsPreserveTheirArguments() = runBlocking {
         val repository = FakeRepository()
-        SetScenarioEnabled(repository)("sc-1", false)
+        SetScenarioEnabled(repository.store())("sc-1", false)
         assertEquals("sc-1" to false, repository.enabled)
-        DeleteScenario(repository)("sc-1")
+        DeleteScenario(repository.store())("sc-1")
         assertEquals("sc-1", repository.deleted)
-        val run = RunScenario(repository)("sc-1", "run-key")
+        val run = RunScenario(repository.store())("sc-1", "run-key")
         assertEquals("evt-1", (run as Outcome.Success).value)
         assertEquals("run-key", repository.runKey)
     }

@@ -223,6 +223,7 @@ projects/mobile/android/
   app/                    single Activity (chrome only), AppGraph, diagnostics
   core/
     model/                Android-free domain: Outcome/RemoteFailure, Clock, ServerClock, DeviceIdentity
+    data/                 EntityStore, EntitySource, FeatureScope (Android-free)
     runtime/              app scope, IoDispatcher, AppStartable, AppForeground, tickerFlow, Backoff
     config/ remoteconfig/ connection contract and its Firebase source
     settings/             DataStore + Keystore token
@@ -280,9 +281,10 @@ platform/android/         Bazel macros, Metro wiring, APK gate, signing, detekt 
   `render(state)` stays optional for tiny screens. Derived data (rows,
   selection summary, speed dial) is computed in `derive(previous, next)` of the
   ViewModel and stored in the state, recomputed only when its sources change.
-- Loading is explicit: a list ViewModel loads in `init` and refreshes on
+- Loading is explicit: a feature repository starts its store sync when its
+  scope is created, and a list ViewModel asks the repository to refresh on
   `visibility.returned` (the screen came back: tab switch, back from an editor,
-  app back to foreground) and on `AppEventBus` changes. `ScreenVisibility` is
+  app back to foreground). `ScreenVisibility` is
   fed by the screen's view lifecycle, never by `subscriptionCount`; tickers use
   `visibility.visible`.
 - Results between screens and sheets are typed: `object X : ResultKey<T>(T.serializer())`
@@ -291,11 +293,26 @@ platform/android/         Bazel macros, Metro wiring, APK gate, signing, detekt 
   (child fragment manager, owner = the screen), and the value reaches the
   ViewModel as an intent. Fragment results are kept while the host is stopped,
   on the back stack or being recreated. `OptionsSheet`/`WheelSheet` use
-  `OptionsResult`/`WheelResult` keys. `AppEventBus` stays for "data changed"
-  between unrelated screens.
+  `OptionsResult`/`WheelResult` keys. `AppEventBus` carries only signals
+  between features that share no repository; "data changed" events are not
+  used.
 - Scenario form dialogs edit a form that is part of the editor state (draft,
   validation, process death), so they share the host editor's ViewModel through
   `hostScreenViewModels()` instead of returning a result.
+- Several ViewModels per screen: `attach(viewModel, onEvent)` delivers events
+  and visibility of a secondary ViewModel, `render(viewModel, selector)` draws
+  its state. A section of another feature is a `SectionFragment` with its own
+  ViewModel, placed into a slot with `section(R.id.slot, Key)`; the key and the
+  contract live in that feature's api (`UpcomingAlarmsSection :
+  ScreenSectionKey`), the fragment is contributed as `ScreenSection` from impl.
+  The home screen shows the alarms section next to the control ViewModel.
+- Flow ViewModels: a fragment that is a `FlowMember` gets `by
+  flowViewModel()` — one instance for every screen and sheet of the flow, kept
+  while any of them is alive (also on the back stack) and cleared when the
+  last one leaves. Actions shared by a list and its editor (delete with
+  confirmation and undo, toggle) live in such an actions ViewModel
+  (`AlarmsActionsViewModel`); an editor may use its flow's ViewModels, nothing
+  reaches them through the Activity.
 - ViewModel scopes: a screen's own (`screenViewModel()`), or `tabViewModels()`
   for list screens that must keep their state while the router replaces the tab
   (alarms, reminders, timers, scenarios, chat). The tab scope lives in
@@ -308,10 +325,15 @@ platform/android/         Bazel macros, Metro wiring, APK gate, signing, detekt 
   `RadioGroupBinder`, `TextBinder` and `PillSegments` send an intent and keep
   the last rendered value until the state changes; programmatic rendering
   never reports back.
-- No `onResume` refresh. Repositories expose `StateFlow`s with a refresh
-  policy (`stateIn(WhileSubscribed)` over `tickerFlow`), editors publish
-  `AppEventBus` events (use it only when the source is not already a shared
-  `StateFlow`). `LatestLauncher` makes the last request win.
+- No `onResume` refresh. A feature repository is the single source of truth:
+  it implements `EntitySource` (`core/data`) over an `EntityStore` —
+  `StateFlow<Map<K, V>>`/`items` plus `load: StateFlow<ListLoadState>`. Every
+  mutation goes through the repository and updates the store from the server
+  answer (`commit`); toggles and deletes are `optimistic` and roll back on
+  failure; a background sync merges and keeps local writes made while it was in
+  flight. Lists, editors and the home screen subscribe to the store; an editor
+  closes itself when its entity disappears. `LatestLauncher` makes the last
+  request win.
 - Lists use `KeyedDiff`, which always returns a payload, so a partial change
   rebinds the same holder (`aspectPayload` per aspect) and never cross-fades.
 - Editors share `EditorDraftSession`: draft, the create idempotency key bound
@@ -350,6 +372,19 @@ platform/android/         Bazel macros, Metro wiring, APK gate, signing, detekt 
   prefers the enclosing dialog over the activity.
 
 ### DI
+
+Feature data lives in a feature scope, not in `AppScope`:
+
+- each data feature has a Metro `@GraphExtension(XScope::class)` (`XScope` in
+  its api) with its repository `@SingleIn(XScope::class)`, and an
+  `XFeatureScope` (`FeatureScope<XGraph>` from `FeatureScopes`);
+- an owner takes a lease: a ViewModel through `scope.viewModel { graph -> }`
+  (released in `onCleared`), a service in `onCreate`/`onDestroy`, a toolbar
+  contribution for the Activity lifetime (`LeaseRelease`). All owners get the
+  same instance; the scope is cleared 5 s after the last release, or at once
+  when the app goes to the background with no owners;
+- another feature leases a repository through `FeatureScope<XRepository>`
+  exported from the impl (home leases timers, reminders and scenarios).
 
 Metro's compiler plugin runs on every Kotlin Android compilation
 (`//platform/android:defs.bzl`). `AppGraph` exposes only `appearance`,

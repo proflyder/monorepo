@@ -6,17 +6,19 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dev.proflyder.home.core.model.FavoritePreferences
 import dev.proflyder.home.core.model.ServerClock
-import dev.proflyder.home.core.model.ServerClockSync
 import dev.proflyder.home.core.presentation.StateViewModel
-import dev.proflyder.home.core.runtime.AppForeground
 import dev.proflyder.home.core.ui.ViewModelSource
-import dev.proflyder.home.feature.alarms.AlarmRepository
 import dev.proflyder.home.feature.control.ControlPreferences
 import dev.proflyder.home.feature.control.ControlRepository
 import dev.proflyder.home.feature.control.impl.R
 import dev.proflyder.home.feature.control.QuickTileProvider
-import dev.proflyder.home.feature.control.data.HomeHubFeed
-import dev.proflyder.home.feature.control.data.HubSources
+import dev.proflyder.home.core.data.FeatureScope
+import dev.proflyder.home.core.data.Lease
+import dev.proflyder.home.feature.control.di.ControlGraph
+import dev.proflyder.home.core.presentation.holding
+import dev.proflyder.home.feature.control.di.ControlFeatureScope
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import dev.proflyder.home.feature.reminders.ReminderRepository
 import dev.proflyder.home.feature.scenarios.ScenarioRepository
 import dev.proflyder.home.feature.timers.TimerRepository
@@ -25,6 +27,12 @@ import dev.zacsweers.metro.ClassKey
 import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.binding
+
+internal class HubSources(
+    val timers: TimerRepository,
+    val reminders: ReminderRepository,
+    val scenarios: ScenarioRepository,
+)
 
 internal class ControlScreenDependencies(
     val repository: ControlRepository,
@@ -41,19 +49,19 @@ internal class ControlViewModel(
 ) : StateViewModel<ControlUiState, ControlIntent, ControlEvent>(ControlUiState()) {
     override fun derive(previous: ControlUiState, next: ControlUiState): ControlUiState = next.derivedFrom(previous)
 
-    private val hubFeed = HomeHubFeed(dependencies.hub, viewModelScope)
     private val tiles = QuickTileLauncher(dependencies.providers)
     private val favorites = ControlFavorites(dependencies.favorites, dependencies.defaultFavoriteScenarios)
     private val devices = DeviceCommands(dependencies.repository, dependencies.hub.scenarios)
-    private val hub = HubCommands(dependencies.hub.alarms, dependencies.hub.timers, hubFeed)
+    private val hub = HubCommands(dependencies.hub.timers)
     private val preferences = dependencies.preferences
     private val layout = ControlLayoutState()
-    private val sources = ControlScreenSources(dependencies, hubFeed, favorites, tiles)
+    private val sources = ControlScreenSources(dependencies, favorites, tiles)
 
     init {
         publish(currentState.copy(provided = tiles.tiles))
         launch { sources.state(devices.pendingEntries, devices.pendingScenarios, layout.state).collect(::publish) }
         launch { sources.loadFailures().collect { emit(ControlEvent.Failure(it)) } }
+        visibility.returned.onEach { sources.refreshHub() }.launchIn(viewModelScope)
     }
 
     override fun handle(intent: ControlIntent) {
@@ -103,30 +111,39 @@ internal class ControlViewModel(
 @ClassKey(ControlViewModel::class)
 @Inject
 class ControlViewModelSource internal constructor(
-    context: Context,
-    repository: ControlRepository,
-    preferences: ControlPreferences,
-    favorites: FavoritePreferences,
-    providers: Set<QuickTileProvider>,
-    alarms: AlarmRepository,
-    timers: TimerRepository,
-    reminders: ReminderRepository,
-    scenarios: ScenarioRepository,
-    clock: ServerClock,
-    clockSync: ServerClockSync,
-    foreground: AppForeground,
+    private val context: Context,
+    private val control: ControlFeatureScope,
+    private val preferences: ControlPreferences,
+    private val favorites: FavoritePreferences,
+    private val providers: Set<QuickTileProvider>,
+    private val timers: FeatureScope<TimerRepository>,
+    private val reminders: FeatureScope<ReminderRepository>,
+    private val scenarios: FeatureScope<ScenarioRepository>,
+    private val clock: ServerClock,
 ) : ViewModelSource {
-    private val dependencies = ControlScreenDependencies(
-        repository = repository,
+    override fun create(): ViewModel {
+        val leases = ControlLeases(control.acquire(), timers.acquire(), reminders.acquire(), scenarios.acquire())
+        return ControlViewModel(dependencies(leases)).holding(leases.all)
+    }
+
+    private fun dependencies(leases: ControlLeases) = ControlScreenDependencies(
+        repository = leases.control.graph.repository,
         preferences = preferences,
         favorites = favorites,
         defaultFavoriteScenarios = context.resources.getStringArray(R.array.control_default_favorite_scenarios).toSet(),
         providers = providers,
-        hub = HubSources(alarms, timers, reminders, scenarios, clockSync, foreground),
+        hub = HubSources(leases.timers.graph, leases.reminders.graph, leases.scenarios.graph),
         clock = clock,
     )
+}
 
-    override fun create(): ViewModel = ControlViewModel(dependencies)
+private class ControlLeases(
+    val control: Lease<ControlGraph>,
+    val timers: Lease<TimerRepository>,
+    val reminders: Lease<ReminderRepository>,
+    val scenarios: Lease<ScenarioRepository>,
+) {
+    val all: List<Lease<*>> = listOf(control, timers, reminders, scenarios)
 }
 
 private const val CONNECTION_FEATURE = "connection"

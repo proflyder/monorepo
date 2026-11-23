@@ -2,11 +2,15 @@ package dev.proflyder.home.feature.alarms.presentation
 
 import dev.proflyder.home.core.presentation.bindSwitch
 import dev.proflyder.home.core.presentation.bindText
-import dev.proflyder.home.core.designsystem.R as DesignR
 import android.os.Bundle
 import dev.proflyder.home.core.model.RepeatKind
 import dev.proflyder.home.core.presentation.RouteNotice
+import dev.proflyder.home.core.navigation.destination
+import dev.proflyder.home.core.presentation.FlowKey
+import dev.proflyder.home.core.presentation.FlowMember
 import dev.proflyder.home.core.presentation.ScreenFragment
+import dev.proflyder.home.core.presentation.flowViewModel
+import dev.proflyder.home.feature.alarms.AlarmEditorDestination
 import dev.proflyder.home.core.presentation.showNotice
 import dev.proflyder.home.core.presentation.EditorStatus
 import dev.proflyder.home.core.ui.injectedViewModels
@@ -16,7 +20,6 @@ import dev.proflyder.home.core.ui.showDatePicker
 import dev.proflyder.home.core.ui.showTimePicker
 import dev.proflyder.home.core.ui.userMessage
 import dev.proflyder.home.feature.alarms.ALARM_QUICK_OFFSETS_MINUTES
-import dev.proflyder.home.feature.alarms.impl.R
 import dev.proflyder.home.feature.alarms.impl.databinding.FragmentAlarmEditorBinding
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -25,11 +28,19 @@ import java.util.Locale
 internal class AlarmEditorFragment :
     ScreenFragment<FragmentAlarmEditorBinding, AlarmEditorUiState, AlarmEditorIntent, AlarmEditorEvent>(
         FragmentAlarmEditorBinding.Companion::inflate,
-    ) {
+    ),
+    FlowMember {
+    override val flow: FlowKey = AlarmsFlow
+
     override val viewModel: AlarmEditorViewModel by injectedViewModels()
+
+    private val actions: AlarmsActionsViewModel by flowViewModel()
+
+    private val route: AlarmEditorDestination? by destination(AlarmEditorDestination)
 
     override fun onScreenCreate(savedInstanceState: Bundle?) {
         onResult(AlarmRepeatChosen) { AlarmEditorIntent.SetRepeat(it.repeat, it.days) }
+        attach(actions, AlarmPrompts(this, actions::dispatch)::show)
     }
 
     override fun onViewReady(binding: FragmentAlarmEditorBinding, savedInstanceState: Bundle?) {
@@ -61,7 +72,7 @@ internal class AlarmEditorFragment :
         binding.alarmEditorRepeatRow.setOnClickListener { dispatch(AlarmEditorIntent.PickRepeat) }
         binding.alarmEditorDateRow.setOnClickListener { dispatch(AlarmEditorIntent.PickDate) }
         binding.alarmEditorSave.setOnClickListener { dispatch(AlarmEditorIntent.Save) }
-        binding.alarmEditorDelete.setOnClickListener { dispatch(AlarmEditorIntent.RequestDelete) }
+        binding.alarmEditorDelete.setOnClickListener { route?.alarmId?.let { actions.dispatch(AlarmActionIntent.RequestDelete(it)) } }
     }
 
     private fun renderTime(hour: Int, minute: Int) {
@@ -95,7 +106,6 @@ internal class AlarmEditorFragment :
                 dispatch(AlarmEditorIntent.SetDate(it))
             }
             is AlarmEditorEvent.PickRepeat -> openRepeatSheet(event.repeat, event.days)
-            AlarmEditorEvent.ConfirmDelete -> confirmDelete()
             is AlarmEditorEvent.Completed -> complete(event.notice)
             is AlarmEditorEvent.OpenRoute -> navigate(event.route)
         }
@@ -104,12 +114,6 @@ internal class AlarmEditorFragment :
     private fun openRepeatSheet(repeat: RepeatKind, days: Set<Int>) {
         if (childFragmentManager.findFragmentByTag(AlarmRepeatSheet.TAG) != null) return
         AlarmRepeatSheet.create(repeat, days).show(childFragmentManager, AlarmRepeatSheet.TAG)
-    }
-
-    private fun confirmDelete() {
-        confirm(R.string.alarms_delete_confirm, DesignR.string.ds_action_delete, DesignR.string.ds_action_cancel) {
-            dispatch(AlarmEditorIntent.Delete)
-        }
     }
 
     private fun complete(notice: RouteNotice) {

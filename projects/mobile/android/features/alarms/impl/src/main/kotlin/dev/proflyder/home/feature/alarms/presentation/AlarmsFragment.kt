@@ -4,10 +4,13 @@ import dev.proflyder.home.core.presentation.addBackCallback
 import dev.proflyder.home.core.designsystem.R as DesignR
 import android.os.Bundle
 import androidx.activity.OnBackPressedCallback
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import dev.proflyder.home.core.model.RemoteFailure
-import dev.proflyder.home.core.presentation.RefreshMode
+import dev.proflyder.home.core.data.RefreshMode
+import dev.proflyder.home.core.presentation.FlowKey
+import dev.proflyder.home.core.presentation.FlowMember
 import dev.proflyder.home.core.presentation.ScreenFragment
+import dev.proflyder.home.core.presentation.UndoNotice
+import dev.proflyder.home.core.presentation.flowViewModel
 import dev.proflyder.home.core.presentation.render
 import dev.proflyder.home.core.ui.ListStateViews
 import dev.proflyder.home.core.ui.applyScrollBottomInset
@@ -21,10 +24,21 @@ import dev.proflyder.home.feature.alarms.impl.R
 import dev.proflyder.home.feature.alarms.impl.databinding.FragmentAlarmsBinding
 
 internal class AlarmsFragment :
-    ScreenFragment<FragmentAlarmsBinding, AlarmsUiState, AlarmsIntent, AlarmsEvent>(FragmentAlarmsBinding.Companion::inflate) {
+    ScreenFragment<FragmentAlarmsBinding, AlarmsUiState, AlarmsIntent, AlarmsEvent>(FragmentAlarmsBinding.Companion::inflate),
+    FlowMember {
+    override val flow: FlowKey = AlarmsFlow
+
     override val viewModel: AlarmsViewModel by tabViewModels()
 
-    private val adapter = AlarmAdapter(AlarmAdapterCallback(::dispatch))
+    private val actions: AlarmsActionsViewModel by flowViewModel()
+
+    private val adapter = AlarmAdapter(AlarmAdapterCallback(::dispatch) { actions.dispatch(it) })
+
+    private val undo = UndoNotice(::requireView) { actions.dispatch(AlarmActionIntent.Undo) }
+
+    override fun onScreenCreate(savedInstanceState: Bundle?) {
+        attach(actions, AlarmPrompts(this, actions::dispatch)::show)
+    }
 
     private val exitSelection = object : OnBackPressedCallback(false) {
         override fun handleOnBackPressed() = dispatch(AlarmsIntent.ClearSelection)
@@ -51,9 +65,11 @@ internal class AlarmsFragment :
         render(AlarmsUiState::list) { list -> renderList(states, list) }
         render(AlarmsUiState::rows, adapter::submitList)
         render(AlarmsUiState::selection) { selection -> renderSelection(selectionBars, selection) }
+        render(actions, AlarmActionsState::undo) { deleted -> undo.render(deleted?.let { getString(R.string.alarms_deleted) }) }
     }
 
     override fun onBindingDestroyed() {
+        undo.clear()
         binding.alarmsList.adapter = null
     }
 
@@ -73,25 +89,7 @@ internal class AlarmsFragment :
         when (event) {
             is AlarmsEvent.Failure -> showFailure(event.failure)
             is AlarmsEvent.OpenRoute -> navigate(event.route)
-            is AlarmsEvent.AskDisable -> askDisable(event.id)
-            is AlarmsEvent.ConfirmDelete -> confirmDelete(event.id)
             is AlarmsEvent.ConfirmDeleteSelected -> confirmDeleteSelected(event.count)
-        }
-    }
-
-    private fun askDisable(id: String) {
-        MaterialAlertDialogBuilder(requireContext())
-            .setTitle(R.string.alarms_disable_title)
-            .setMessage(R.string.alarms_disable_message)
-            .setNeutralButton(R.string.alarms_disable_skip_once) { _, _ -> dispatch(AlarmsIntent.SkipOnce(id)) }
-            .setPositiveButton(R.string.alarms_disable_turn_off) { _, _ -> dispatch(AlarmsIntent.TurnOff(id)) }
-            .setNegativeButton(DesignR.string.ds_action_cancel, null)
-            .show()
-    }
-
-    private fun confirmDelete(id: String) {
-        confirm(R.string.alarms_delete_confirm, DesignR.string.ds_action_delete, DesignR.string.ds_action_cancel) {
-            dispatch(AlarmsIntent.Delete(id))
         }
     }
 
