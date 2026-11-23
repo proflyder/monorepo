@@ -9,6 +9,8 @@ import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import dev.proflyder.home.core.config.ConnectionSettingsStore
 import dev.proflyder.home.core.endpoint.ServerEndpoint
+import dev.proflyder.home.core.model.AppLogger
+import dev.proflyder.home.core.model.info
 import dev.proflyder.home.core.runtime.IoDispatcher
 import dev.proflyder.home.feature.vpn.HomeNetworkState
 import dev.proflyder.home.feature.vpn.NetworkEnvironment
@@ -34,6 +36,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -42,6 +45,7 @@ import kotlinx.coroutines.flow.stateIn
 internal class AndroidNetworkEnvironment(
     private val context: Context,
     connection: ConnectionSettingsStore,
+    private val logger: AppLogger,
     scope: CoroutineScope,
     @IoDispatcher io: CoroutineDispatcher,
 ) : NetworkEnvironment {
@@ -55,20 +59,21 @@ internal class AndroidNetworkEnvironment(
         .mapLatest(::classify)
         .flowOn(io)
         .distinctUntilChanged()
+        .onEach { logger.info(TAG, "environment ${it.javaClass.simpleName}") }
         .stateIn(scope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS, 0), HomeNetworkState.Unknown)
 
     private class Probe(val networks: NetworkSnapshot, val endpoint: ServerEndpoint?)
 
-    private class NetworkSnapshot(val networks: List<Network>)
+    private class NetworkSnapshot(val networks: List<Network>, val blocked: Set<Network> = emptySet()) {
+        val facts = NetworkFacts(networks.map { it.networkHandle }.toSet(), blocked.map { it.networkHandle }.toSet())
+        val usable: List<Network> get() = networks - blocked
+    }
 
     private fun classify(probe: Probe): HomeNetworkState {
-        val networks = probe.networks.networks
-        val handles = networks.map { it.networkHandle }.toSet()
         val endpoint = probe.endpoint
-        return when {
-            networks.isEmpty() -> HomeNetworkState.Offline
-            endpoint != null && networks.any { reachesHome(it, endpoint) } -> HomeNetworkState.Home(handles)
-            else -> HomeNetworkState.Away(handles)
+        val snapshot = probe.networks
+        return EnvironmentClassifier.classify(snapshot.facts, endpoint != null) {
+            endpoint != null && snapshot.usable.any { reachesHome(it, endpoint) }
         }
     }
 
@@ -78,7 +83,8 @@ internal class AndroidNetworkEnvironment(
     @SuppressLint("MissingPermission")
     private suspend fun ProducerScope<NetworkSnapshot>.watchPhysicalNetworks() {
         val networks = ConcurrentHashMap.newKeySet<Network>()
-        val callback = PhysicalNetworkCallback(networks) { trySend(NetworkSnapshot(networks.toList())) }
+        val blocked = ConcurrentHashMap.newKeySet<Network>()
+        val callback = PhysicalNetworkCallback(networks, blocked) { trySend(NetworkSnapshot(networks.toList(), blocked.toSet())) }
         val registered = runCatching { manager?.registerNetworkCallback(PHYSICAL_REQUEST, callback) }.isSuccess
         if (!registered) trySend(NetworkSnapshot(fallbackNetworks()))
         awaitClose { if (registered) runCatching { manager?.unregisterNetworkCallback(callback) } }
@@ -107,6 +113,7 @@ internal class AndroidNetworkEnvironment(
 
     private class PhysicalNetworkCallback(
         private val networks: MutableSet<Network>,
+        private val blocked: MutableSet<Network>,
         private val changed: () -> Unit,
     ) : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) {
@@ -116,6 +123,15 @@ internal class AndroidNetworkEnvironment(
 
         override fun onLost(network: Network) {
             networks.remove(network)
+            blocked.remove(network)
+            changed()
+        }
+
+        override fun onBlockedStatusChanged(network: Network, isBlocked: Boolean) {
+            when (isBlocked) {
+                true -> blocked.add(network)
+                false -> blocked.remove(network)
+            }
             changed()
         }
 
@@ -123,6 +139,7 @@ internal class AndroidNetworkEnvironment(
     }
 
     private companion object {
+        const val TAG = "VpnEnvironment"
         val SETTLE = 1_500.milliseconds
         val STOP_TIMEOUT_MILLIS = 5.seconds.inWholeMilliseconds
         const val PROBE_TIMEOUT_MILLIS = 1_500

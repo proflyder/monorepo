@@ -1,6 +1,9 @@
 package dev.proflyder.home.feature.vpn.tunnel
 
+import dev.proflyder.home.core.model.AppLogger
 import dev.proflyder.home.core.model.Clock
+import dev.proflyder.home.core.model.info
+import dev.proflyder.home.core.model.warn
 import dev.proflyder.home.core.model.VpnProfile
 import dev.proflyder.home.core.model.VpnProtocolId
 import dev.proflyder.home.core.runtime.AppStartable
@@ -48,9 +51,9 @@ internal interface TunnelSwitch {
 }
 
 internal sealed interface VpnCommand {
-    data class Connect(val via: VpnProtocolId?) : VpnCommand
+    data class Connect(val via: VpnProtocolId?, val origin: ConnectOrigin) : VpnCommand
 
-    data object Reconnect : VpnCommand
+    data class Reconnect(val origin: ConnectOrigin) : VpnCommand
 
     data object Disconnect : VpnCommand
 }
@@ -65,8 +68,9 @@ internal class ChainVpnController(
     private val environment: NetworkEnvironment,
     private val permission: VpnPermission,
     private val clock: Clock,
+    private val logger: AppLogger,
     private val scope: CoroutineScope,
-) : VpnController, TunnelSwitch, AppStartable {
+) : VpnController, TunnelSwitch, TunnelLauncher, AppStartable {
     private val state = MutableStateFlow<VpnConnection>(VpnConnection.Disconnected)
     private val switchingState = MutableStateFlow(false)
     private val commands = Channel<VpnCommand>(Channel.UNLIMITED)
@@ -84,16 +88,17 @@ internal class ChainVpnController(
 
     override fun start() {
         scope.launch { commands.receiveAsFlow().collect(::execute) }
-        scope.launch { chain.systemStarts.collect { connect() } }
     }
 
     override fun availableTransports(): List<VpnTransportInfo> = chain.available()
 
-    override fun connect() = send(VpnCommand.Connect(via = null))
+    override fun connect() = launch(ConnectOrigin.USER)
 
-    override fun connectVia(transport: VpnProtocolId) = send(VpnCommand.Connect(transport))
+    override fun launch(origin: ConnectOrigin) = send(VpnCommand.Connect(via = null, origin))
 
-    override fun reconnect() = send(VpnCommand.Reconnect)
+    override fun connectVia(transport: VpnProtocolId) = send(VpnCommand.Connect(transport, ConnectOrigin.USER))
+
+    override fun reconnect() = send(VpnCommand.Reconnect(ConnectOrigin.USER))
 
     override fun disconnect() = send(VpnCommand.Disconnect)
 
@@ -109,23 +114,23 @@ internal class ChainVpnController(
 
     private suspend fun perform(command: VpnCommand) {
         when (command) {
-            is VpnCommand.Connect -> connect(command.via)
-            VpnCommand.Reconnect -> restart()
+            is VpnCommand.Connect -> connect(command.via, command.origin)
+            is VpnCommand.Reconnect -> restart(command.origin)
             VpnCommand.Disconnect -> stop()
         }
     }
 
-    private suspend fun connect(via: VpnProtocolId?) {
+    private suspend fun connect(via: VpnProtocolId?, origin: ConnectOrigin) {
         if (via == null && session?.isActive == true) return
         stop()
-        session = scope.launch { run(via) }
+        session = scope.launch { run(via, origin) }
     }
 
-    private suspend fun restart() {
+    private suspend fun restart(origin: ConnectOrigin) {
         val current = active ?: return
         val via = current.transport.info.id.takeIf { current.transport.info.external }
         stop()
-        session = scope.launch { run(via) }
+        session = scope.launch { run(via, origin) }
     }
 
     private suspend fun stop() {
@@ -136,14 +141,21 @@ internal class ChainVpnController(
         state.value = VpnConnection.Disconnected
     }
 
-    private suspend fun run(via: VpnProtocolId?) {
+    private suspend fun run(via: VpnProtocolId?, origin: ConnectOrigin) {
+        val atHome = currentAtHome()
+        logger.info(TAG, "connect origin=$origin atHome=$atHome via=${via?.value}")
+        if (!ConnectGate.allows(origin, atHome)) return skip(origin, atHome)
         val profile = profiles.ensure() ?: return fail(VpnConnectProblem.NO_PROFILE)
         val candidates = via?.let { listOfNotNull(chain.find(it)) } ?: chain.automatic(profile)
-        val atHome = currentAtHome()
         for (transport in candidates) {
             if (attempt(transport, profile, atHome) == Attempt.DONE) return
         }
-        state.value = exhausted(profile, atHome)
+        state.value = exhausted(profile, origin, environment.state.value.atHome ?: atHome)
+    }
+
+    private fun skip(origin: ConnectOrigin, atHome: Boolean?) {
+        logger.warn(TAG, "connect skipped origin=$origin atHome=$atHome")
+        state.value = VpnConnection.Disconnected
     }
 
     private suspend fun attempt(transport: VpnTransport, profile: VpnProfile, atHome: Boolean?): Attempt {
@@ -202,16 +214,21 @@ internal class ChainVpnController(
     private suspend fun followEnvironment(transport: VpnTransport, request: TunnelRequest) {
         environment.state.collect { network ->
             val next = request.copy(atHome = network.atHome ?: request.atHome)
-            if (transport.needsRestart(request, next)) reconnect()
+            if (transport.needsRestart(request, next)) send(VpnCommand.Reconnect(ConnectOrigin.NETWORK_RESTART))
         }
     }
 
     private suspend fun currentAtHome(): Boolean? =
         withTimeoutOrNull(ENVIRONMENT_WAIT) { environment.state.first { it != HomeNetworkState.Unknown } }?.atHome
 
-    private fun exhausted(profile: VpnProfile, atHome: Boolean?): VpnConnection = when (atHome) {
-        true -> VpnConnection.NotNeededAtHome
-        else -> VpnConnection.FallbackRequired(chain.fallbacks(profile))
+    private fun exhausted(profile: VpnProfile, origin: ConnectOrigin, atHome: Boolean?): VpnConnection {
+        val outcome = ConnectGate.outcome(origin, atHome)
+        logger.warn(TAG, "no handshake origin=$origin atHome=$atHome outcome=$outcome")
+        return when (outcome) {
+            ExhaustedOutcome.NOT_NEEDED_AT_HOME -> VpnConnection.NotNeededAtHome
+            ExhaustedOutcome.OFFER_FALLBACK -> VpnConnection.FallbackRequired(chain.fallbacks(profile))
+            ExhaustedOutcome.QUIET -> VpnConnection.Disconnected
+        }
     }
 
     private fun fail(problem: VpnConnectProblem) {
@@ -226,6 +243,7 @@ internal class ChainVpnController(
     private class ActiveTunnel(val transport: VpnTransport, val request: TunnelRequest)
 
     private companion object {
-        val ENVIRONMENT_WAIT = 3.seconds
+        const val TAG = "VpnController"
+        val ENVIRONMENT_WAIT = 10.seconds
     }
 }

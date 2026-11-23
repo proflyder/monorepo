@@ -11,10 +11,10 @@ import kotlinx.coroutines.flow.merge
 
 @SingleIn(AppScope::class)
 @Inject
-internal class VpnTransportChain(transports: Set<VpnTransport>) {
+internal class VpnTransportChain(transports: Set<VpnTransport>) : SystemVpnStarts {
     private val ordered: List<VpnTransport> = transports.sortedBy { it.order }
 
-    val systemStarts: Flow<Unit> = ordered.map { it.systemStarts }.merge()
+    override val starts: Flow<Unit> = ordered.map { it.systemStarts }.merge()
 
     fun find(id: VpnProtocolId): VpnTransport? = ordered.firstOrNull { it.info.id == id }
 

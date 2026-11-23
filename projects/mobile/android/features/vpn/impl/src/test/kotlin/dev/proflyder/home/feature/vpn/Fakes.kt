@@ -6,13 +6,17 @@ import dev.proflyder.home.core.model.VpnProfile
 import dev.proflyder.home.core.model.VpnProtocolId
 import dev.proflyder.home.core.runtime.AppForeground
 import dev.proflyder.home.core.runtime.ForegroundState
+import dev.proflyder.home.feature.vpn.transport.SystemVpnStarts
 import dev.proflyder.home.feature.vpn.transport.TransportStatus
 import dev.proflyder.home.feature.vpn.transport.TunnelRequest
 import dev.proflyder.home.feature.vpn.transport.VpnTransport
+import dev.proflyder.home.feature.vpn.tunnel.ConnectOrigin
+import dev.proflyder.home.feature.vpn.tunnel.TunnelLauncher
 import dev.proflyder.home.feature.vpn.tunnel.VpnPermission
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flowOf
@@ -70,8 +74,13 @@ internal object FakeClock : Clock {
     override fun elapsedNanos(): Long = 0
 }
 
-internal class FakeController : VpnController {
+internal class FakeSystemStarts : SystemVpnStarts {
+    override val starts = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+}
+
+internal class FakeController : VpnController, TunnelLauncher {
     val commands = mutableListOf<String>()
+    val origins = mutableListOf<ConnectOrigin>()
 
     override val connection = MutableStateFlow<VpnConnection>(VpnConnection.Disconnected)
 
@@ -79,8 +88,11 @@ internal class FakeController : VpnController {
 
     override fun availableTransports(): List<VpnTransportInfo> = emptyList()
 
-    override fun connect() {
+    override fun connect() = launch(ConnectOrigin.USER)
+
+    override fun launch(origin: ConnectOrigin) {
         commands += "connect"
+        origins += origin
         connection.value = VpnConnection.Connecting(FakeTransport.info("primary"))
     }
 
@@ -106,7 +118,7 @@ internal enum class Handshake {
 internal class FakeTransport(
     id: String,
     override val order: Int,
-    private val handshake: Handshake,
+    var handshake: Handshake,
     external: Boolean = false,
     override val needsSystemPermission: Boolean = !external,
     private val restartOnNetworkChange: Boolean = false,
