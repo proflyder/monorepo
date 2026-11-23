@@ -116,6 +116,10 @@ class PagedStateViewModelTest {
         override fun handle(intent: TestIntent) {
             handled += intent
         }
+
+        init {
+            startPaging()
+        }
     }
 
     private data class TestState(

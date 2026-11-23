@@ -53,6 +53,10 @@ internal class NotificationHistoryViewModel(
 ) {
     private val zone: ZoneId = ZoneId.systemDefault()
 
+    init {
+        startPaging()
+    }
+
     override fun copyPaging(pages: PagedState<NotificationHistory>, pendingRemoval: NotificationHistory?): NotificationHistoryUiState =
         NotificationHistoryUiState(
             pages = pages,
