@@ -491,6 +491,12 @@ navigate by route string, not by an impl destination.
   sensor blanks it. The proximity lock is held only on the earpiece route.
   If Telecom refuses the self-managed connection, the call is placed
   directly instead of hanging in «Dialing».
+- **Call screen closing.** The screen closes on `IDLE` only after the call
+  it started has left `IDLE` at least once. The decision is made in a single
+  collector of the controller state, reading the current flags directly; it
+  must not come out of the `combine` that renders the screen: `combine` may
+  deliver the cleared «awaiting start» flag before its own copy of `DIALING`
+  and then judge a stale `IDLE`, which closed the screen ~40 ms after start.
 - **Find phone.** A high-priority FCM data message is the case Android allows
   a killed app to start a foreground service from. The ring uses
   `USAGE_ALARM` at max alarm volume and restores it; the ringer mode is never

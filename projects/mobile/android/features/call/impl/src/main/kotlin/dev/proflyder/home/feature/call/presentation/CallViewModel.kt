@@ -14,7 +14,6 @@ import dev.proflyder.home.feature.call.CallPhase
 import dev.proflyder.home.feature.call.CallSnapshot
 import dev.proflyder.home.feature.call.audio.CallAudioController
 import dev.proflyder.home.feature.call.audio.CallAudioRoute
-import dev.proflyder.home.feature.call.audio.CallAudioRouteState
 import dev.proflyder.home.feature.call.telecom.CallCoordinator
 import dev.zacsweers.metro.Inject
 import kotlin.time.Duration.Companion.seconds
@@ -23,7 +22,6 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -41,8 +39,8 @@ internal class CallViewModel(
     private val flags = MutableStateFlow(CallScreenFlags())
 
     init {
-        launch { controller.state.filter { it.phase != CallPhase.IDLE }.collect { clearAwaitingStart() } }
-        launch { combine(controller.state, audio.state, flags, elapsedSeconds(), ::project).collect(::show) }
+        launch { controller.state.collect(::onCall) }
+        launch { combine(controller.state, audio.state, flags, elapsedSeconds(), ::callScreenState).collect(::show) }
     }
 
     override fun handle(intent: CallIntent) {
@@ -58,25 +56,18 @@ internal class CallViewModel(
         }
     }
 
-    private fun project(
-        call: CallSnapshot,
-        routes: CallAudioRouteState,
-        current: CallScreenFlags,
-        elapsed: Long,
-    ): Pair<CallScreenState, Boolean> = callScreenState(call, routes, current, elapsed) to shouldClose(call, current)
-
-    private fun show(projection: Pair<CallScreenState, Boolean>) {
-        updateState { projection.first }
-        if (projection.second) emit(CallEvent.Finish)
+    private fun show(screen: CallScreenState) {
+        updateState { screen }
     }
 
-    private fun clearAwaitingStart() {
-        flags.update { it.copy(awaitingStart = false) }
+    private fun onCall(call: CallSnapshot) {
+        if (call.phase != CallPhase.IDLE) flags.update { it.copy(awaitingStart = false) }
+        if (shouldClose(call, flags.value)) emit(CallEvent.Finish)
     }
 
     private fun open(startCall: Boolean) {
         flags.update { it.copy(opened = true, awaitingStart = it.awaitingStart || startCall) }
-        if (!startCall) return
+        if (!startCall) return onCall(controller.state.value)
         controller.dismissEnded()
         val missing = permissions.missing()
         if (missing.isEmpty()) coordinator.startOutgoingCall() else emit(CallEvent.RequestPermissions(missing))
