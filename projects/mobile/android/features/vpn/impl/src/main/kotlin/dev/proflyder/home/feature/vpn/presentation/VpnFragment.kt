@@ -18,6 +18,8 @@ import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.feature.vpn.VpnAuth
 import dev.proflyder.home.feature.vpn.VpnConnection
 import dev.proflyder.home.feature.vpn.VpnProfileState
+import dev.proflyder.home.feature.vpn.VpnSettings
+import dev.proflyder.home.feature.vpn.VpnTraffic
 import dev.proflyder.home.feature.vpn.VpnRoute
 import dev.proflyder.home.feature.vpn.impl.R
 import dev.proflyder.home.feature.vpn.impl.databinding.FragmentVpnBinding
@@ -31,21 +33,15 @@ internal class VpnFragment :
 
     private val certificatePicker = registerForActivityResult(ActivityResultContracts.OpenDocument(), ::onCertificate)
 
-    private var screen: VpnScreen? = null
-
-    override fun onScreenCreated(binding: FragmentVpnBinding, savedInstanceState: Bundle?) {
+    override fun onViewReady(binding: FragmentVpnBinding, savedInstanceState: Bundle?) {
         binding.root.applyScrollBottomInset()
-        screen = VpnScreen(binding, ::dispatch)
+        val screen = VpnScreen(binding, ::dispatch)
         binding.vpnCertificateImport.setOnClickListener { certificatePicker.launch(CERTIFICATE_TYPES) }
         binding.vpnForget.setOnClickListener { confirmForget() }
-    }
-
-    override fun onBindingDestroyed() {
-        screen = null
-    }
-
-    override fun render(state: VpnUiState) {
-        screen?.render(state)
+        render({ VpnStatus(it.connection, it.traffic, it.nowMillis, it.busy) }, screen::renderStatus)
+        render({ it.settings to it.atHome }) { (settings, atHome) -> screen.renderRoute(settings, atHome) }
+        render({ it.settings to it.fallbackReady }) { (settings, ready) -> screen.renderAuth(settings, ready) }
+        render({ it.profile to it.busy }) { (profile, busy) -> screen.renderProfile(profile, busy) }
     }
 
     override fun onEvent(event: VpnEvent) {
@@ -96,6 +92,13 @@ internal class VpnFragment :
     }
 }
 
+internal data class VpnStatus(
+    val connection: VpnConnection,
+    val traffic: VpnTraffic?,
+    val nowMillis: Long,
+    val busy: Boolean,
+)
+
 internal class VpnScreen(
     private val binding: FragmentVpnBinding,
     dispatch: (VpnIntent) -> Unit,
@@ -124,49 +127,45 @@ internal class VpnScreen(
         binding.vpnCertificateImport.contentDescription = context.getString(R.string.vpn_certificate_import)
     }
 
-    fun render(state: VpnUiState) {
-        renderStatus(state)
-        renderRoute(state)
-        renderAuth(state)
-        val context = binding.root.context
-        binding.vpnProfileRow.subtitle = VpnTexts.profile(context, state.profile)
-        binding.vpnProfileRow.subtitleTone = profileTone(state.profile)
-        binding.vpnReissue.isEnabled = !state.busy
-        binding.vpnForget.isEnabled = !state.busy
+    fun renderProfile(profile: VpnProfileState, busy: Boolean) {
+        binding.vpnProfileRow.subtitle = VpnTexts.profile(binding.root.context, profile)
+        binding.vpnProfileRow.subtitleTone = profileTone(profile)
+        binding.vpnReissue.isEnabled = !busy
+        binding.vpnForget.isEnabled = !busy
     }
 
-    private fun renderStatus(state: VpnUiState) {
+    fun renderStatus(status: VpnStatus) {
         val context = binding.root.context
-        val connection = state.connection
+        val connection = status.connection
         binding.vpnStatusRow.title = context.getString(VpnTexts.title(connection))
-        binding.vpnStatusRow.subtitle = VpnTexts.detail(context, connection, state.nowMillis)
+        binding.vpnStatusRow.subtitle = VpnTexts.detail(context, connection, status.nowMillis)
         binding.vpnStatusRow.subtitleTone = statusTone(connection)
-        val traffic = state.traffic?.takeIf { connection is VpnConnection.Connected }?.let { VpnTexts.traffic(context, it) }
+        val traffic = status.traffic?.takeIf { connection is VpnConnection.Connected }?.let { VpnTexts.traffic(context, it) }
         binding.vpnStatusTraffic.text = traffic
         binding.vpnStatusTraffic.setVisible(traffic != null)
-        binding.vpnProgress.setVisible(connection is VpnConnection.Connecting || state.busy)
+        binding.vpnProgress.setVisible(connection is VpnConnection.Connecting || status.busy)
         binding.vpnToggle.setText(toggleText(connection))
         fallbacks.render((connection as? VpnConnection.FallbackRequired)?.options.orEmpty())
     }
 
-    private fun renderRoute(state: VpnUiState) {
+    fun renderRoute(settings: VpnSettings, atHome: Boolean?) {
         val context = binding.root.context
-        route.render(state.settings.route)
-        binding.vpnRouteHelp.text = context.getString(routeHelp(state.settings.route))
-        autoConnect.render(state.settings.autoConnect)
-        connectOnOpen.render(state.settings.connectOnOpen)
-        binding.vpnHomeStatus.text = context.getString(homeText(state.atHome))
+        route.render(settings.route)
+        binding.vpnRouteHelp.text = context.getString(routeHelp(settings.route))
+        autoConnect.render(settings.autoConnect)
+        connectOnOpen.render(settings.connectOnOpen)
+        binding.vpnHomeStatus.text = context.getString(homeText(atHome))
     }
 
-    private fun renderAuth(state: VpnUiState) {
+    fun renderAuth(settings: VpnSettings, fallbackReady: Boolean) {
         val context = binding.root.context
-        val certificate = state.settings.auth == VpnAuth.CERTIFICATE
-        auth.render(state.settings.auth)
-        binding.vpnExternalStatus.text = context.getString(externalText(state.fallbackReady))
+        val certificate = settings.auth == VpnAuth.CERTIFICATE
+        auth.render(settings.auth)
+        binding.vpnExternalStatus.text = context.getString(externalText(fallbackReady))
         binding.vpnCertificateRow.setVisible(certificate)
-        binding.vpnCertificateRow.subtitle = state.settings.certificateName.ifBlank { context.getString(R.string.vpn_certificate_none) }
-        binding.vpnCertificateInstall.setVisible(certificate && state.settings.certificateName.isNotBlank())
-        binding.vpnAuthHelp.text = context.getString(authHelp(state.settings.auth))
+        binding.vpnCertificateRow.subtitle = settings.certificateName.ifBlank { context.getString(R.string.vpn_certificate_none) }
+        binding.vpnCertificateInstall.setVisible(certificate && settings.certificateName.isNotBlank())
+        binding.vpnAuthHelp.text = context.getString(authHelp(settings.auth))
     }
 
     private fun toggleText(connection: VpnConnection): Int = when {

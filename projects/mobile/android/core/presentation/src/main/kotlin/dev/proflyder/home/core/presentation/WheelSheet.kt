@@ -1,4 +1,4 @@
-package dev.proflyder.home.core.designsystem
+package dev.proflyder.home.core.presentation
 
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -14,8 +14,17 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
+import dev.proflyder.home.core.designsystem.R
+import kotlinx.serialization.Serializable
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+
+@Serializable
+data class WheelChoice(val index: Int)
+
+open class WheelResult : ResultKey<WheelChoice>(WheelChoice.serializer())
+
+private object WheelCodec : WheelResult()
 
 class WheelSelection(private val savedState: SavedStateHandle) : ViewModel() {
     val index: StateFlow<Int> = savedState.getStateFlow(KEY_INDEX, savedState.get<Int>(ARG_INITIAL) ?: 0)
@@ -62,7 +71,7 @@ class WheelSheet : BottomSheetDialogFragment() {
     }
 
     private fun confirm() {
-        val result = Bundle().apply { putInt(RESULT_INDEX, selection.index.value) }
+        val result = WheelCodec.pack(WheelChoice(selection.index.value))
         parentFragmentManager.setFragmentResult(args.getString(ARG_REQUEST).orEmpty(), result)
         dismiss()
     }
@@ -71,9 +80,9 @@ class WheelSheet : BottomSheetDialogFragment() {
         private const val ARG_REQUEST = "ds_wheel_request"
         private const val ARG_TITLE = "ds_wheel_title"
         private const val ARG_LABELS = "ds_wheel_labels"
-        private const val RESULT_INDEX = "ds_wheel_result"
 
-        fun show(manager: FragmentManager, requestKey: String, title: CharSequence, labels: List<String>, selected: Int) {
+        fun show(manager: FragmentManager, result: WheelResult, title: CharSequence, labels: List<String>, selected: Int) {
+            val requestKey = result.requestKey
             if (manager.findFragmentByTag(requestKey) != null) return
             WheelSheet().apply {
                 arguments = Bundle().apply {
@@ -84,7 +93,5 @@ class WheelSheet : BottomSheetDialogFragment() {
                 }
             }.show(manager, requestKey)
         }
-
-        fun chosenIndex(result: Bundle): Int? = result.getInt(RESULT_INDEX, -1).takeIf { it >= 0 }
     }
 }

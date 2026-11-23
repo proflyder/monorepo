@@ -12,7 +12,6 @@ import org.junit.runners.Suite
     CatalogScreenshotTest::class,
     LightParamsEditorScreenshotTest::class,
     RevealBinderTest::class,
-    SheetsScreenshotTest::class,
     SectionsTest::class,
 )
 class DesignSystemTestSuite

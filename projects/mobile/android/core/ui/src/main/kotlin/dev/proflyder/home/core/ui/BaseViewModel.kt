@@ -18,8 +18,10 @@ abstract class BaseViewModel<S : Any>(initialState: S) : ViewModel() {
     protected val currentState: S get() = mutableState.value
 
     protected fun updateState(reducer: S.() -> S) {
-        mutableState.update { it.reducer() }
+        mutableState.update { previous -> derive(previous, previous.reducer()) }
     }
+
+    protected open fun derive(previous: S, next: S): S = next
 
     protected fun launch(block: suspend CoroutineScope.() -> Unit): Job = viewModelScope.launch(block = block)
 }

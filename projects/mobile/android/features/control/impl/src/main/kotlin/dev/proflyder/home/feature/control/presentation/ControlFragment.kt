@@ -11,6 +11,7 @@ import dev.proflyder.home.core.ui.applyScrollBottomInset
 import dev.proflyder.home.core.ui.fabClearance
 import dev.proflyder.home.core.ui.liftAboveBottomInsets
 import dev.proflyder.home.core.ui.setupPullToRefresh
+import dev.proflyder.home.feature.control.SpeedDialItem
 import dev.proflyder.home.feature.control.impl.databinding.FragmentControlBinding
 
 internal class ControlFragment :
@@ -20,29 +21,29 @@ internal class ControlFragment :
     override val viewModel: ControlViewModel by screenViewModel()
 
     private val dialogs = ControlDialogs(::requireContext, ::dispatch)
-    private var list: ControlListRenderer? = null
-    private var speedDial: SpeedDialOverlay? = null
     private val dialBack = object : OnBackPressedCallback(false) {
         override fun handleOnBackPressed() = dispatch(ControlIntent.Dial(open = false))
     }
+    private var speedDial: SpeedDialOverlay? = null
 
-    override fun onScreenCreated(binding: FragmentControlBinding, savedInstanceState: Bundle?) {
+    override fun onViewReady(binding: FragmentControlBinding, savedInstanceState: Bundle?) {
         binding.controlList.applyScrollBottomInset(binding.controlList.fabClearance())
         binding.controlQuickFab.liftAboveBottomInsets()
         binding.controlStatesBanner.liftAboveBottomInsets()
-        list = ControlListRenderer(binding, ::dispatch)
-        speedDial = SpeedDialOverlay(binding.controlRoot, binding.controlQuickFab, ::dispatch)
+        val list = ControlListRenderer(binding, ::dispatch)
+        val dial = SpeedDialOverlay(binding.controlRoot, binding.controlQuickFab, ::dispatch).also { speedDial = it }
         binding.controlList.addOnScrollListener(FabOnScroll())
         addBackCallback(dialBack)
         binding.controlRefresh.setupPullToRefresh { dispatch(ControlIntent.Refresh) }
         binding.controlRetry.setOnClickListener { dispatch(ControlIntent.Refresh) }
         binding.controlOpenConnection.setOnClickListener { dispatch(ControlIntent.OpenConnection) }
+        render(::controlListInputOf, list::render)
+        render({ it.speedDial to it.layout.dialOpen }) { (items, open) -> renderDial(dial, items, open) }
     }
 
-    override fun render(state: ControlUiState) {
-        list?.render(state)
-        speedDial?.render(state.speedDial, state.layout.dialOpen)
-        dialBack.isEnabled = state.layout.dialOpen
+    private fun renderDial(dial: SpeedDialOverlay, items: List<SpeedDialItem>, open: Boolean) {
+        dial.render(items, open)
+        dialBack.isEnabled = open
     }
 
     override fun onEvent(event: ControlEvent) {
@@ -61,7 +62,6 @@ internal class ControlFragment :
     override fun onBindingDestroyed() {
         speedDial?.reset()
         speedDial = null
-        list = null
         dialogs.dismissAll()
         dispatch(ControlIntent.Dial(open = false))
     }

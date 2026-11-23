@@ -20,7 +20,11 @@
             android:paddingStart="@dimen/reminders_screen_margin"
             android:paddingTop="12dp"
             android:paddingEnd="@dimen/reminders_screen_margin"
-            android:paddingBottom="@dimen/ds_space_xl" />
+            android:paddingBottom="@dimen/ds_space_xl"
+            app:layoutManager="androidx.recyclerview.widget.GridLayoutManager"
+            app:spanCount="@integer/reminders_columns"
+            tools:itemCount="3"
+            tools:listitem="@layout/item_reminder" />
 
         <ProgressBar
             android:id="@+id/reminders_progress"

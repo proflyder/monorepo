@@ -58,7 +58,8 @@ internal class RemindersViewModel(
     )
 
     init {
-        loader.refreshOn(merge(screenShown, bus.eventsOf<RemindersChanged>()))
+        loader.refresh(RefreshMode.SOFT)
+        loader.refreshOn(merge(visibility.returned, bus.eventsOf<RemindersChanged>()))
     }
 
     private fun openEditor(id: String?) {

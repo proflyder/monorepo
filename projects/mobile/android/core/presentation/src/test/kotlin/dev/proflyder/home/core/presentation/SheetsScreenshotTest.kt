@@ -1,13 +1,14 @@
-package dev.proflyder.home.core.designsystem
+package dev.proflyder.home.core.presentation
 
 import android.graphics.Bitmap
 import android.graphics.Canvas
-import android.os.Bundle
 import android.view.View
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.NumberPicker
 import androidx.fragment.app.FragmentActivity
+import com.google.android.material.color.MaterialColors
+import dev.proflyder.home.core.designsystem.R
 import dev.proflyder.home.core.theme.AppTheme
 import java.io.File
 import org.junit.Assert.assertEquals
@@ -28,36 +29,36 @@ class SheetsScreenshotTest {
     @Test
     fun optionsSheetMarksTheSelectionAndReturnsTheTappedKey() {
         val activity = activity()
-        val results = mutableListOf<Bundle>()
-        activity.supportFragmentManager.setFragmentResultListener(REQUEST, activity) { _, result -> results += result }
-        OptionsSheet.show(activity.supportFragmentManager, REQUEST, "Добавить шаг", OPTIONS, selectedKey = "speak")
+        val results = mutableListOf<SheetChoice>()
+        activity.supportFragmentManager.listenResult(Choice, activity) { results += it }
+        OptionsSheet.show(activity.supportFragmentManager, Choice, "Добавить шаг", OPTIONS, selectedKey = "speak")
         val sheet = settle(activity) as OptionsSheet
         save(sheet.requireView(), "options_sheet.png")
 
         sheet.requireView().findViewById<LinearLayout>(R.id.ds_sheet_options).getChildAt(2).performClick()
         shadowOf(Looper.getMainLooper()).idle()
 
-        assertEquals("delay", OptionsSheet.chosenKey(results.single()))
+        assertEquals(SheetChoice("delay"), results.single())
     }
 
     @Test
     fun cancellingTheOptionsSheetReportsNoChoice() {
         val activity = activity()
-        val results = mutableListOf<Bundle>()
-        activity.supportFragmentManager.setFragmentResultListener(REQUEST, activity) { _, result -> results += result }
-        OptionsSheet.show(activity.supportFragmentManager, REQUEST, "Добавить шаг", OPTIONS)
+        val results = mutableListOf<SheetChoice>()
+        activity.supportFragmentManager.listenResult(Choice, activity) { results += it }
+        OptionsSheet.show(activity.supportFragmentManager, Choice, "Добавить шаг", OPTIONS)
         (settle(activity) as OptionsSheet).requireDialog().cancel()
         shadowOf(Looper.getMainLooper()).idle()
 
-        assertNull(OptionsSheet.chosenKey(results.single()))
+        assertNull(results.single().key)
     }
 
     @Test
     fun wheelSheetConfirmsTheScrolledValue() {
         val activity = activity()
-        val results = mutableListOf<Bundle>()
-        activity.supportFragmentManager.setFragmentResultListener(REQUEST, activity) { _, result -> results += result }
-        WheelSheet.show(activity.supportFragmentManager, REQUEST, "Задержка", WHEEL, selected = 2)
+        val results = mutableListOf<WheelChoice>()
+        activity.supportFragmentManager.listenResult(Wheel, activity) { results += it }
+        WheelSheet.show(activity.supportFragmentManager, Wheel, "Задержка", WHEEL, selected = 2)
         val sheet = settle(activity) as WheelSheet
         save(sheet.requireView(), "wheel_sheet.png")
         val wheel = sheet.requireView().findViewById<NumberPicker>(R.id.ds_sheet_wheel)
@@ -68,7 +69,7 @@ class SheetsScreenshotTest {
         sheet.requireView().findViewById<View>(R.id.ds_sheet_done).performClick()
         shadowOf(Looper.getMainLooper()).idle()
 
-        assertEquals(4, WheelSheet.chosenIndex(results.single()))
+        assertEquals(WheelChoice(4), results.single())
     }
 
     private fun NumberPicker.dispatchValueChange(index: Int) {
@@ -86,13 +87,13 @@ class SheetsScreenshotTest {
     private fun settle(activity: FragmentActivity) = activity.supportFragmentManager.run {
         executePendingTransactions()
         shadowOf(Looper.getMainLooper()).idle()
-        checkNotNull(findFragmentByTag(REQUEST))
+        checkNotNull(fragments.lastOrNull())
     }
 
     private fun save(view: View, name: String) {
         (view.parent as? android.view.ViewGroup)?.removeView(view)
         val host = FrameLayout(view.context).apply { addView(view) }
-        host.setBackgroundColor(color(view.context, com.google.android.material.R.attr.colorSurfaceContainerLow))
+        host.setBackgroundColor(MaterialColors.getColor(view.context, com.google.android.material.R.attr.colorSurfaceContainerLow, 0))
         val width = View.MeasureSpec.makeMeasureSpec(WIDTH, View.MeasureSpec.EXACTLY)
         host.measure(width, View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
         host.layout(0, 0, host.measuredWidth, host.measuredHeight)
@@ -103,8 +104,11 @@ class SheetsScreenshotTest {
         File(dir, name).outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, PNG_QUALITY, it) }
     }
 
+    private object Choice : OptionsResult()
+
+    private object Wheel : WheelResult()
+
     private companion object {
-        const val REQUEST = "sheet_request"
         const val WIDTH = 1233
         const val PNG_QUALITY = 100
         val OPTIONS = listOf(

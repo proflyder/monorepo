@@ -11,10 +11,8 @@ import dev.proflyder.home.core.designsystem.DesignCatalog
 import dev.proflyder.home.core.designsystem.ListRow
 import dev.proflyder.home.core.designsystem.PillSegments
 import dev.proflyder.home.core.designsystem.R as DesignR
-import dev.proflyder.home.core.presentation.PillSegmentsBinder
 import dev.proflyder.home.core.presentation.ScreenFragment
 import dev.proflyder.home.core.presentation.StateViewModel
-import dev.proflyder.home.core.presentation.SwitchBinder
 import dev.proflyder.home.core.presentation.screenViewModel
 import dev.proflyder.home.core.ui.ViewBinding
 import dev.proflyder.home.core.ui.ViewModelSource
@@ -53,25 +51,14 @@ internal class DesignCatalogFragment :
     ) {
     override val viewModel: DesignCatalogViewModel by screenViewModel()
 
-    private var pills: PillSegmentsBinder<Int>? = null
-    private var switch: SwitchBinder? = null
-
-    override fun onScreenCreated(binding: DesignCatalogBinding, savedInstanceState: Bundle?) {
+    override fun onViewReady(binding: DesignCatalogBinding, savedInstanceState: Bundle?) {
         binding.root.applyScrollBottomInset()
         val segments = binding.root.findViewById<PillSegments>(DesignR.id.ds_catalog_pills)
-        pills = bindPills(segments, segments.indices(), DesignCatalogIntent::SelectPill)
+        val pills = bindPills(segments, segments.indices(), DesignCatalogIntent::SelectPill)
         val row = binding.root.findViewById<ListRow>(DesignR.id.ds_catalog_row_switch)
-        switch = bindSwitch(row.switch, DesignCatalogIntent::SetSwitch)
-    }
-
-    override fun onBindingDestroyed() {
-        pills = null
-        switch = null
-    }
-
-    override fun render(state: DesignCatalogState) {
-        pills?.render(state.pill)
-        switch?.render(state.switchOn)
+        val switch = bindSwitch(row.switch, DesignCatalogIntent::SetSwitch)
+        render(DesignCatalogState::pill, pills::render)
+        render(DesignCatalogState::switchOn, switch::render)
     }
 }
 

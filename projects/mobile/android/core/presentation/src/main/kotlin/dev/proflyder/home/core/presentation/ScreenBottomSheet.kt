@@ -19,28 +19,44 @@ abstract class ScreenBottomSheet<VB : ViewBinding, S : Any, I : Any, E : Any>(
 
     override val screenName: String get() = screenNameOf(this)
 
+    final override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        deliverEvents(viewModel.screenEvents, ::onEvent)
+        onScreenCreate(savedInstanceState)
+    }
+
     final override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View =
         inflateBinding(inflater, container, false).also { _binding = it }.root
 
     final override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        onSheetCreated(binding, savedInstanceState)
-        viewLifecycleOwner.connect(viewModel, ::render, ::onEvent)
+        onViewReady(binding, savedInstanceState)
+        bindScreenView(viewModel, ::render)
     }
 
     final override fun onDestroyView() {
-        onSheetDestroyed()
+        onViewDestroyed()
         _binding = null
         super.onDestroyView()
     }
 
-    protected open fun onSheetCreated(binding: VB, savedInstanceState: Bundle?) = Unit
+    protected open fun onScreenCreate(savedInstanceState: Bundle?) = Unit
 
-    protected open fun onSheetDestroyed() = Unit
+    protected open fun onViewReady(binding: VB, savedInstanceState: Bundle?) = Unit
 
-    protected abstract fun render(state: S)
+    protected open fun onViewDestroyed() = Unit
+
+    protected open fun render(state: S) = Unit
+
+    protected fun <T> render(selector: (S) -> T, block: (T) -> Unit) {
+        viewLifecycleOwner.renderSlice(viewModel.state, selector, block)
+    }
 
     protected open fun onEvent(event: E) = Unit
+
+    protected fun <T : Any> onResult(key: ResultKey<T>, toIntent: (T) -> I?) {
+        childFragmentManager.listenResult(key, this) { value -> toIntent(value)?.let(::dispatch) }
+    }
 
     final override fun dispatch(intent: I) {
         viewModel.dispatch(intent)

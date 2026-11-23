@@ -16,5 +16,9 @@ import org.junit.runners.Suite
     EditorDraftSessionTest::class,
     BindersTest::class,
     ScreenInfrastructureTest::class,
+    ScreenLifecycleTest::class,
+    ScreenEventsTest::class,
+    SheetsScreenshotTest::class,
+    ScreenResultsTest::class,
 )
 class AllPresentationTests

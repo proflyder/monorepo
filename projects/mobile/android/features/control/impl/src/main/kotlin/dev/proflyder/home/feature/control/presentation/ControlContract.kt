@@ -41,15 +41,40 @@ internal data class ControlUiState(
     val pending: Set<String> = emptySet(),
     val pendingScenarios: Set<String> = emptySet(),
     val layout: ControlLayout = ControlLayout(),
+    val speedDial: List<SpeedDialItem> = emptyList(),
 ) {
     val entries: List<ControlEntry> get() = catalog.entries
+}
 
-    val speedDial: List<SpeedDialItem>
-        get() = SpeedDialItems.build(
+internal fun ControlUiState.derivedFrom(previous: ControlUiState): ControlUiState {
+    val unchanged = entries == previous.entries && provided == previous.provided && favorites == previous.favorites &&
+        scenarios == previous.scenarios && pending == previous.pending && pendingScenarios == previous.pendingScenarios
+    if (unchanged) return copy(speedDial = previous.speedDial)
+    return copy(
+        speedDial = SpeedDialItems.build(
             QuickTiles.build(provided, favorites, entries, scenarios, pending, pendingScenarios),
             WakeFeedback.actions(entries, pending),
-        )
+        ),
+    )
 }
+
+internal data class ControlListInput(
+    val catalog: ControlCatalogState,
+    val hub: HubView,
+    val filter: ControlFilter,
+    val pending: Set<String>,
+    val expandedDevices: Set<String>,
+    val collapsedRooms: Set<String>,
+)
+
+internal fun controlListInputOf(state: ControlUiState): ControlListInput = ControlListInput(
+    catalog = state.catalog,
+    hub = state.hub,
+    filter = state.filter,
+    pending = state.pending,
+    expandedDevices = state.layout.expandedDevices,
+    collapsedRooms = state.layout.collapsedRooms,
+)
 
 internal sealed interface PinSubject {
     val ref: FavoriteRef

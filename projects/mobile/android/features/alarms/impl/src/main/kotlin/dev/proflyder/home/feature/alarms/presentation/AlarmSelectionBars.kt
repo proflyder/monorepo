@@ -21,9 +21,9 @@ internal class AlarmSelectionBars(
         binding.alarmsSelectionDelete.setOnClickListener { dispatch(AlarmsIntent.RequestDeleteSelected) }
     }
 
-    fun render(state: AlarmsUiState) {
-        if (shown != state.selectionMode) showBars(state.selectionMode, animate = shown != null)
-        renderContent(state)
+    fun render(selection: AlarmSelectionUi) {
+        if (shown != selection.active) showBars(selection.active, animate = shown != null)
+        renderContent(selection)
     }
 
     private fun showBars(selecting: Boolean, animate: Boolean) {
@@ -43,13 +43,13 @@ internal class AlarmSelectionBars(
     private fun bottomBarHeight(): Int = binding.alarmsActionBar.height.takeIf { it > 0 }
         ?: binding.root.resources.getDimensionPixelSize(R.dimen.alarms_action_bar_height)
 
-    private fun renderContent(state: AlarmsUiState) = with(binding) {
-        val count = state.selectedIds.size
+    private fun renderContent(selection: AlarmSelectionUi) = with(binding) {
+        val count = selection.count
         alarmsSelectionCount.text = root.resources.getQuantityString(R.plurals.alarms_selected_count, count, count)
-        alarmsSelectionAll.setText(if (state.allSelected) R.string.alarms_select_none else R.string.alarms_select_all)
-        val actions = state.selectionActions
+        alarmsSelectionAll.setText(if (selection.allSelected) R.string.alarms_select_none else R.string.alarms_select_all)
+        val actions = selection.actions
         alarmsSelectionEnable.setVisible(actions.canEnable)
         alarmsSelectionDisable.setVisible(actions.canDisable)
-        listOf(alarmsSelectionEnable, alarmsSelectionDisable, alarmsSelectionDelete).forEach { it.isEnabled = !state.busy }
+        listOf(alarmsSelectionEnable, alarmsSelectionDisable, alarmsSelectionDelete).forEach { it.isEnabled = !selection.busy }
     }
 }

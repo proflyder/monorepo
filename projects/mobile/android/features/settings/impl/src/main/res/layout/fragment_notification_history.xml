@@ -48,7 +48,10 @@
             android:paddingStart="@dimen/ds_space_l"
             android:paddingTop="@dimen/ds_space_xs"
             android:paddingEnd="@dimen/ds_space_l"
-            android:paddingBottom="@dimen/ds_space_xl" />
+            android:paddingBottom="@dimen/ds_space_xl"
+            app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
+            tools:itemCount="3"
+            tools:listitem="@layout/item_notification_history" />
 
         <LinearLayout
             android:id="@+id/history_empty"

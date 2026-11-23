@@ -33,9 +33,13 @@ internal data class ScenariosUiState(
     val loadError: RemoteFailure? = null,
     val busy: Boolean = false,
     val favorites: List<FavoriteRef> = emptyList(),
+    val rows: List<ScenarioRow> = emptyList(),
 ) {
     fun isPinned(scenario: Scenario): Boolean = FavoriteRef(FavoriteKind.SCENARIO, scenario.id) in favorites
 }
+
+internal fun ScenariosUiState.derivedFrom(previous: ScenariosUiState): ScenariosUiState =
+    if (scenarios == previous.scenarios && busy == previous.busy) copy(rows = previous.rows) else copy(rows = scenarios.map { ScenarioRow(it, busy) })
 
 internal sealed interface ScenariosIntent {
     data class Refresh(val mode: RefreshMode) : ScenariosIntent
@@ -64,6 +68,8 @@ internal class ScenariosViewModel(
     events: AppEventBus,
 ) : StateViewModel<ScenariosUiState, ScenariosIntent, ScenariosEvent>(ScenariosUiState()) {
     private val loads by latest()
+
+    override fun derive(previous: ScenariosUiState, next: ScenariosUiState): ScenariosUiState = next.derivedFrom(previous)
 
     init {
         refresh(RefreshMode.HARD)

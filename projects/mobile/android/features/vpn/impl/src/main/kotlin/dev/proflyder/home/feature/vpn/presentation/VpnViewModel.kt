@@ -79,9 +79,9 @@ internal class VpnViewModel(
 ) : StateViewModel<VpnUiState, VpnIntent, VpnEvent>(VpnUiState()) {
     init {
         launch {
-            screenVisible.flatMapLatest { visible -> if (visible) feed.snapshots() else emptyFlow() }.collect(::apply)
+            visibility.visible.flatMapLatest { visible -> if (visible) feed.snapshots() else emptyFlow() }.collect(::apply)
         }
-        launch { screenShown.collect { updateState { copy(fallbackReady = fallbackReady()) } } }
+        launch { visibility.shown.collect { updateState { copy(fallbackReady = fallbackReady()) } } }
     }
 
     private fun apply(snapshot: VpnSnapshot) = updateState {

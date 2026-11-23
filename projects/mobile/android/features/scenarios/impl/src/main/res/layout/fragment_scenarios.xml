@@ -24,7 +24,11 @@
                 android:paddingStart="@dimen/scenarios_screen_margin"
                 android:paddingTop="12dp"
                 android:paddingEnd="@dimen/scenarios_screen_margin"
-                android:paddingBottom="@dimen/ds_space_xl" />
+                android:paddingBottom="@dimen/ds_space_xl"
+                app:layoutManager="androidx.recyclerview.widget.GridLayoutManager"
+                app:spanCount="@integer/scenarios_columns"
+                tools:itemCount="3"
+                tools:listitem="@layout/item_scenario" />
 
             <ProgressBar
                 android:id="@+id/scenarios_progress"

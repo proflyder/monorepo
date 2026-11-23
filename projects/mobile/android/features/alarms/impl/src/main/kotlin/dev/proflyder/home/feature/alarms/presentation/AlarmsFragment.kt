@@ -4,7 +4,6 @@ import dev.proflyder.home.core.presentation.addBackCallback
 import dev.proflyder.home.core.designsystem.R as DesignR
 import android.os.Bundle
 import androidx.activity.OnBackPressedCallback
-import androidx.recyclerview.widget.GridLayoutManager
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.presentation.RefreshMode
@@ -13,7 +12,7 @@ import dev.proflyder.home.core.presentation.render
 import dev.proflyder.home.core.ui.ListStateViews
 import dev.proflyder.home.core.ui.applyScrollBottomInset
 import dev.proflyder.home.core.ui.fabClearance
-import dev.proflyder.home.core.ui.injectedActivityViewModels
+import dev.proflyder.home.core.presentation.tabViewModels
 import dev.proflyder.home.core.ui.liftAboveBottomInsets
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.core.ui.setupPullToRefresh
@@ -23,53 +22,51 @@ import dev.proflyder.home.feature.alarms.impl.databinding.FragmentAlarmsBinding
 
 internal class AlarmsFragment :
     ScreenFragment<FragmentAlarmsBinding, AlarmsUiState, AlarmsIntent, AlarmsEvent>(FragmentAlarmsBinding.Companion::inflate) {
-    override val viewModel: AlarmsViewModel by injectedActivityViewModels()
+    override val viewModel: AlarmsViewModel by tabViewModels()
 
     private val adapter = AlarmAdapter(AlarmAdapterCallback(::dispatch))
-    private var states: ListStateViews? = null
-    private var selectionBars: AlarmSelectionBars? = null
 
     private val exitSelection = object : OnBackPressedCallback(false) {
         override fun handleOnBackPressed() = dispatch(AlarmsIntent.ClearSelection)
     }
 
-    override fun onScreenCreated(binding: FragmentAlarmsBinding, savedInstanceState: Bundle?) {
+    override fun onViewReady(binding: FragmentAlarmsBinding, savedInstanceState: Bundle?) {
         binding.alarmsList.applyScrollBottomInset(binding.alarmsList.fabClearance())
         binding.alarmsAdd.liftAboveBottomInsets()
         binding.alarmsActionBar.liftAboveBottomInsets()
-        binding.alarmsList.layoutManager =
-            GridLayoutManager(requireContext(), resources.getInteger(R.integer.alarms_columns))
         binding.alarmsList.adapter = adapter
-        states = ListStateViews(
+        val states = ListStateViews(
             progress = binding.alarmsProgress,
             empty = binding.alarmsEmpty,
             error = binding.alarmsError,
             content = binding.alarmsList,
             errorText = binding.alarmsErrorText,
         )
-        selectionBars = AlarmSelectionBars(binding, ::dispatch)
+        val selectionBars = AlarmSelectionBars(binding, ::dispatch)
         binding.alarmsRefresh.setupPullToRefresh { dispatch(AlarmsIntent.Refresh(RefreshMode.HARD)) }
         binding.alarmsRetry.setOnClickListener { dispatch(AlarmsIntent.Refresh(RefreshMode.HARD)) }
         binding.alarmsOpenConnection.setOnClickListener { dispatch(AlarmsIntent.OpenConnection) }
         binding.alarmsAdd.setOnClickListener { dispatch(AlarmsIntent.Add) }
         addBackCallback(exitSelection)
+        render(AlarmsUiState::list) { list -> renderList(states, list) }
+        render(AlarmsUiState::rows, adapter::submitList)
+        render(AlarmsUiState::selection) { selection -> renderSelection(selectionBars, selection) }
     }
 
     override fun onBindingDestroyed() {
         binding.alarmsList.adapter = null
-        states = null
-        selectionBars = null
     }
 
-    override fun render(state: AlarmsUiState) {
-        val hasItems = state.alarms.isNotEmpty()
-        states?.render(state.load, hasItems) { it.userMessage(requireContext()) }
-        binding.alarmsOpenConnection.setVisible(state.load.failure == RemoteFailure.NotConfigured)
-        adapter.submitList(state.rows)
-        binding.alarmsRefresh.isRefreshing = state.load.refreshing && hasItems
-        binding.alarmsRefresh.isEnabled = !state.selectionMode
-        exitSelection.isEnabled = state.selectionMode
-        selectionBars?.render(state)
+    private fun renderList(states: ListStateViews, list: AlarmsListUi) {
+        states.render(list.load, list.hasItems) { it.userMessage(requireContext()) }
+        binding.alarmsOpenConnection.setVisible(list.load.failure == RemoteFailure.NotConfigured)
+        binding.alarmsRefresh.isRefreshing = list.load.refreshing && list.hasItems
+    }
+
+    private fun renderSelection(bars: AlarmSelectionBars, selection: AlarmSelectionUi) {
+        binding.alarmsRefresh.isEnabled = !selection.active
+        exitSelection.isEnabled = selection.active
+        bars.render(selection)
     }
 
     override fun onEvent(event: AlarmsEvent) {

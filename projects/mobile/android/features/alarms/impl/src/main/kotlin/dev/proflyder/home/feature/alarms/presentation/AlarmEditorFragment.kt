@@ -8,8 +8,7 @@ import dev.proflyder.home.core.model.RepeatKind
 import dev.proflyder.home.core.presentation.RouteNotice
 import dev.proflyder.home.core.presentation.ScreenFragment
 import dev.proflyder.home.core.presentation.showNotice
-import dev.proflyder.home.core.presentation.SwitchBinder
-import dev.proflyder.home.core.presentation.TextBinder
+import dev.proflyder.home.core.presentation.EditorStatus
 import dev.proflyder.home.core.ui.injectedViewModels
 import dev.proflyder.home.core.ui.pinAboveKeyboard
 import dev.proflyder.home.core.ui.setVisible
@@ -29,13 +28,25 @@ internal class AlarmEditorFragment :
     ) {
     override val viewModel: AlarmEditorViewModel by injectedViewModels()
 
-    private var label: TextBinder? = null
-    private var enabled: SwitchBinder? = null
+    override fun onScreenCreate(savedInstanceState: Bundle?) {
+        onResult(AlarmRepeatChosen) { AlarmEditorIntent.SetRepeat(it.repeat, it.days) }
+    }
 
-    override fun onScreenCreated(binding: FragmentAlarmEditorBinding, savedInstanceState: Bundle?) {
+    override fun onViewReady(binding: FragmentAlarmEditorBinding, savedInstanceState: Bundle?) {
         binding.alarmEditorSaveBar.pinAboveKeyboard(binding.alarmEditorScroll)
-        label = bindText(binding.alarmEditorLabel, AlarmEditorIntent::SetLabel)
-        enabled = bindSwitch(binding.alarmEditorEnabled, AlarmEditorIntent::SetEnabled)
+        val label = bindText(binding.alarmEditorLabel, AlarmEditorIntent::SetLabel)
+        val enabled = bindSwitch(binding.alarmEditorEnabled, AlarmEditorIntent::SetEnabled)
+        bindClicks(binding)
+        render(AlarmEditorUiState::label, label::render)
+        render(AlarmEditorUiState::enabled, enabled::render)
+        render({ it.hour to it.minute }) { (hour, minute) -> renderTime(hour, minute) }
+        render({ it.repeat to it.weekdays }) { (repeat, days) -> renderRepeat(repeat, days) }
+        render(AlarmEditorUiState::onceDate, ::renderDate)
+        render(AlarmEditorUiState::editing) { binding.alarmEditorDelete.setVisible(it) }
+        render(AlarmEditorUiState::status, ::renderStatus)
+    }
+
+    private fun bindClicks(binding: FragmentAlarmEditorBinding) {
         binding.alarmEditorTime.setOnClickListener { dispatch(AlarmEditorIntent.PickTime) }
         val chips = listOf(
             binding.quickOffset15,
@@ -51,30 +62,28 @@ internal class AlarmEditorFragment :
         binding.alarmEditorDateRow.setOnClickListener { dispatch(AlarmEditorIntent.PickDate) }
         binding.alarmEditorSave.setOnClickListener { dispatch(AlarmEditorIntent.Save) }
         binding.alarmEditorDelete.setOnClickListener { dispatch(AlarmEditorIntent.RequestDelete) }
-        childFragmentManager.setFragmentResultListener(AlarmRepeatSheet.REQUEST_KEY, viewLifecycleOwner) { _, result ->
-            AlarmRepeatSheet.resultOf(result)?.let(::dispatch)
-        }
     }
 
-    override fun onBindingDestroyed() {
-        label = null
-        enabled = null
+    private fun renderTime(hour: Int, minute: Int) {
+        binding.alarmEditorTime.text = String.format(Locale.ROOT, "%02d:%02d", hour, minute)
     }
 
-    override fun render(state: AlarmEditorUiState) = with(binding) {
-        label?.render(state.label)
-        enabled?.render(state.enabled)
-        alarmEditorTime.text = String.format(Locale.ROOT, "%02d:%02d", state.hour, state.minute)
-        alarmEditorRepeatValue.text = AlarmFormat.repeatValue(requireContext(), state.repeat, state.weekdays)
-        alarmEditorDateRow.setVisible(state.repeat == RepeatKind.ONCE)
-        val date = state.onceDate ?: LocalDate.now()
-        alarmEditorDateValue.text = date.format(DateTimeFormatter.ofPattern("EEE d MMM yyyy", Locale.getDefault()))
-        alarmEditorDelete.setVisible(state.editing)
-        alarmEditorSave.isEnabled = state.status.idle
-        alarmEditorDelete.isEnabled = state.status.idle
-        alarmEditorProgress.setVisible(state.status.busy)
-        alarmEditorError.setVisible(state.status.error != null)
-        alarmEditorError.text = state.status.error?.userMessage(requireContext())
+    private fun renderRepeat(repeat: RepeatKind, days: Set<Int>) {
+        binding.alarmEditorRepeatValue.text = AlarmFormat.repeatValue(requireContext(), repeat, days)
+        binding.alarmEditorDateRow.setVisible(repeat == RepeatKind.ONCE)
+    }
+
+    private fun renderDate(onceDate: LocalDate?) {
+        val date = onceDate ?: LocalDate.now()
+        binding.alarmEditorDateValue.text = date.format(DateTimeFormatter.ofPattern("EEE d MMM yyyy", Locale.getDefault()))
+    }
+
+    private fun renderStatus(status: EditorStatus) = with(binding) {
+        alarmEditorSave.isEnabled = status.idle
+        alarmEditorDelete.isEnabled = status.idle
+        alarmEditorProgress.setVisible(status.busy)
+        alarmEditorError.setVisible(status.error != null)
+        alarmEditorError.text = status.error?.userMessage(requireContext())
     }
 
     override fun onEvent(event: AlarmEditorEvent) {

@@ -8,6 +8,7 @@ import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.model.Schedule
 import dev.proflyder.home.core.presentation.AppEventBus
+import dev.proflyder.home.core.presentation.DeliveredWhenStarted
 import dev.proflyder.home.core.presentation.ExclusiveActions
 import dev.proflyder.home.core.presentation.ListLoadState
 import dev.proflyder.home.core.presentation.ListRefresher
@@ -30,16 +31,46 @@ import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.binding
 import kotlinx.coroutines.flow.merge
 
+internal data class AlarmSelectionUi(
+    val active: Boolean = false,
+    val count: Int = 0,
+    val allSelected: Boolean = false,
+    val actions: AlarmSelectionActions = AlarmSelectionActions(canEnable = false, canDisable = false),
+    val busy: Boolean = false,
+)
+
+internal data class AlarmsListUi(
+    val load: ListLoadState = ListLoadState(),
+    val hasItems: Boolean = false,
+)
+
 internal data class AlarmsUiState(
     val load: ListLoadState = ListLoadState(),
     val alarms: List<Schedule> = emptyList(),
     val busy: Boolean = false,
     val selectedIds: Set<String> = emptySet(),
-) {
-    val selectionMode: Boolean get() = selectedIds.isNotEmpty()
-    val allSelected: Boolean get() = alarms.isNotEmpty() && selectedIds.size == alarms.size
-    val rows: List<AlarmRow> get() = alarms.map { AlarmRow(it, it.id in selectedIds, selectionMode) }
-    val selectionActions: AlarmSelectionActions get() = alarmSelectionActions(alarms, selectedIds)
+    val list: AlarmsListUi = AlarmsListUi(),
+    val rows: List<AlarmRow> = emptyList(),
+    val selection: AlarmSelectionUi = AlarmSelectionUi(),
+)
+
+internal fun AlarmsUiState.derivedFrom(previous: AlarmsUiState): AlarmsUiState {
+    val sourcesChanged = alarms != previous.alarms || selectedIds != previous.selectedIds
+    if (!sourcesChanged && load == previous.load && busy == previous.busy) {
+        return copy(list = previous.list, rows = previous.rows, selection = previous.selection)
+    }
+    val active = selectedIds.isNotEmpty()
+    return copy(
+        list = AlarmsListUi(load, alarms.isNotEmpty()),
+        rows = if (sourcesChanged) alarms.map { AlarmRow(it, it.id in selectedIds, active) } else previous.rows,
+        selection = AlarmSelectionUi(
+            active = active,
+            count = selectedIds.size,
+            allSelected = alarms.isNotEmpty() && selectedIds.size == alarms.size,
+            actions = if (sourcesChanged) alarmSelectionActions(alarms, selectedIds) else previous.selection.actions,
+            busy = busy,
+        ),
+    )
 }
 
 internal sealed interface AlarmsIntent {
@@ -63,7 +94,7 @@ internal sealed interface AlarmsIntent {
 }
 
 internal sealed interface AlarmsEvent {
-    data class Failure(val failure: RemoteFailure) : AlarmsEvent
+    data class Failure(val failure: RemoteFailure) : AlarmsEvent, DeliveredWhenStarted
     data class OpenRoute(val route: Route) : AlarmsEvent
     data class AskDisable(val id: String) : AlarmsEvent
     data class ConfirmDelete(val id: String) : AlarmsEvent
@@ -79,8 +110,11 @@ internal class AlarmsViewModel(
     private val actions = ExclusiveActions(viewModelScope, ::onBusy) { emit(AlarmsEvent.Failure(it)) }
 
     init {
-        loader.refreshOn(merge(screenShown, bus.eventsOf<AlarmsChanged>()))
+        loader.refresh(RefreshMode.SOFT)
+        loader.refreshOn(merge(visibility.returned, bus.eventsOf<AlarmsChanged>()))
     }
+
+    override fun derive(previous: AlarmsUiState, next: AlarmsUiState): AlarmsUiState = next.derivedFrom(previous)
 
     private fun openEditor(id: String?) {
         emit(AlarmsEvent.OpenRoute(Route.Screen(AlarmEditorDestination(id))))
@@ -106,7 +140,7 @@ internal class AlarmsViewModel(
 
     private fun handleSelection(intent: AlarmsIntent) {
         when (intent) {
-            AlarmsIntent.ToggleSelectAll -> updateState { copy(selectedIds = if (allSelected) emptySet() else ids()) }
+            AlarmsIntent.ToggleSelectAll -> updateState { copy(selectedIds = if (selection.allSelected) emptySet() else ids()) }
             AlarmsIntent.ClearSelection -> updateState { copy(selectedIds = emptySet()) }
             is AlarmsIntent.SetSelectedEnabled -> setSelectedEnabled(intent.enabled)
             AlarmsIntent.RequestDeleteSelected -> confirmDeleteSelected()
@@ -125,7 +159,7 @@ internal class AlarmsViewModel(
 
     private fun onBusy(key: String?) = updateState { copy(busy = key != null) }
 
-    private fun click(id: String) = when (currentState.selectionMode) {
+    private fun click(id: String) = when (currentState.selection.active) {
         true -> toggleSelection(id)
         false -> openEditor(id)
     }

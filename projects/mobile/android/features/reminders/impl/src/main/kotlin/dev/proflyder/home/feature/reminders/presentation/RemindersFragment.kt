@@ -2,14 +2,14 @@ package dev.proflyder.home.feature.reminders.presentation
 
 import dev.proflyder.home.core.designsystem.R as DesignR
 import android.os.Bundle
-import androidx.recyclerview.widget.GridLayoutManager
+import dev.proflyder.home.core.presentation.ListLoadState
 import dev.proflyder.home.core.presentation.RefreshMode
 import dev.proflyder.home.core.presentation.ScreenFragment
 import dev.proflyder.home.core.presentation.render
 import dev.proflyder.home.core.ui.ListStateViews
 import dev.proflyder.home.core.ui.applyScrollBottomInset
 import dev.proflyder.home.core.ui.fabClearance
-import dev.proflyder.home.core.ui.injectedActivityViewModels
+import dev.proflyder.home.core.presentation.tabViewModels
 import dev.proflyder.home.core.ui.liftAboveBottomInsets
 import dev.proflyder.home.core.ui.setupPullToRefresh
 import dev.proflyder.home.core.ui.userMessage
@@ -20,18 +20,14 @@ internal class RemindersFragment :
     ScreenFragment<FragmentRemindersBinding, RemindersUiState, RemindersIntent, RemindersEvent>(
         FragmentRemindersBinding.Companion::inflate,
     ) {
-    override val viewModel: RemindersViewModel by injectedActivityViewModels()
+    override val viewModel: RemindersViewModel by tabViewModels()
 
     private val adapter = ReminderAdapter(ReminderAdapterCallback(::dispatch))
-    private var states: ListStateViews? = null
-
-    override fun onScreenCreated(binding: FragmentRemindersBinding, savedInstanceState: Bundle?) {
+    override fun onViewReady(binding: FragmentRemindersBinding, savedInstanceState: Bundle?) {
         binding.remindersList.applyScrollBottomInset(binding.remindersList.fabClearance())
         binding.remindersAdd.liftAboveBottomInsets()
-        binding.remindersList.layoutManager =
-            GridLayoutManager(requireContext(), resources.getInteger(R.integer.reminders_columns))
         binding.remindersList.adapter = adapter
-        states = ListStateViews(
+        val states = ListStateViews(
             progress = binding.remindersProgress,
             empty = binding.remindersEmpty,
             error = binding.remindersError,
@@ -41,18 +37,17 @@ internal class RemindersFragment :
         binding.remindersRefresh.setupPullToRefresh { dispatch(RemindersIntent.Refresh(RefreshMode.HARD)) }
         binding.remindersRetry.setOnClickListener { dispatch(RemindersIntent.Refresh(RefreshMode.HARD)) }
         binding.remindersAdd.setOnClickListener { dispatch(RemindersIntent.Add) }
+        render({ it.load to it.reminders.isNotEmpty() }) { (load, hasItems) -> renderLoad(states, load, hasItems) }
+        render(RemindersUiState::reminders, adapter::submitList)
     }
 
     override fun onBindingDestroyed() {
         binding.remindersList.adapter = null
-        states = null
     }
 
-    override fun render(state: RemindersUiState) {
-        val hasItems = state.reminders.isNotEmpty()
-        states?.render(state.load, hasItems) { it.userMessage(requireContext()) }
-        adapter.submitList(state.reminders)
-        binding.remindersRefresh.isRefreshing = state.load.refreshing && hasItems
+    private fun renderLoad(states: ListStateViews, load: ListLoadState, hasItems: Boolean) {
+        states.render(load, hasItems) { it.userMessage(requireContext()) }
+        binding.remindersRefresh.isRefreshing = load.refreshing && hasItems
     }
 
     override fun onEvent(event: RemindersEvent) {

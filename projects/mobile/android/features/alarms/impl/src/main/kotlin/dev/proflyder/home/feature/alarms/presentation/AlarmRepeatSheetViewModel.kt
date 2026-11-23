@@ -4,10 +4,12 @@ import androidx.lifecycle.SavedStateHandle
 import dev.proflyder.home.core.model.RepeatKind
 import dev.proflyder.home.core.presentation.StateViewModel
 
-internal data class AlarmRepeatSheetState(val choice: AlarmRepeatChoice) {
-    val canConfirm: Boolean
-        get() = choice.repeat != RepeatKind.CUSTOM || choice.days.isNotEmpty()
-}
+internal data class AlarmRepeatSheetState(
+    val choice: AlarmRepeatChoice,
+    val canConfirm: Boolean = choice.canConfirm(),
+)
+
+internal fun AlarmRepeatChoice.canConfirm(): Boolean = repeat != RepeatKind.CUSTOM || days.isNotEmpty()
 
 internal sealed interface AlarmRepeatIntent {
     data class Choose(val repeat: RepeatKind) : AlarmRepeatIntent
@@ -48,7 +50,7 @@ internal class AlarmRepeatSheetViewModel(
     }
 
     private fun change(choice: AlarmRepeatChoice) {
-        updateState { copy(choice = choice) }
+        updateState { copy(choice = choice, canConfirm = choice.canConfirm()) }
         savedState[KEY_REPEAT] = choice.repeat.name
         savedState[KEY_DAYS] = choice.days.sorted().toIntArray()
     }

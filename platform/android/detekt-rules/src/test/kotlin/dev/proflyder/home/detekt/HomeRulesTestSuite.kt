@@ -13,5 +13,6 @@ import org.junit.runners.Suite
     NoDirectStateWriteTest::class,
     PublicInImplTest::class,
     NoUiOwnedControlStateTest::class,
+    NoCodeLayoutManagerTest::class,
 )
 class HomeRulesTestSuite

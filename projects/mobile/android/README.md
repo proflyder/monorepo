@@ -262,20 +262,56 @@ platform/android/         Bazel macros, Metro wiring, APK gate, signing, detekt 
 
 ### One-way data flow
 
-- Every screen is a `ScreenFragment` on a `StateViewModel<S, I, E>`: one
-  `StateFlow<S>` changed only through `updateState`, typed intents in
-  (`dispatch`), one-shot events out (`Channel(UNLIMITED)`, delivered once to
-  the next `STARTED` collector, not across process death). Messages, dialogs
-  and navigation are events; a ViewModel has no `Context`.
+- Every screen is a `ScreenFragment` (or `ScreenBottomSheet`) on a
+  `StateViewModel<S, I, E>`: one `StateFlow<S>` changed only through
+  `updateState`, typed intents in (`dispatch`), one-shot events out. Messages,
+  dialogs and navigation are events; a ViewModel has no `Context`.
+- Screen lifecycle has two hooks. `onScreenCreate` runs in `onCreate`, once
+  per instance: the event collector, typed result listeners, activity
+  result/permission launchers. `onViewReady` runs per view: adapter, click
+  listeners, binders and render subscriptions on `viewLifecycleOwner`.
+- Events sit in `ScreenEvents` (a queue in the ViewModel) until a screen takes
+  them. The collector runs from `CREATED`; each event waits for its own
+  lifecycle state: `RESUMED` by default (navigation, dialogs), `STARTED` for an
+  event that implements `DeliveredWhenStarted` (notices). An event is removed
+  only when delivered, so a destroyed view or a rotation loses nothing.
+- Rendering goes by slices: `render(selector) { value -> }` maps the state,
+  skips equal values (also across stop/start) and runs on `STARTED`.
+  `render(state)` stays optional for tiny screens. Derived data (rows,
+  selection summary, speed dial) is computed in `derive(previous, next)` of the
+  ViewModel and stored in the state, recomputed only when its sources change.
+- Loading is explicit: a list ViewModel loads in `init` and refreshes on
+  `visibility.returned` (the screen came back: tab switch, back from an editor,
+  app back to foreground) and on `AppEventBus` changes. `ScreenVisibility` is
+  fed by the screen's view lifecycle, never by `subscriptionCount`; tickers use
+  `visibility.visible`.
+- Results between screens and sheets are typed: `object X : ResultKey<T>(T.serializer())`
+  with a `@Serializable` value; the sender calls `setResult(X, value)`, the
+  host registers `onResult(X) { value -> Intent }` in `onScreenCreate`
+  (child fragment manager, owner = the screen), and the value reaches the
+  ViewModel as an intent. Fragment results are kept while the host is stopped,
+  on the back stack or being recreated. `OptionsSheet`/`WheelSheet` use
+  `OptionsResult`/`WheelResult` keys. `AppEventBus` stays for "data changed"
+  between unrelated screens.
+- Scenario form dialogs edit a form that is part of the editor state (draft,
+  validation, process death), so they share the host editor's ViewModel through
+  `hostScreenViewModels()` instead of returning a result.
+- ViewModel scopes: a screen's own (`screenViewModel()`), or `tabViewModels()`
+  for list screens that must keep their state while the router replaces the tab
+  (alarms, reminders, timers, scenarios, chat). The tab scope lives in
+  `TabScopes`, keyed by the fragment's place in the tree, not by the Activity.
+- Lists are declared in XML: `app:layoutManager`, `app:spanCount`,
+  `app:stackFromEnd`, `tools:listitem`; detekt `NoCodeLayoutManager` rejects
+  layout managers in code except a grid that installs a `SpanSizeLookup`
+  (control).
 - Controls never own state: `SwitchBinder`, `CheckableBinder`,
   `RadioGroupBinder`, `TextBinder` and `PillSegments` send an intent and keep
   the last rendered value until the state changes; programmatic rendering
   never reports back.
 - No `onResume` refresh. Repositories expose `StateFlow`s with a refresh
-  policy (`stateIn(WhileSubscribed)` over `tickerFlow`), list screens refresh
-  on `screenShown`, editors publish `AppEventBus` events (use it only when the
-  source is not already a shared `StateFlow`). `LatestLauncher` makes the last
-  request win.
+  policy (`stateIn(WhileSubscribed)` over `tickerFlow`), editors publish
+  `AppEventBus` events (use it only when the source is not already a shared
+  `StateFlow`). `LatestLauncher` makes the last request win.
 - Lists use `KeyedDiff`, which always returns a payload, so a partial change
   rebinds the same holder (`aspectPayload` per aspect) and never cross-fades.
 - Editors share `EditorDraftSession`: draft, the create idempotency key bound
@@ -302,8 +338,8 @@ platform/android/         Bazel macros, Metro wiring, APK gate, signing, detekt 
   (`ScreenFragment`, `ScreenBottomSheet`) is reported automatically.
 - Bottom sheets with their own state extend `ScreenBottomSheet<VB, S, I, E>`
   (same model as `ScreenFragment`, `by screenViewModel()`). Plain choices use
-  `OptionsSheet` and `WheelSheet` from `core/designsystem`; results come back
-  through the Fragment Result API.
+  `OptionsSheet` and `WheelSheet` from `core/presentation`; results come back
+  through typed `ResultKey`s.
 - Sectioned lists: the adapter implements `SectionedAdapter`; decorations
   `StickySectionHeaders().attachTo(list)` (a tap on the pinned header goes to
   the header), `GroupDividers` (only between rows of a group) and `GroupCards`

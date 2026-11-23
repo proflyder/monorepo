@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.swiperefreshlayout.widget.SwipeRefreshLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.swiperefreshlayout.widget.SwipeRefreshLayout xmlns:tools="http://schemas.android.com/tools"
+    xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/timers_refresh"
     android:layout_width="match_parent"
@@ -100,6 +101,7 @@
                     android:id="@+id/timers_input_error"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:text="@string/timers_duration_error"
                     android:textColor="?attr/colorError"
                     android:visibility="gone" />
 
@@ -149,7 +151,10 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
-                    android:nestedScrollingEnabled="false" />
+                    android:nestedScrollingEnabled="false"
+                    app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
+                    tools:itemCount="3"
+                    tools:listitem="@layout/item_timer" />
             </LinearLayout>
         </androidx.core.widget.NestedScrollView>
     </FrameLayout>

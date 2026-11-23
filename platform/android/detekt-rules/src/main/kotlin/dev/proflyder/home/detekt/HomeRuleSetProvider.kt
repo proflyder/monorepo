@@ -18,6 +18,7 @@ class HomeRuleSetProvider : RuleSetProvider {
             NoDirectStateWrite(config),
             PublicInImpl(config),
             NoUiOwnedControlState(config),
+            NoCodeLayoutManager(config),
         ),
     )
 }

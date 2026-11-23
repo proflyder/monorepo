@@ -1,7 +1,7 @@
 package dev.proflyder.home.feature.system.presentation
 
 import android.os.Bundle
-import androidx.recyclerview.widget.LinearLayoutManager
+import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.model.SystemSnapshot
 import dev.proflyder.home.core.navigation.destination
 import dev.proflyder.home.core.presentation.IntentAdapterCallback
@@ -22,11 +22,12 @@ internal abstract class SystemScreenFragment :
 
     abstract fun rows(snapshot: SystemSnapshot): List<SystemRow>
 
-    override fun onScreenCreated(binding: FragmentSystemBinding, savedInstanceState: Bundle?) {
-        binding.systemList.layoutManager = LinearLayoutManager(requireContext())
+    override fun onViewReady(binding: FragmentSystemBinding, savedInstanceState: Bundle?) {
         binding.systemList.adapter = adapter
         binding.systemRefresh.setupPullToRefresh { dispatch(SystemIntent.Refresh) }
         binding.systemRetry.setOnClickListener { dispatch(SystemIntent.Refresh) }
+        render(SystemState::snapshot) { snapshot -> adapter.submitList(snapshot?.let { rows(it) }.orEmpty()) }
+        render({ SystemStatus(it.loading, it.error, it.snapshot != null) }, ::renderStatus)
     }
 
     private fun sectionIntent(row: SystemRow): SystemIntent? =
@@ -36,14 +37,13 @@ internal abstract class SystemScreenFragment :
         binding.systemList.adapter = null
     }
 
-    override fun render(state: SystemState) {
-        val snapshot = state.snapshot
-        val error = state.error
-        binding.systemRefresh.isRefreshing = state.loading && snapshot != null
-        binding.systemProgress.setVisible(state.loading && snapshot == null && error == null)
-        binding.systemError.setVisible(snapshot == null && error != null && !state.loading)
+    private fun renderStatus(status: SystemStatus) {
+        val error = status.error
+        val hasSnapshot = status.hasSnapshot
+        binding.systemRefresh.isRefreshing = status.loading && hasSnapshot
+        binding.systemProgress.setVisible(status.loading && !hasSnapshot && error == null)
+        binding.systemError.setVisible(!hasSnapshot && error != null && !status.loading)
         binding.systemErrorText.text = error?.userMessage(requireContext())
-        adapter.submitList(snapshot?.let { rows(it) }.orEmpty())
     }
 
     override fun onEvent(event: SystemEvent) {
@@ -64,3 +64,5 @@ internal class SystemDetailFragment : SystemScreenFragment() {
     override fun rows(snapshot: SystemSnapshot): List<SystemRow> =
         SystemRows(requireContext()).detail(destination?.section ?: SystemSection.HOST, snapshot)
 }
+
+internal data class SystemStatus(val loading: Boolean, val error: RemoteFailure?, val hasSnapshot: Boolean)

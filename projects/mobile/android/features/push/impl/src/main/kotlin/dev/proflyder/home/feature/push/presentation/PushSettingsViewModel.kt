@@ -53,7 +53,7 @@ internal class PushSettingsViewModel(
         combine(store.registration, registrar.status) { registration, sync -> registration to sync }
             .onEach { (registration, sync) -> updateState { copy(registration = registration, sync = sync) } }
             .launchIn(viewModelScope)
-        screenShown.onEach { updateState { copy(permissions = probe.status()) } }.launchIn(viewModelScope)
+        visibility.shown.onEach { updateState { copy(permissions = probe.status()) } }.launchIn(viewModelScope)
     }
 
     override fun handle(intent: PushSettingsIntent) {

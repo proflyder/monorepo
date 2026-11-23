@@ -83,7 +83,6 @@ internal class AlarmAdapter(
         private var strokeAnimator: ValueAnimator? = null
 
         init {
-            binding.root.isCheckable = true
             forwardRowClicks()
             binding.alarmSnooze.setOnClickListener { callback.dispatch(AlarmsIntent.Snooze(item.alarm.id)) }
             binding.alarmStop.setOnClickListener { callback.dispatch(AlarmsIntent.Stop(item.alarm.id)) }

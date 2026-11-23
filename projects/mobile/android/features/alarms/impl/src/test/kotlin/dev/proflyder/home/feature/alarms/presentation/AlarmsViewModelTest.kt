@@ -9,7 +9,6 @@ import dev.proflyder.home.feature.alarms.domain.SnoozeAlarm
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -17,6 +16,8 @@ import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotSame
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -37,10 +38,9 @@ class AlarmsViewModelTest {
     private fun viewModel() = AlarmsViewModel(repository, SnoozeAlarm(repository), bus)
 
     @Test
-    fun loadsWhenShownAndSortsByTheDomainOrder() = runTest {
+    fun loadsOnCreationAndSortsByTheDomainOrder() {
         val viewModel = viewModel()
-        assertEquals(0, repository.listCalls)
-        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.state.collect {} }
+        assertEquals(1, repository.listCalls)
         assertEquals(listOf("early", "once", "late"), viewModel.state.value.alarms.map { it.id })
         assertFalse(viewModel.state.value.load.refreshing)
     }
@@ -49,8 +49,31 @@ class AlarmsViewModelTest {
     fun anEditorChangeRefreshesTheListInTheBackground() {
         val viewModel = viewModel()
         bus.publish(AlarmsChanged)
-        assertEquals(1, repository.listCalls)
+        assertEquals(2, repository.listCalls)
         assertEquals(3, viewModel.state.value.alarms.size)
+    }
+
+    @Test
+    fun onlyAReturnToTheScreenRefreshesNotTheFirstShow() {
+        val viewModel = viewModel()
+        viewModel.visibility.started()
+        assertEquals(1, repository.listCalls)
+        viewModel.visibility.stopped()
+        viewModel.visibility.started()
+        assertEquals(2, repository.listCalls)
+    }
+
+    @Test
+    fun rowsAreKeptWhenOnlyUnrelatedFieldsChange() {
+        val viewModel = viewModel()
+        val rows = viewModel.state.value.rows
+        viewModel.dispatch(AlarmsIntent.Refresh(RefreshMode.HARD))
+        assertSame(rows, viewModel.state.value.rows)
+        viewModel.dispatch(AlarmsIntent.LongClick("late"))
+        val selected = viewModel.state.value.rows
+        assertNotSame(rows, selected)
+        assertTrue(selected.first { it.alarm.id == "late" }.selected)
+        assertTrue(viewModel.state.value.selection.active)
     }
 
     @Test
@@ -73,7 +96,7 @@ class AlarmsViewModelTest {
         assertEquals(setOf("late", "early"), viewModel.state.value.selectedIds)
         viewModel.dispatch(AlarmsIntent.DeleteSelected)
         assertEquals(listOf("once"), viewModel.state.value.alarms.map { it.id })
-        assertFalse(viewModel.state.value.selectionMode)
+        assertFalse(viewModel.state.value.selection.active)
     }
 
     @Test

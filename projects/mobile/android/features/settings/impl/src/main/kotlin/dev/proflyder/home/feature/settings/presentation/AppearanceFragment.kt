@@ -12,7 +12,6 @@ import dev.proflyder.home.core.theme.Appearance
 import dev.proflyder.home.core.theme.ColorRole
 import dev.proflyder.home.core.theme.R as ThemeR
 import dev.proflyder.home.core.theme.ThemeMode
-import dev.proflyder.home.core.presentation.PillSegmentsBinder
 import dev.proflyder.home.core.presentation.ScreenFragment
 import dev.proflyder.home.core.presentation.screenViewModel
 import dev.proflyder.home.core.ui.applyScrollBottomInset
@@ -26,31 +25,22 @@ internal class AppearanceFragment :
     ) {
     override val viewModel: AppearanceViewModel by screenViewModel()
 
-    private val cards = linkedMapOf<AppTheme, ItemAppearanceThemeBinding>()
-    private var mode: PillSegmentsBinder<ThemeMode>? = null
-
-    override fun onScreenCreated(binding: FragmentAppearanceBinding, savedInstanceState: Bundle?) {
+    override fun onViewReady(binding: FragmentAppearanceBinding, savedInstanceState: Bundle?) {
         binding.root.applyScrollBottomInset()
-        bindThemeCards(binding, AppThemes.isDynamicAvailable) { dispatch(AppearanceIntent.SelectTheme(it)) }
+        val cards = bindThemeCards(binding, AppThemes.isDynamicAvailable) { dispatch(AppearanceIntent.SelectTheme(it)) }
         binding.appearanceMode.setLabels(ThemeMode.entries.map { getString(MODE_LABELS.getValue(it)) })
-        mode = bindPills(binding.appearanceMode, ThemeMode.entries, AppearanceIntent::SelectMode)
+        val mode = bindPills(binding.appearanceMode, ThemeMode.entries, AppearanceIntent::SelectMode)
+        render(Appearance::mode, mode::render)
+        render(Appearance::theme) { theme -> renderThemeCards(cards, theme) }
     }
+}
 
-    override fun onBindingDestroyed() {
-        cards.clear()
-        mode = null
-    }
-
-    override fun render(state: Appearance) {
-        mode?.render(state.mode)
-        renderThemeCards(cards, state)
-    }
-
-    internal fun bindThemeCards(binding: FragmentAppearanceBinding, dynamic: Boolean, onClick: (AppTheme) -> Unit) {
-        AppTheme.entries.forEach { theme ->
-            cards[theme] = addThemeCard(binding, theme, dynamic).also { it.root.setOnClickListener { onClick(theme) } }
-        }
-    }
+internal fun bindThemeCards(
+    binding: FragmentAppearanceBinding,
+    dynamic: Boolean,
+    onClick: (AppTheme) -> Unit,
+): Map<AppTheme, ItemAppearanceThemeBinding> = AppTheme.entries.associateWith { theme ->
+    addThemeCard(binding, theme, dynamic).also { it.root.setOnClickListener { onClick(theme) } }
 }
 
 private val MODE_LABELS = mapOf(
@@ -96,8 +86,8 @@ private fun tint(view: View, color: Int) {
     ViewCompat.setBackgroundTintList(view, ColorStateList.valueOf(color))
 }
 
-internal fun renderThemeCards(cards: Map<AppTheme, ItemAppearanceThemeBinding>, appearance: Appearance) {
-    cards.forEach { (theme, card) -> renderCard(card, theme == appearance.theme) }
+internal fun renderThemeCards(cards: Map<AppTheme, ItemAppearanceThemeBinding>, selected: AppTheme) {
+    cards.forEach { (theme, card) -> renderCard(card, theme == selected) }
 }
 
 private fun renderCard(card: ItemAppearanceThemeBinding, selected: Boolean) {

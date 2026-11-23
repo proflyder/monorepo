@@ -132,7 +132,11 @@ class VpnScreenshotTest {
         val context = themed()
         val binding = FragmentVpnBinding.inflate(LayoutInflater.from(context))
         binding.root.setBackgroundColor(MaterialColors.getColor(context, com.google.android.material.R.attr.colorSurface, 0))
-        VpnScreen(binding) { intents += it }.render(state)
+        val screen = VpnScreen(binding) { intents += it }
+        screen.renderStatus(VpnStatus(state.connection, state.traffic, state.nowMillis, state.busy))
+        screen.renderRoute(state.settings, state.atHome)
+        screen.renderAuth(state.settings, state.fallbackReady)
+        screen.renderProfile(state.profile, state.busy)
         return binding
     }
 
