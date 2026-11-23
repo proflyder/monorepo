@@ -141,6 +141,19 @@ bazel test --config=android //platform/android/...
   deploy-jar'ы (~240 МБ каждый) не попадают в disk cache, Android-кэш CI
   пишет только `warm-android` (`bazel test` + GC до 4 ГБ) под ключом
   `bazel-android-<os>-shared-*`.
+- Тяжёлые `robolectric_test` шардируются: `shard_count` у
+  `home_android_local_test` (по умолчанию 1; 3 у `app` и `core/designsystem`,
+  2 у модулей, где тест идёт дольше ~20 с). Шарды — отдельные JVM на одном
+  deploy-jar; JUnit-раннер Bazel фильтрует тесты по
+  `TEST_SHARD_INDEX`/`TEST_TOTAL_SHARDS`, каждый тест попадает ровно в один
+  шард. Новый шард добавляет ~5 с старта Robolectric, поэтому шардировать
+  стоит только таргеты длиннее ~20 с. Тест не должен зависеть от порядка и
+  соседних классов: общие файлы — только в `TEST_TMPDIR`/`filesDir`,
+  порты — эфемерные.
+- Каждая JVM Robolectric ограничена `-Xmx1g` и резервирует у Bazel
+  `resources:memory:1536`, так что параллельные тесты не выходят за память
+  раннера. В CI (4 vCPU, 16 ГБ) тест-шаг `android-app` идёт с
+  `--local_test_jobs=4`; persistent workers для тестов не используются.
 - Каждый `*_test` под `projects/mobile/android/**` входит в `android_tests`
   или `test_targets` юнита, иначе `mise run ci:units`
   (`androidSuiteCoverageProblems`) красный.
