@@ -55,6 +55,8 @@ pub struct Config {
     pub phone: EndpointConfig,
     pub station: EndpointConfig,
     pub phone_token: Secret,
+    pub access_url: String,
+    pub service_token: Secret,
     pub station_token: Secret,
     pub ring_timeout: Duration,
     pub connect_timeout: Duration,
@@ -104,7 +106,7 @@ impl Config {
     ) -> Result<Self, ConfigError> {
         let listen =
             first(getenv, &["INTERCOM_LISTEN"]).unwrap_or_else(|| DEFAULT_LISTEN.to_owned());
-        let phone_token = load_token(
+        let legacy_phone = load_token(
             getenv,
             read_file,
             &["INTERCOM_TOKEN"],
@@ -120,11 +122,13 @@ impl Config {
             ConfigError::StationTokenRequired,
             ConfigError::StationTokenFile,
         )?;
-        if phone_token.ct_eq(station_token.expose()) {
+        if legacy_phone.ct_eq(station_token.expose()) {
             return Err(ConfigError::Invalid(
                 "phone and station tokens must differ".into(),
             ));
         }
+        let access_url = first(getenv, &["INTERCOM_ACCESS_URL"]).unwrap_or_default();
+        let service_token = load_service_token(getenv, read_file, &legacy_phone)?;
 
         let phone = EndpointConfig {
             id: endpoint_id(
@@ -176,7 +180,9 @@ impl Config {
             listen,
             phone,
             station,
-            phone_token,
+            phone_token: legacy_phone,
+            access_url,
+            service_token,
             station_token,
             ring_timeout,
             connect_timeout,
@@ -287,6 +293,32 @@ fn endpoint_id(value: &str, key: &str) -> Result<String, ConfigError> {
         )));
     }
     Ok(value.to_owned())
+}
+
+fn load_service_token(
+    getenv: &dyn Fn(&str) -> Option<String>,
+    read_file: &dyn Fn(&str) -> std::io::Result<Vec<u8>>,
+    legacy: &Secret,
+) -> Result<Secret, ConfigError> {
+    let Some(path) = first(getenv, &["INTERCOM_SERVICE_TOKEN_FILE"]) else {
+        return Ok(legacy.clone());
+    };
+    match read_file(&path) {
+        Ok(data) => {
+            let token = String::from_utf8_lossy(&data);
+            let token = token.trim();
+            if token.is_empty() {
+                return Err(ConfigError::Invalid(
+                    "INTERCOM_SERVICE_TOKEN_FILE is empty".into(),
+                ));
+            }
+            Ok(Secret::new(token))
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(legacy.clone()),
+        Err(_) => Err(ConfigError::Invalid(
+            "INTERCOM_SERVICE_TOKEN_FILE: cannot read file".into(),
+        )),
+    }
 }
 
 fn load_token(
@@ -433,6 +465,41 @@ mod tests {
         )
         .expect("load");
         assert_eq!(config.phone_token.expose(), "direct");
+    }
+
+    #[test]
+    fn the_service_token_falls_back_to_the_legacy_phone_token() {
+        let config = Config::load_from(
+            &env(&[
+                ("INTERCOM_TOKEN", "legacy"),
+                ("INTERCOM_STATION_TOKEN", "station"),
+                (
+                    "INTERCOM_ACCESS_URL",
+                    "http://scheduler:8098/v1/access/snapshot",
+                ),
+                ("INTERCOM_SERVICE_TOKEN_FILE", "/run/service"),
+            ]),
+            &|path| {
+                assert_eq!(path, "/run/service");
+                Ok(b"service\n".to_vec())
+            },
+        )
+        .expect("load");
+        assert_eq!(config.service_token.expose(), "service");
+        assert_eq!(
+            config.access_url,
+            "http://scheduler:8098/v1/access/snapshot"
+        );
+        let fallback = Config::load_from(
+            &env(&[
+                ("INTERCOM_TOKEN", "legacy"),
+                ("INTERCOM_STATION_TOKEN", "station"),
+                ("INTERCOM_SERVICE_TOKEN_FILE", "/run/service"),
+            ]),
+            &|_| Err(std::io::Error::from(std::io::ErrorKind::NotFound)),
+        )
+        .expect("fallback");
+        assert_eq!(fallback.service_token.expose(), "legacy");
     }
 
     #[test]

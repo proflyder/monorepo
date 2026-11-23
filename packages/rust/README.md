@@ -21,6 +21,7 @@ cargo test -p <crate>
 | `home-actor` | `Handle<C>` и `channel()` — канал команд актора |
 | `home-linux` | errno-текст без `(os error N)`, sysfs, kernel ABI станции (fb, i2c, evdev, tty) поверх `rustix` |
 | `home-secret` | `Secret`/`Token` (zeroize, без значения в `Debug`, constant-time сравнение), файловые токены — только unix |
+| `home-app-auth` | каталог модулей приложения, sha256-снимок токенов, `base`, проверка модуля и `module_forbidden` |
 | `home-http` | axum bearer-авторизация, `healthz`, лимиты, graceful `serve` |
 | `home-config` | `clap` + env: секрет из `NAME_FILE`/`NAME`, границы значений |
 | `home-sqlite` | `rusqlite` за single-writer потоком, WAL, миграции через `schema_meta` |

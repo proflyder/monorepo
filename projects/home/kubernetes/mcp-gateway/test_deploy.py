@@ -461,8 +461,7 @@ class ManifestTests(unittest.TestCase):
         self.assertEqual(volumes["bb-ssh"]["secret"]["defaultMode"], 0o400)
         voice_items = volumes["voice"]["secret"]["items"]
         self.assertEqual(voice_items, [{"key": "token", "path": "token"}])
-        scheduler_items = volumes["scheduler"]["secret"]["items"]
-        self.assertEqual(scheduler_items, [{"key": "token", "path": "token"}])
+        self.assertNotIn("items", volumes["scheduler"]["secret"])
         self.assertEqual(volumes["scheduler"]["secret"]["secretName"], "mcp-gateway-scheduler")
 
     def test_app_chat_uses_the_relay_and_a_retained_volume(self):
@@ -604,16 +603,12 @@ class ManifestTests(unittest.TestCase):
                 }
             ],
         )
-        scheduler = by_name["mcp-gateway-scheduler"]["spec"]["data"]
+        scheduler = by_name["mcp-gateway-scheduler"]["spec"]
         self.assertEqual(
-            scheduler,
-            [
-                {
-                    "secretKey": "token",
-                    "remoteRef": {"key": "k8s/home-assistant/scheduler-auth", "property": "token"},
-                }
-            ],
+            scheduler["dataFrom"],
+            [{"extract": {"key": "k8s/home-assistant/scheduler-auth"}}],
         )
+        self.assertNotIn("data", scheduler)
         for doc in docs:
             self.assertEqual(doc["spec"]["target"]["creationPolicy"], "Owner")
             self.assertEqual(doc["spec"]["target"]["deletionPolicy"], "Retain")

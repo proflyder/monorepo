@@ -410,11 +410,39 @@ async fn a_failing_prometheus_degrades_to_unknown() {
 #[tokio::test]
 async fn server_requires_the_app_bearer() {
     let prom = Arc::new(FixtureProm::new());
+    let snapshot = home_app_auth::AccessSnapshot {
+        revision: 1,
+        tokens: vec![
+            home_app_auth::TokenRecord {
+                id: "owner".to_owned(),
+                name: "owner".to_owned(),
+                sha256: home_app_auth::sha256_hex("owner"),
+                owner: true,
+                modules: home_app_auth::Modules::owner()
+                    .ids()
+                    .into_iter()
+                    .map(str::to_owned)
+                    .collect(),
+            },
+            home_app_auth::TokenRecord {
+                id: "member".to_owned(),
+                name: "member".to_owned(),
+                sha256: home_app_auth::sha256_hex("app"),
+                owner: false,
+                modules: home_app_auth::Modules::member()
+                    .ids()
+                    .into_iter()
+                    .map(str::to_owned)
+                    .collect(),
+            },
+        ],
+    };
     let app = crate::server::router(crate::server::Options {
         auth_token: "mcp".to_owned(),
         voice_token: None,
         voice: None,
-        system: Some(("app".to_owned(), dashboard(prom, Duration::from_secs(60)))),
+        access: Some(home_app_auth::AccessCache::new(snapshot)),
+        system: Some(dashboard(prom, Duration::from_secs(60))),
         chat: None,
         chat_alerts_token: None,
         groups: Vec::new(),
@@ -438,7 +466,8 @@ async fn server_requires_the_app_bearer() {
     };
     assert_eq!(status("").await, StatusCode::UNAUTHORIZED);
     assert_eq!(status("mcp").await, StatusCode::UNAUTHORIZED);
-    assert_eq!(status("app").await, StatusCode::OK);
+    assert_eq!(status("app").await, StatusCode::FORBIDDEN);
+    assert_eq!(status("owner").await, StatusCode::OK);
 }
 
 fn empty_deps() -> crate::tools::Deps {

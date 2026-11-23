@@ -49,7 +49,7 @@ manifest under `projects/home/kubernetes`.
   CIDR, pod CIDR `10.42.0.0/16` (Traefik, voice proxy), `monitoring` (scrape).
   `/mcp` and `/v1/voice/*` need their bearer tokens and are not routed by
   Traefik; only `Host(control.${HOME_DOMAIN}) && PathPrefix(/v1/system/)` is
-  (`ingress/routes`, accepts the `scheduler-auth` app token).
+  (`ingress/routes`, app-токены проверяются модулями `system`/`chat`).
 - Egress: kube-API 6443, monitoring 9090/9093/3100, catalog checks on
   `${LAN_CIDR}`, bb host exactly `${BB_CT_IP}:22`, DNS, and 443 to any
   destination for Telegram (no stable ranges).
@@ -66,7 +66,7 @@ OpenBao paths (procedure and map — `docs/SECRETS.md`), all under
 | `hermes-environment` (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_ALLOWED_USERS`) | infra bot; first allowed user is the fixed report recipient. Missing keys keep `mcp-gateway-telegram` not Ready (fail closed) |
 | `ha-bridge-ha` (`token`) | HA REST checks, shared with ha-bridge |
 | `mcp-gateway-bb-ssh` (`id_ed25519`, `known_hosts`) | dedicated key accepted by the bb host only for the forced command (`projects/home/proxmox/bb/README.md`); host key verified once, then pinned |
-| `scheduler-auth`, `hermes-chat-relay`, `chat-alerts` (`token`) | time tools / app bearer, chat relay to Hermes, chat alerts |
+| `scheduler-auth`, `hermes-chat-relay`, `chat-alerts` (`token`) | time tools / service-token, chat relay to Hermes, chat alerts; app-токены приходят из snapshot scheduler |
 
 Generate new tokens with `openssl rand -hex 32` straight into OpenBao; never
 print values. `flux-app-settings` keys used here: `LAN_CIDR`, `NODE_LAN_IP`,

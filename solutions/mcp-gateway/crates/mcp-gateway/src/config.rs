@@ -376,7 +376,7 @@ fn load_push_files(cfg: &mut Config, read_file: &ReadFile<'_>) -> Result<(), Str
 }
 
 fn load_scheduler_files(cfg: &mut Config, read_file: &ReadFile<'_>) -> Result<(), String> {
-    if !cfg.groups.iter().any(|name| name == "time") {
+    if !cfg.groups.iter().any(|name| name == "time") && cfg.app_token_file.is_empty() {
         return Ok(());
     }
     if cfg.scheduler_url.is_empty() || cfg.scheduler_token_file.is_empty() {
@@ -602,6 +602,8 @@ mod tests {
             ("MCP_AUTH_TOKEN_FILE", "/token"),
             ("MCP_INFRA_CATALOG_FILE", "/c"),
             ("MCP_APP_TOKEN_FILE", "/app"),
+            ("MCP_SCHEDULER_URL", "http://scheduler:8098"),
+            ("MCP_SCHEDULER_TOKEN_FILE", "/scheduler"),
         ];
         let read = |path: &str| {
             Ok(if path == "/app" {
@@ -631,6 +633,8 @@ mod tests {
             ("MCP_AUTH_TOKEN_FILE", "/token"),
             ("MCP_INFRA_CATALOG_FILE", "/c"),
             ("MCP_APP_TOKEN_FILE", "/app"),
+            ("MCP_SCHEDULER_URL", "http://scheduler:8098"),
+            ("MCP_SCHEDULER_TOKEN_FILE", "/scheduler"),
             ("MCP_CHAT_HERMES_URL", "http://relay:8644"),
             ("MCP_CHAT_HERMES_TOKEN_FILE", "/relay"),
             ("MCP_CHAT_PROMPT_FILE", "/prompt"),
@@ -640,10 +644,12 @@ mod tests {
         assert_eq!(config.chat_prompt, "prompt");
         assert_eq!(config.chat_session, DEFAULT_CHAT_SESSION);
         assert_eq!(config.chat_db, DEFAULT_CHAT_DB);
-        let without_app = [full[0], full[1], full[3], full[4], full[5]];
+        let without_app = [full[0], full[1], full[5], full[6], full[7]];
         let error = Config::load_from(&env(&without_app), &read).expect_err("no app token");
         assert!(error.contains("MCP_APP_TOKEN_FILE"), "{error}");
-        let without_prompt = [full[0], full[1], full[2], full[3], full[4]];
+        let without_prompt = [
+            full[0], full[1], full[2], full[3], full[4], full[5], full[6],
+        ];
         let error = Config::load_from(&env(&without_prompt), &read).expect_err("no prompt");
         assert!(error.contains("MCP_CHAT_PROMPT_FILE"), "{error}");
     }

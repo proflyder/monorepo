@@ -76,12 +76,12 @@
 | `k8s/home-assistant/hermes-environment` | Hermes agent environment (HA/MA/Telegram/API keys) | ESO → home-assistant |
 | `k8s/home-assistant/chat-alerts` | bearer of the Alertmanager webhook into the app chat (mcp-gateway `/v1/chat/alerts`) | ESO → home-assistant (`mcp-gateway-chat-alerts`), monitoring (`alertmanager-telegram`) |
 | `k8s/home-assistant/hermes-chat-relay` | bearer between mcp-gateway and the app chat relay in voice-proxy (Hermes sessions API) | ESO → home-assistant (`mcp-gateway-chat`, `hermes-chat-relay`) |
-| `k8s/home-assistant/intercom` | intercom signaling: station device token; `phone_token` is taken from `scheduler-auth` (`token`) | ESO → home-assistant |
+| `k8s/home-assistant/intercom` | intercom signaling: station device token; app tokens и service-token приходят из `scheduler-auth` | ESO → home-assistant |
 | `k8s/home-assistant/mcp-gateway-auth` | MCP gateway bearer | ESO → home-assistant |
 | `k8s/home-assistant/mcp-gateway-bb-ssh` | SSH key + known_hosts for bb dispatch from the MCP gateway | ESO → home-assistant |
 | `k8s/home-assistant/mcp-gateway-voice` | voice tool bearer of the MCP gateway | ESO → home-assistant |
-| `k8s/home-assistant/phone-push` | FCM service account (Firebase Cloud Messaging API Admin) for phone-push | ESO → home-assistant |
-| `k8s/home-assistant/scheduler-auth` | scheduler API bearer (`token`), WireGuard peer-sync bearer (`vpn_sync_token`, копия в CT 102 `/etc/wireguard/sync.header`), VPN-профиль (`vpn.json`) | ESO → home-assistant |
+| `k8s/home-assistant/phone-push` | FCM service account (Firebase Cloud Messaging API Admin) for phone-push; service-token — из `scheduler-auth` | ESO → home-assistant |
+| `k8s/home-assistant/scheduler-auth` | app access: legacy `token` («Мама»), seed `app_tokens` (только sha256, импортируется при старте), `service_token`, WireGuard peer-sync bearer (`vpn_sync_token`, копия в CT 102 `/etc/wireguard/sync.header`), VPN-профиль (`vpn.json`) | ESO → home-assistant |
 | `k8s/home-assistant/wakegrant` | wakegrant issuer token and per-machine keys | ESO → home-assistant |
 | `k8s/monitoring/grafana-admin` | Grafana admin login | ESO → monitoring |
 | `k8s/monitoring/heartbeat` | dead-man switch Worker URL and token | ESO → monitoring |

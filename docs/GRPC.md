@@ -86,7 +86,9 @@ curl -sS http://127.0.0.1:8098/home.v1.SchedulerService/CreateSchedule \
 
 - `Authorization: Bearer <token>` обязателен для каждого RPC; сравнение
   constant-time по SHA-256;
-- токен задаётся `SCHEDULER_TOKEN` или `SCHEDULER_TOKEN_FILE`; без него
+- app-токены проверяются по модулям (`base` для GetStatus, `alarms_timers`,
+  `scenarios`, `home` для EnqueueTask/CancelTask); service-token задаётся
+  `SCHEDULER_SERVICE_TOKEN[_FILE]` (fallback `SCHEDULER_TOKEN[_FILE]`); без него
   процесс не стартует;
 - `SCHEDULER_CONSUMERS` — опциональный allowlist `consumer_id` для
   executor-ов;

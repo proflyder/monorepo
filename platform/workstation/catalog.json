@@ -222,7 +222,7 @@
    "consumer": "ESO → home-assistant"
   },
   "k8s/home-assistant/scheduler-auth": {
-   "purpose": "scheduler API bearer (token), WireGuard peer-sync bearer (vpn_sync_token) and VPN profile settings (vpn.json)",
+   "purpose": "app access tokens seed (app_tokens, sha256 only), legacy token (mama), service_token, WireGuard peer-sync bearer (vpn_sync_token) and VPN profile settings (vpn.json)",
    "consumer": "ESO → home-assistant"
   },
   "k8s/home-assistant/wakegrant": {

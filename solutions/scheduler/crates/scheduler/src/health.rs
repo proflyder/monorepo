@@ -22,7 +22,9 @@ pub async fn run_healthcheck() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    if let Err(error) = check_ready(&format!("http://{address}"), config.token.expose()).await {
+    if let Err(error) =
+        check_ready(&format!("http://{address}"), config.service_token.expose()).await
+    {
         eprintln!("healthcheck: {error}");
         return ExitCode::FAILURE;
     }
@@ -44,7 +46,7 @@ pub async fn run_status() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    match get_status_body(&format!("http://{address}"), config.token.expose()).await {
+    match get_status_body(&format!("http://{address}"), config.service_token.expose()).await {
         Ok(body) => {
             print!("{body}");
             ExitCode::SUCCESS

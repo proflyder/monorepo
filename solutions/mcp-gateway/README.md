@@ -195,9 +195,12 @@ Read-only агрегатор для вкладки «Система» Android-п
 дашборд — это ещё одно представление тех же источников. Код —
 `crates/mcp-gateway/src/system/`.
 
-- Аутентификация: `Authorization: Bearer <токен приложения>`
-  (`MCP_APP_TOKEN_FILE`); MCP- и voice-токены здесь отклоняются (`401`,
-  realm `home-app`). Без `MCP_APP_TOKEN_FILE` маршрутов нет.
+- Аутентификация: `Authorization: Bearer <токен приложения>`; решение
+  принимает общий `home-app-auth` по snapshot scheduler (`/v1/access/snapshot`,
+  кэш 30 с). `/v1/system/*` требует модуль `system` (по умолчанию только
+  owner), `/v1/chat/*` — `chat`. MCP- и voice-токены здесь отклоняются
+  (`401`, realm `home-app`). `MCP_APP_TOKEN_FILE` остаётся только флагом
+  включения app-маршрутов и legacy-токеном «Мама».
 - Внешний маршрут (только `/v1/system/` и `/v1/chat/`, без `/mcp`) — в
   [README деплоя](../../projects/home/kubernetes/mcp-gateway/README.md).
 - Кэш секции 15 с (`CACHE_TTL`); параллельные запросы делят одно обновление.
@@ -232,8 +235,9 @@ Android ──/v1/chat/*──► mcp-gateway ──► chat relay (voice-proxy)
                             │ SQLite MCP_CHAT_DB
 ```
 
-- Аутентификация — тот же токен приложения, что `/v1/system/*`
-  (`MCP_APP_TOKEN_FILE`, realm `home-app`).
+- Аутентификация — app-токен с модулем `chat`; alert-сообщения
+  (`kind=alert`) в `/v1/chat/messages` и `/v1/chat/events` отдаются только
+  токену с модулем `alerts`.
 - Hermes API слушает только loopback пода Hermes. Gateway ходит к нему через
   chat relay в `voice-proxy` (отдельный Bearer), который пропускает ровно
   `POST /api/sessions` и `POST /api/sessions/home-app/chat/stream` для одной
@@ -375,10 +379,10 @@ Android ──/v1/chat/*──► mcp-gateway ──► chat relay (voice-proxy)
 | `MCP_BB_DISPATCHER_THREAD_ID` | для voice | — | Постоянный рабочий тред для `profile=work`. |
 | `MCP_VOICE_TOKEN_FILE` | нет | — | Включает `/v1/voice/*`; токен обязан отличаться от MCP-токена. |
 | `MCP_SCHEDULER_URL` | для `time` | — | База `home.v1.SchedulerService`, например `http://scheduler.home-assistant.svc.cluster.local:8098`. |
-| `MCP_SCHEDULER_TOKEN_FILE` | для `time` | — | Bearer планировщика (`secret/k8s/home-assistant/scheduler-auth`, ключ `token`). |
+| `MCP_SCHEDULER_TOKEN_FILE` | для `time`/app | — | Service bearer планировщика (`scheduler-auth#token`; после bootstrap — `service_token`). |
 | `MCP_PUSH_URL` | для `phone` | — | База `solutions/phone-push`, например `http://phone-push.home-assistant.svc.cluster.local:8095`. |
-| `MCP_PUSH_TOKEN_FILE` | для `phone` | — | Bearer push-сервиса: тот же общий токен приложения (`scheduler-auth`). |
-| `MCP_APP_TOKEN_FILE` | нет | — | Включает `/v1/system/*` (дашборд Android). Общий токен приложения (`scheduler-auth`); обязан отличаться от MCP- и voice-токенов. |
+| `MCP_PUSH_TOKEN_FILE` | для `phone` | — | Service bearer phone-push (`scheduler-auth`). |
+| `MCP_APP_TOKEN_FILE` | нет | — | Включает `/v1/system/*` и `/v1/chat/*`; значение — legacy app-токен «Мама» из `scheduler-auth#token`. |
 | `MCP_CHAT_HERMES_URL` | нет | — | Включает `/v1/chat/*`: база chat relay. Требует `MCP_APP_TOKEN_FILE`. |
 | `MCP_CHAT_HERMES_TOKEN_FILE` | для чата | — | Bearer chat relay (`secret/k8s/home-assistant/hermes-chat-relay`, ключ `token`). |
 | `MCP_CHAT_PROMPT_FILE` | для чата | — | Системный промпт беседы приложения (`chat-prompt.txt` из ConfigMap). |

@@ -64,6 +64,7 @@ fn app() -> Router {
     let groups: Vec<Arc<dyn ToolGroup>> = vec![Arc::new(ReadGroup::new(Arc::clone(&deps)))];
     server::router(server::Options {
         system: None,
+        access: None,
         chat: None,
         chat_alerts_token: None,
         auth_token: TOKEN.to_owned(),

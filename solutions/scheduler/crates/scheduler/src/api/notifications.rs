@@ -12,7 +12,7 @@ use crate::store::{
 };
 use crate::sync::{Announcement, SyncSink};
 
-use super::auth::BearerAuth;
+use super::auth::{AccessAuth, error_response};
 
 pub const DEVICE_HEADER: &str = "home-device-id";
 const MAX_DEVICE_ID_CHARS: usize = 128;
@@ -20,7 +20,7 @@ const MAX_DEVICE_ID_CHARS: usize = 128;
 #[derive(Clone, Debug)]
 pub struct NotificationState {
     pub store: Arc<Store>,
-    pub auth: Arc<BearerAuth>,
+    pub auth: Arc<AccessAuth>,
     pub sync: Arc<dyn SyncSink>,
 }
 
@@ -131,13 +131,25 @@ struct ErrorResponse {
     error: &'static str,
 }
 
+fn authorized(auth: &AccessAuth, headers: &HeaderMap) -> Option<Response> {
+    auth.require(
+        headers.get(header::AUTHORIZATION),
+        home_app_auth::Module::Notifications,
+    )
+    .err()
+    .map(|forbidden| {
+        let (status, headers, body) = error_response(forbidden);
+        (status, headers, body).into_response()
+    })
+}
+
 pub async fn record(
     State(state): State<NotificationState>,
     headers: HeaderMap,
     Json(body): Json<RecordBody>,
 ) -> Response {
-    if !state.auth.authorized(headers.get(header::AUTHORIZATION)) {
-        return error(StatusCode::UNAUTHORIZED, "unauthenticated");
+    if let Some(response) = authorized(&state.auth, &headers) {
+        return response;
     }
     if body.device_id.trim().is_empty() {
         return error(StatusCode::BAD_REQUEST, "deviceId is required");
@@ -178,8 +190,8 @@ pub async fn history(
     headers: HeaderMap,
     Query(query): Query<HistoryQuery>,
 ) -> Response {
-    if !state.auth.authorized(headers.get(header::AUTHORIZATION)) {
-        return error(StatusCode::UNAUTHORIZED, "unauthenticated");
+    if let Some(response) = authorized(&state.auth, &headers) {
+        return response;
     }
     let Some(device_id) = header_device(&headers) else {
         return error(StatusCode::BAD_REQUEST, "device_required");
@@ -202,8 +214,8 @@ pub async fn history(
 }
 
 pub async fn unread(State(state): State<NotificationState>, headers: HeaderMap) -> Response {
-    if !state.auth.authorized(headers.get(header::AUTHORIZATION)) {
-        return error(StatusCode::UNAUTHORIZED, "unauthenticated");
+    if let Some(response) = authorized(&state.auth, &headers) {
+        return response;
     }
     let Some(device_id) = header_device(&headers) else {
         return error(StatusCode::BAD_REQUEST, "device_required");
@@ -223,8 +235,8 @@ pub async fn set_read(
     headers: HeaderMap,
     Json(body): Json<ReadBody>,
 ) -> Response {
-    if !state.auth.authorized(headers.get(header::AUTHORIZATION)) {
-        return error(StatusCode::UNAUTHORIZED, "unauthenticated");
+    if let Some(response) = authorized(&state.auth, &headers) {
+        return response;
     }
     let Some(device_id) = header_device(&headers) else {
         return error(StatusCode::BAD_REQUEST, "device_required");
@@ -255,8 +267,8 @@ pub async fn set_read(
 }
 
 pub async fn read_all(State(state): State<NotificationState>, headers: HeaderMap) -> Response {
-    if !state.auth.authorized(headers.get(header::AUTHORIZATION)) {
-        return error(StatusCode::UNAUTHORIZED, "unauthenticated");
+    if let Some(response) = authorized(&state.auth, &headers) {
+        return response;
     }
     let Some(device_id) = header_device(&headers) else {
         return error(StatusCode::BAD_REQUEST, "device_required");
@@ -289,8 +301,8 @@ pub async fn remove(
     headers: HeaderMap,
     Json(body): Json<RemoveBody>,
 ) -> Response {
-    if !state.auth.authorized(headers.get(header::AUTHORIZATION)) {
-        return error(StatusCode::UNAUTHORIZED, "unauthenticated");
+    if let Some(response) = authorized(&state.auth, &headers) {
+        return response;
     }
     let Some(device_id) = header_device(&headers) else {
         return error(StatusCode::BAD_REQUEST, "device_required");
@@ -320,8 +332,8 @@ pub async fn remove(
 }
 
 pub async fn clear(State(state): State<NotificationState>, headers: HeaderMap) -> Response {
-    if !state.auth.authorized(headers.get(header::AUTHORIZATION)) {
-        return error(StatusCode::UNAUTHORIZED, "unauthenticated");
+    if let Some(response) = authorized(&state.auth, &headers) {
+        return response;
     }
     let Some(device_id) = header_device(&headers) else {
         return error(StatusCode::BAD_REQUEST, "device_required");
@@ -453,7 +465,7 @@ mod tests {
         let sync = Arc::new(MemorySync::default());
         let state = NotificationState {
             store: Arc::clone(&store),
-            auth: Arc::new(BearerAuth::new(TOKEN)),
+            auth: Arc::new(AccessAuth::for_tests(TOKEN)),
             sync: sync.clone(),
         };
         let router = Router::new()

@@ -1,10 +1,11 @@
 use connectrpc::interceptor::{UnaryRequest, UnaryResponse};
 use connectrpc::{ConnectError, Interceptor, Next, async_trait};
+use home_app_auth::{AccessCache, Forbidden, Module, Principal, bearer};
+use home_secret::Token;
+use http::StatusCode;
 use http::header::AUTHORIZATION;
 use sha2::{Digest, Sha256};
 use subtle::ConstantTimeEq;
-
-const BEARER_PREFIX: &str = "bearer ";
 
 pub struct BearerAuth {
     expected: [u8; 32],
@@ -32,18 +33,9 @@ impl BearerAuth {
         let Some(header) = header.and_then(|value| value.to_str().ok()) else {
             return false;
         };
-        let header = header.trim();
-        if header.len() <= BEARER_PREFIX.len() {
+        let Some(provided) = bearer(header) else {
             return false;
-        }
-        let (prefix, rest) = header.split_at(BEARER_PREFIX.len());
-        if !prefix.eq_ignore_ascii_case(BEARER_PREFIX) {
-            return false;
-        }
-        let provided = rest.trim();
-        if provided.is_empty() {
-            return false;
-        }
+        };
         let digest = Sha256::digest(provided.as_bytes());
         digest.as_slice().ct_eq(&self.expected).into()
     }
@@ -60,5 +52,290 @@ impl Interceptor for BearerAuth {
             return Err(ConnectError::unauthenticated("unauthenticated"));
         }
         next.run(request).await
+    }
+}
+
+#[derive(Clone)]
+pub struct AccessAuth {
+    cache: AccessCache,
+    service: Token,
+}
+
+impl std::fmt::Debug for AccessAuth {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.debug_struct("AccessAuth").finish_non_exhaustive()
+    }
+}
+
+impl AccessAuth {
+    pub fn new(cache: AccessCache, service: Token) -> Self {
+        Self { cache, service }
+    }
+
+    #[cfg(test)]
+    pub fn for_tests(token: &str) -> Self {
+        let snapshot = home_app_auth::AccessSnapshot {
+            revision: 1,
+            tokens: vec![home_app_auth::TokenRecord {
+                id: "test".to_owned(),
+                name: "test".to_owned(),
+                sha256: home_app_auth::sha256_hex(token),
+                owner: true,
+                modules: home_app_auth::Modules::owner()
+                    .ids()
+                    .into_iter()
+                    .map(str::to_owned)
+                    .collect(),
+            }],
+        };
+        Self::new(AccessCache::new(snapshot), Token::new(token))
+    }
+
+    pub fn service_authorized(&self, header: Option<&http::HeaderValue>) -> bool {
+        let Some(value) = header.and_then(|value| value.to_str().ok()) else {
+            return false;
+        };
+        let Some(candidate) = bearer(value) else {
+            return false;
+        };
+        self.service.ct_eq(candidate)
+    }
+
+    pub fn authenticate(&self, header: Option<&http::HeaderValue>) -> Result<Principal, Forbidden> {
+        self.cache
+            .authenticate(header)
+            .ok_or(Forbidden::Unauthenticated)
+    }
+
+    pub fn caller(&self, header: Option<&http::HeaderValue>) -> Result<Caller, Forbidden> {
+        if self.service_authorized(header) {
+            return Ok(Caller::Service);
+        }
+        self.authenticate(header).map(Caller::App)
+    }
+
+    pub fn app(
+        &self,
+        header: Option<&http::HeaderValue>,
+        module: Module,
+    ) -> Result<Principal, Forbidden> {
+        let principal = self.authenticate(header)?;
+        principal.require(module)?;
+        Ok(principal)
+    }
+
+    pub fn any_app(&self, header: Option<&http::HeaderValue>) -> Result<Principal, Forbidden> {
+        self.authenticate(header)
+    }
+
+    pub fn require(
+        &self,
+        header: Option<&http::HeaderValue>,
+        module: Module,
+    ) -> Result<Caller, Forbidden> {
+        if self.service_authorized(header) {
+            return Ok(Caller::Service);
+        }
+        self.app(header, module).map(Caller::App)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum Caller {
+    Service,
+    App(Principal),
+}
+
+fn method_module(path: &str) -> Option<Module> {
+    let method = path.rsplit('/').next().unwrap_or(path);
+    match method {
+        "GetStatus" => Some(Module::Base),
+        "ListDueEvents" | "AckEvent" => None,
+        "EnqueueTask" | "CancelTask" => Some(Module::Home),
+        "CreateSchedule"
+        | "GetSchedule"
+        | "ListSchedules"
+        | "UpdateSchedule"
+        | "DeleteSchedule"
+        | "SetScheduleEnabled"
+        | "SnoozeSchedule"
+        | "StopSchedule"
+        | "SkipScheduleOccurrence"
+        | "StartTimer"
+        | "GetTimer"
+        | "ListTimers"
+        | "PauseTimer"
+        | "ResumeTimer"
+        | "CancelTimer"
+        | "CreateAlarm"
+        | "GetAlarm"
+        | "ListAlarms"
+        | "UpdateAlarm"
+        | "DeleteAlarm"
+        | "SetAlarmEnabled"
+        | "SnoozeAlarm"
+        | "StopAlarm" => Some(Module::AlarmsTimers),
+        "CreateScenario" | "GetScenario" | "ListScenarios" | "UpdateScenario"
+        | "DeleteScenario" | "SetScenarioEnabled" | "RunScenario" => Some(Module::Scenarios),
+        _ => Some(Module::Admin),
+    }
+}
+
+fn connect_forbidden(forbidden: Forbidden) -> ConnectError {
+    match forbidden {
+        Forbidden::Unauthenticated => ConnectError::unauthenticated("unauthenticated"),
+        Forbidden::ServiceOnly | Forbidden::Module(_) => {
+            ConnectError::permission_denied(forbidden.body())
+        }
+    }
+}
+
+#[async_trait]
+impl Interceptor for AccessAuth {
+    async fn intercept_unary(
+        &self,
+        mut request: UnaryRequest,
+        next: Next<'_>,
+    ) -> Result<UnaryResponse, ConnectError> {
+        let path = request.ctx.path().unwrap_or_default().to_owned();
+        let module = method_module(&path);
+        let caller =
+            if module.is_none() && self.service_authorized(request.ctx.header(AUTHORIZATION)) {
+                Caller::Service
+            } else {
+                self.caller(request.ctx.header(AUTHORIZATION))
+                    .map_err(connect_forbidden)?
+            };
+        match (&caller, module) {
+            (Caller::Service, _) => {}
+            (Caller::App(principal), Some(module)) => {
+                principal.require(module).map_err(connect_forbidden)?;
+                tracing::debug!(
+                    token = principal.name.as_str(),
+                    modules = ?principal.module_ids(),
+                    method = path.as_str(),
+                    "application request authorized"
+                );
+                request.ctx.extensions_mut().insert(principal.clone());
+            }
+            (Caller::App(principal), None) => {
+                tracing::warn!(
+                    token = principal.name.as_str(),
+                    method = path.as_str(),
+                    "service-only method called by an application token"
+                );
+                return Err(connect_forbidden(Forbidden::ServiceOnly));
+            }
+        }
+        next.run(request).await
+    }
+}
+
+pub fn error_response(
+    forbidden: Forbidden,
+) -> (
+    StatusCode,
+    [(http::header::HeaderName, &'static str); 1],
+    String,
+) {
+    let status = match forbidden {
+        Forbidden::Unauthenticated => StatusCode::UNAUTHORIZED,
+        Forbidden::ServiceOnly | Forbidden::Module(_) => StatusCode::FORBIDDEN,
+    };
+    (
+        status,
+        [(http::header::CONTENT_TYPE, "application/json")],
+        forbidden.body(),
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use home_app_auth::{AccessSnapshot, Module, Modules, TokenRecord, sha256_hex};
+    use http::HeaderValue;
+
+    use super::*;
+
+    fn auth(modules: &Modules) -> AccessAuth {
+        let snapshot = AccessSnapshot {
+            revision: 1,
+            tokens: vec![TokenRecord {
+                id: "test".to_owned(),
+                name: "test".to_owned(),
+                sha256: sha256_hex("app-token"),
+                owner: false,
+                modules: modules.ids().into_iter().map(str::to_owned).collect(),
+            }],
+        };
+        AccessAuth::new(AccessCache::new(snapshot), Token::new("service-token"))
+    }
+
+    fn header(value: &str) -> HeaderValue {
+        HeaderValue::from_str(value).expect("header")
+    }
+
+    #[test]
+    fn every_method_is_mapped_to_exactly_one_module() {
+        for method in [
+            "CreateSchedule",
+            "ListSchedules",
+            "StartTimer",
+            "CreateAlarm",
+            "RunScenario",
+            "GetStatus",
+            "EnqueueTask",
+        ] {
+            assert!(method_module(&format!("/home.v1.SchedulerService/{method}")).is_some());
+        }
+        assert_eq!(method_module("/x/ListDueEvents"), None);
+        assert_eq!(method_module("/x/AckEvent"), None);
+        assert_eq!(
+            method_module("/x/GetStatus"),
+            Some(home_app_auth::Module::Base)
+        );
+    }
+
+    #[test]
+    fn a_member_is_denied_each_module_outside_its_grants() {
+        let auth = auth(&Modules::member());
+        let header = Some(&header("Bearer app-token"));
+        for module in [
+            home_app_auth::Module::Base,
+            home_app_auth::Module::Home,
+            home_app_auth::Module::Scenarios,
+            home_app_auth::Module::AlarmsTimers,
+            home_app_auth::Module::IntercomCall,
+            home_app_auth::Module::Notifications,
+        ] {
+            auth.app(header, module).expect("member module");
+        }
+        for module in [
+            home_app_auth::Module::Chat,
+            home_app_auth::Module::Vpn,
+            home_app_auth::Module::System,
+            home_app_auth::Module::InfraReports,
+            home_app_auth::Module::Alerts,
+            home_app_auth::Module::Admin,
+        ] {
+            assert_eq!(
+                auth.app(header, module),
+                Err(Forbidden::Module(module)),
+                "{module:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_service_token_bypasses_modules_but_not_app_only_routes() {
+        let auth = auth(&Modules::empty());
+        let header = Some(&header("Bearer service-token"));
+        assert!(matches!(
+            auth.require(header, Module::Notifications),
+            Ok(Caller::Service)
+        ));
+        assert_eq!(
+            auth.app(header, Module::Vpn),
+            Err(Forbidden::Unauthenticated)
+        );
     }
 }

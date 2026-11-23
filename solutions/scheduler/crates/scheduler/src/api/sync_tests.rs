@@ -31,10 +31,30 @@ fn fixture() -> Fixture {
         Vec::new(),
     )
     .with_sync(Arc::clone(&sync) as Arc<dyn crate::sync::SyncSink>);
+    let snapshot = home_app_auth::AccessSnapshot {
+        revision: 1,
+        tokens: vec![home_app_auth::TokenRecord {
+            id: "test".to_owned(),
+            name: "test".to_owned(),
+            sha256: home_app_auth::sha256_hex(TOKEN),
+            owner: false,
+            modules: home_app_auth::Modules::member()
+                .ids()
+                .into_iter()
+                .map(str::to_owned)
+                .collect(),
+        }],
+    };
+    let cache = home_app_auth::AccessCache::new(snapshot);
+    let auth = Arc::new(super::AccessAuth::new(
+        cache.clone(),
+        home_secret::Token::new("service-test-token"),
+    ));
     let app = router(
         service.clone(),
         AlarmFacade::new(service),
-        TOKEN,
+        auth,
+        cache,
         VpnAccess::default(),
         Arc::clone(&sync) as Arc<dyn crate::sync::SyncSink>,
     );

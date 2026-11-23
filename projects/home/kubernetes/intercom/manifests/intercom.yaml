@@ -38,7 +38,11 @@ spec:
             - name: INTERCOM_LISTEN
               value: 0.0.0.0:8099
             - name: INTERCOM_TOKEN_FILE
-              value: /run/secrets/intercom/phone_token
+              value: /run/secrets/intercom/token
+            - name: INTERCOM_ACCESS_URL
+              value: http://scheduler.home-assistant.svc.cluster.local:8098/v1/access/snapshot
+            - name: INTERCOM_SERVICE_TOKEN_FILE
+              value: /run/secrets/intercom/service_token
             - name: INTERCOM_STATION_TOKEN_FILE
               value: /run/secrets/intercom/station_token
             - name: INTERCOM_PHONE_ENDPOINT_ID
@@ -95,11 +99,6 @@ spec:
           secret:
             secretName: intercom
             defaultMode: 0440
-            items:
-              - key: phone_token
-                path: phone_token
-              - key: station_token
-                path: station_token
         - name: tmp
           emptyDir:
             sizeLimit: 16Mi

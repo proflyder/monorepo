@@ -22,6 +22,8 @@ pub struct Config {
     pub db_path: PathBuf,
     pub listen: String,
     pub token: Secret,
+    pub service_token: Secret,
+    pub access_seed_file: Option<PathBuf>,
     pub missed_grace: Duration,
     pub ring_window: Duration,
     pub event_retention: Duration,
@@ -66,6 +68,8 @@ pub enum ConfigError {
     TokenRequired,
     #[error("SCHEDULER_TOKEN_FILE: cannot read token file")]
     TokenFile,
+    #[error("SCHEDULER_SERVICE_TOKEN or SCHEDULER_SERVICE_TOKEN_FILE is invalid")]
+    ServiceToken,
     #[error("{0}")]
     Invalid(String),
 }
@@ -85,6 +89,8 @@ impl Config {
             .unwrap_or_else(|| DEFAULT_LISTEN.to_owned());
 
         let token = load_token(getenv, read_file)?;
+        let service_token = load_service_token(getenv, read_file, &token)?;
+        let access_seed_file = first(getenv, &["SCHEDULER_APP_TOKENS_FILE"]).map(PathBuf::from);
 
         let missed_grace = duration_seconds(
             getenv,
@@ -142,6 +148,8 @@ impl Config {
             db_path: PathBuf::from(db_path),
             listen,
             token,
+            service_token,
+            access_seed_file,
             missed_grace,
             ring_window,
             event_retention,
@@ -257,6 +265,31 @@ fn load_token(
     Ok(Secret::new(token))
 }
 
+fn load_service_token(
+    getenv: &dyn Fn(&str) -> Option<String>,
+    read_file: &dyn Fn(&str) -> std::io::Result<Vec<u8>>,
+    legacy: &Secret,
+) -> Result<Secret, ConfigError> {
+    if let Some(token) = first(getenv, &["SCHEDULER_SERVICE_TOKEN"]) {
+        return Ok(Secret::new(token));
+    }
+    let Some(path) = first(getenv, &["SCHEDULER_SERVICE_TOKEN_FILE"]) else {
+        return Ok(legacy.clone());
+    };
+    match read_file(&path) {
+        Ok(data) => {
+            let token = String::from_utf8_lossy(&data);
+            let token = token.trim();
+            if token.is_empty() {
+                return Err(ConfigError::ServiceToken);
+            }
+            Ok(Secret::new(token))
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(legacy.clone()),
+        Err(_) => Err(ConfigError::ServiceToken),
+    }
+}
+
 fn first(getenv: &dyn Fn(&str) -> Option<String>, keys: &[&str]) -> Option<String> {
     keys.iter().find_map(|key| {
         let value = getenv(key)?;
@@ -336,10 +369,44 @@ mod tests {
         assert_eq!(config.ring_window, Duration::from_secs(900));
         assert_eq!(config.tick_interval, Duration::from_secs(1));
         assert_eq!(config.token.expose(), "secret");
+        assert_eq!(config.service_token.expose(), "secret");
+        assert_eq!(config.access_seed_file, None);
         assert!(
             !format!("{config:?}").contains("secret"),
             "debug must not print the token"
         );
+    }
+
+    #[test]
+    fn a_service_token_overrides_the_legacy_bearer() {
+        let config = Config::load_from(
+            &env(&[
+                ("SCHEDULER_TOKEN", "legacy"),
+                ("SCHEDULER_SERVICE_TOKEN", "service"),
+                ("SCHEDULER_APP_TOKENS_FILE", "/run/app_tokens"),
+            ]),
+            &no_file,
+        )
+        .expect("load");
+        assert_eq!(config.token.expose(), "legacy");
+        assert_eq!(config.service_token.expose(), "service");
+        assert_eq!(
+            config.access_seed_file,
+            Some(PathBuf::from("/run/app_tokens"))
+        );
+    }
+
+    #[test]
+    fn a_missing_service_token_file_falls_back_to_the_legacy_token() {
+        let config = Config::load_from(
+            &env(&[
+                ("SCHEDULER_TOKEN", "legacy"),
+                ("SCHEDULER_SERVICE_TOKEN_FILE", "/run/service"),
+            ]),
+            &|_| Err(std::io::Error::from(std::io::ErrorKind::NotFound)),
+        )
+        .expect("load");
+        assert_eq!(config.service_token.expose(), "legacy");
     }
 
     #[test]

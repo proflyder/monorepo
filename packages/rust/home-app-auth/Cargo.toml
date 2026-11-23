@@ -1,0 +1,20 @@
+[package]
+name = "home-app-auth"
+description = "Named application bearer tokens with owner/member roles and a legacy member fallback"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+hex = { workspace = true }
+home-secret = { path = "../home-secret" }
+http = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+subtle = { workspace = true }
+thiserror = { workspace = true }
+
+[lints]
+workspace = true

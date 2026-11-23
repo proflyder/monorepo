@@ -10,6 +10,7 @@ use std::convert::Infallible;
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+use axum::Extension;
 use axum::Router;
 use axum::body::Body;
 use axum::extract::{DefaultBodyLimit, Path, Query, State};
@@ -19,6 +20,7 @@ use axum::response::IntoResponse;
 use axum::response::sse::{Event as SseEvent, KeepAlive, Sse};
 use axum::routing::{get, post};
 use futures::stream::{self, Stream, StreamExt as _};
+use home_app_auth::{Module, Principal};
 use serde::{Deserialize, Serialize};
 use tokio::sync::{broadcast, mpsc};
 
@@ -647,8 +649,18 @@ struct EventsQuery {
     after: Option<i64>,
 }
 
-async fn list(State(chat): State<Arc<Chat>>, Query(query): Query<ListQuery>) -> Response<Body> {
-    respond(chat.page(query.before, query.limit))
+async fn list(
+    State(chat): State<Arc<Chat>>,
+    Query(query): Query<ListQuery>,
+    principal: Option<Extension<Principal>>,
+) -> Response<Body> {
+    let alerts = alerts_allowed(principal.as_ref());
+    respond(chat.page(query.before, query.limit).map(|mut page| {
+        if !alerts {
+            page.messages.retain(|message| message.kind != Kind::Alert);
+        }
+        page
+    }))
 }
 
 async fn send(State(chat): State<Arc<Chat>>, body: axum::body::Bytes) -> Response<Body> {
@@ -662,7 +674,12 @@ async fn retry(State(chat): State<Arc<Chat>>, Path(id): Path<String>) -> Respons
     respond(chat.retry(&id))
 }
 
-async fn events(State(chat): State<Arc<Chat>>, Query(query): Query<EventsQuery>) -> Response<Body> {
+async fn events(
+    State(chat): State<Arc<Chat>>,
+    Query(query): Query<EventsQuery>,
+    principal: Option<Extension<Principal>>,
+) -> Response<Body> {
+    let alerts = alerts_allowed(principal.as_ref());
     let receiver = chat.subscribe();
     let snapshot = match chat.snapshot(query.after.unwrap_or(0)) {
         Ok(snapshot) => snapshot,
@@ -671,26 +688,39 @@ async fn events(State(chat): State<Arc<Chat>>, Query(query): Query<EventsQuery>)
     let initial = stream::iter(
         snapshot
             .into_iter()
+            .filter(move |message| alerts || message.kind != Kind::Alert)
             .map(|message| Ok(message_event(&message))),
     );
-    Sse::new(initial.chain(live_events(receiver)))
+    Sse::new(initial.chain(live_events(receiver, alerts)))
         .keep_alive(KeepAlive::new().interval(KEEPALIVE))
         .into_response()
 }
 
+fn alerts_allowed(principal: Option<&Extension<Principal>>) -> bool {
+    principal.is_none_or(|principal| principal.0.allows(Module::Alerts))
+}
+
 fn live_events(
     receiver: broadcast::Receiver<Event>,
+    alerts: bool,
 ) -> impl Stream<Item = Result<SseEvent, Infallible>> {
-    stream::unfold(receiver, |mut receiver| async move {
-        let event = receiver.recv().await.ok()?;
-        Some((Ok(sse_event(&event)), receiver))
+    stream::unfold((receiver, alerts), |(mut receiver, alerts)| async move {
+        loop {
+            let event = receiver.recv().await.ok()?;
+            if let Some(event) = sse_event(&event, alerts) {
+                return Some((Ok(event), (receiver, alerts)));
+            }
+        }
     })
 }
 
-fn sse_event(event: &Event) -> SseEvent {
+fn sse_event(event: &Event, alerts: bool) -> Option<SseEvent> {
     match event {
-        Event::Message(message) => message_event(message),
-        Event::Delta(delta) => json_event("delta", delta),
+        Event::Message(message) if alerts || message.kind != Kind::Alert => {
+            Some(message_event(message))
+        }
+        Event::Message(_) => None,
+        Event::Delta(delta) => Some(json_event("delta", delta)),
     }
 }
 

@@ -6,6 +6,7 @@ package(default_visibility = ["//visibility:public"])
 PACKAGE_VERSION = "0.1.0"
 
 LIB_DEPS = [
+    "//packages/rust/home-app-auth:home_app_auth",
     "//packages/rust/home-config:home_config",
     "//packages/rust/home-ha:home_ha",
     "//packages/rust/home-http:home_http",

@@ -8,12 +8,12 @@ use serde::{Deserialize, Serialize};
 
 use crate::store::{PushDevice, PushDeviceInput, Store, StoreError};
 
-use super::auth::BearerAuth;
+use super::auth::{AccessAuth, error_response};
 
 #[derive(Clone, Debug)]
 pub struct PushState {
     pub store: Arc<Store>,
-    pub auth: Arc<BearerAuth>,
+    pub auth: Arc<AccessAuth>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -93,13 +93,34 @@ struct ErrorResponse {
     error: &'static str,
 }
 
+fn authorized_base(auth: &AccessAuth, headers: &HeaderMap) -> Option<Response> {
+    auth.any_app(headers.get(header::AUTHORIZATION))
+        .err()
+        .map(|forbidden| {
+            let (status, headers, body) = error_response(forbidden);
+            (status, headers, body).into_response()
+        })
+}
+
+fn authorized(auth: &AccessAuth, headers: &HeaderMap) -> Option<Response> {
+    auth.require(
+        headers.get(header::AUTHORIZATION),
+        home_app_auth::Module::Notifications,
+    )
+    .err()
+    .map(|forbidden| {
+        let (status, headers, body) = error_response(forbidden);
+        (status, headers, body).into_response()
+    })
+}
+
 pub async fn register(
     State(state): State<PushState>,
     headers: HeaderMap,
     Json(body): Json<RegisterBody>,
 ) -> Response {
-    if !state.auth.authorized(headers.get(header::AUTHORIZATION)) {
-        return error(StatusCode::UNAUTHORIZED, "unauthenticated");
+    if let Some(response) = authorized_base(&state.auth, &headers) {
+        return response;
     }
     let input = PushDeviceInput {
         device_id: body.device_id,
@@ -127,8 +148,8 @@ pub async fn rename(
     headers: HeaderMap,
     Json(body): Json<RenameBody>,
 ) -> Response {
-    if !state.auth.authorized(headers.get(header::AUTHORIZATION)) {
-        return error(StatusCode::UNAUTHORIZED, "unauthenticated");
+    if let Some(response) = authorized(&state.auth, &headers) {
+        return response;
     }
     let now = now_unix();
     let result = blocking(Arc::clone(&state.store), move |store| {
@@ -145,8 +166,8 @@ pub async fn rename(
 }
 
 pub async fn list(State(state): State<PushState>, headers: HeaderMap) -> Response {
-    if !state.auth.authorized(headers.get(header::AUTHORIZATION)) {
-        return error(StatusCode::UNAUTHORIZED, "unauthenticated");
+    if let Some(response) = authorized(&state.auth, &headers) {
+        return response;
     }
     match blocking(Arc::clone(&state.store), Store::list_push_devices).await {
         Ok(devices) => Json(DevicesResponse {
@@ -162,8 +183,8 @@ pub async fn remove(
     headers: HeaderMap,
     Json(body): Json<RemoveBody>,
 ) -> Response {
-    if !state.auth.authorized(headers.get(header::AUTHORIZATION)) {
-        return error(StatusCode::UNAUTHORIZED, "unauthenticated");
+    if let Some(response) = authorized(&state.auth, &headers) {
+        return response;
     }
     let token = body.token;
     match blocking(Arc::clone(&state.store), move |store| {
@@ -235,7 +256,7 @@ mod tests {
         let store = Arc::new(Store::open_in_memory(Config::default()).expect("store"));
         let state = PushState {
             store: Arc::clone(&store),
-            auth: Arc::new(BearerAuth::new(TOKEN)),
+            auth: Arc::new(AccessAuth::for_tests(TOKEN)),
         };
         let router = Router::new()
             .route("/v1/push/devices", get(list).post(register))

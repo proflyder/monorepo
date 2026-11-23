@@ -349,3 +349,21 @@
     SwipeRefresh и догрузку, а `SwipeActions` объявляет действия без ручного
     `ItemTouchHelper`. Причина: прежние `Pager`/`PagingDelegate` были тонкими
     обёртками, интенты и undo дублировались в каждом экране.
+69. **Доступ приложения — модули, а не роли.** Источник правды — SQLite
+    scheduler (schema v8): `app_tokens` (имя, sha256, модули, owner) и
+    `access_meta.revision`; plaintext не хранится. Каждый app-эндпоинт
+    принадлежит ровно одному модулю: `base` (`GetStatus`, `/v1/me`,
+    регистрация push-устройства), `home` (`/v1/catalog`, `EnqueueTask`,
+    `CancelTask`), `scenarios`, `alarms_timers`, `intercom_call`,
+    `notifications`, `chat`, `vpn`, `system`, `infra_reports` (резерв),
+    `alerts` (фильтр alert-сообщений в чате), `admin` (`/v1/access/*`).
+    Любой действующий токен получает `base`; «Мама» после миграции —
+    `home, scenarios, alarms_timers, intercom_call, notifications`; owner —
+    все модули, его нельзя отозвать или лишить `admin`. Проверка — общий
+    крейт `home-app-auth` в каждом сервисе; ответ без модуля —
+    `403 {"error":"module_forbidden","module":"…"}`. Остальные сервисы
+    получают snapshot (`GET /v1/access/snapshot`, service-token) и держат
+    кэш 30 с; scheduler после изменения токенов шлёт sync `entity=access`
+    телефонам. Причина: один список модулей и одна проверка вместо ролей,
+    копипасты и расхождений между сервисами; сервис-к-сервису остаётся на
+    отдельном `service_token`, а не на app-токенах.

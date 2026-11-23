@@ -251,9 +251,6 @@ spec:
           secret:
             secretName: mcp-gateway-scheduler
             defaultMode: 0440
-            items:
-              - key: token
-                path: token
         - name: chat
           secret:
             secretName: mcp-gateway-chat

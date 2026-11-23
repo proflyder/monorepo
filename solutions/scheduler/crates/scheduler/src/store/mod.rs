@@ -1,3 +1,4 @@
+mod access;
 mod event;
 mod migrate;
 mod notifications;
@@ -23,6 +24,7 @@ pub use crate::domain::{
     ScenarioStep, ScenarioTimeTrigger, ScenarioTrigger, Schedule, ScheduleKind, SourceKind, Timer,
     TimerState,
 };
+pub use access::AccessToken;
 pub use notifications::{
     DEFAULT_HISTORY_LIMIT, MAX_HISTORY_LIMIT, Notification, NotificationInput, NotificationKind,
     NotificationPage,
@@ -34,7 +36,7 @@ pub use vpn::{VpnPeer, VpnPeerInput, VpnPool, is_wireguard_key as vpn_key_is_val
 
 use crate::domain::ScheduleKind as DomainScheduleKind;
 
-pub const SCHEMA_VERSION: i64 = 7;
+pub const SCHEMA_VERSION: i64 = 8;
 
 pub const QUEUE_HOME: &str = "home";
 pub const QUEUE_TASKS: &str = "tasks";
@@ -186,6 +188,26 @@ const V7: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS notifications_device ON notifications(device_id, created_unix DESC)",
 ];
 
+const V8: &[&str] = &[
+    "CREATE TABLE IF NOT EXISTS app_tokens (
+			id TEXT PRIMARY KEY,
+			name TEXT NOT NULL UNIQUE,
+			sha256 TEXT NOT NULL UNIQUE,
+			modules_json TEXT NOT NULL,
+			is_owner INTEGER NOT NULL DEFAULT 0,
+			created_unix INTEGER NOT NULL,
+			updated_unix INTEGER NOT NULL,
+			revoked_unix INTEGER NOT NULL DEFAULT 0
+		)",
+    "CREATE INDEX IF NOT EXISTS app_tokens_active ON app_tokens(revoked_unix, created_unix)",
+    "CREATE TABLE IF NOT EXISTS access_meta (
+			id INTEGER PRIMARY KEY CHECK (id = 1),
+			revision INTEGER NOT NULL DEFAULT 0,
+			legacy_imported INTEGER NOT NULL DEFAULT 0
+		)",
+    "INSERT OR IGNORE INTO access_meta (id, revision, legacy_imported) VALUES (1, 0, 0)",
+];
+
 pub const MIGRATIONS: &[Migration] = &[
     Migration {
         version: 1,
@@ -218,9 +240,14 @@ pub const MIGRATIONS: &[Migration] = &[
         statements: V6,
     },
     Migration {
-        version: SCHEMA_VERSION,
+        version: 7,
         description: "scheduler v7 notification history",
         statements: V7,
+    },
+    Migration {
+        version: SCHEMA_VERSION,
+        description: "scheduler v8 application access tokens",
+        statements: V8,
     },
 ];
 

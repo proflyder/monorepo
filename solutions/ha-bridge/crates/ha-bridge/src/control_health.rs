@@ -142,12 +142,4 @@ mod tests {
         let address = serve(r#"{"entries":[]}"#, StatusCode::UNAUTHORIZED).await;
         assert!(check_catalog(&address, &config).await.is_err());
     }
-
-    #[test]
-    fn authorized_helper_is_shared_with_the_server() {
-        assert!(!crate::catalog_api::authorized(
-            None,
-            &home_secret::Token::new("")
-        ));
-    }
 }

@@ -163,8 +163,11 @@
 
 ## Планировщик и Android
 
-- scheduler (`solutions/scheduler`): SQLite на PVC `scheduler-data`, схема v6,
-  хранит только UTC, клиентская зона — заголовок `Time-Zone`. Исполнители:
+- scheduler (`solutions/scheduler`): SQLite на PVC `scheduler-data`, схема v8,
+  хранит только UTC, клиентская зона — заголовок `Time-Zone`; app-доступ —
+  модули `base/home/scenarios/alarms_timers/intercom_call/notifications/chat/
+  vpn/system/infra_reports/alerts/admin` (токены в `app_tokens`, только sha256),
+  owner — один, остальные токены выпускает admin API. Исполнители:
   ha-bridge (очередь `home`, execute), ha-control (`control`), ha-scenario
   (`scenario`); voice-proxy — consumer очередей озвучивания. Второго
   исполнителя на те же расписания нет.

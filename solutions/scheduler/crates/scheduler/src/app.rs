@@ -2,6 +2,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Context as _;
+use home_app_auth::{AccessCache, AccessSnapshot};
 use home_runtime::{Supervisor, shutdown_signal};
 use home_telemetry::TelemetryBuilder;
 use tokio::net::TcpListener;
@@ -43,10 +44,16 @@ pub async fn run() -> anyhow::Result<()> {
     .with_scenario_execution(config.scenario_execution)
     .with_sync(Arc::clone(&sync));
     let vpn_access = vpn_access(&config);
+    let cache = access_cache(&config, &store)?;
+    let auth = Arc::new(api::AccessAuth::new(
+        cache.clone(),
+        home_secret::Token::new(config.service_token.expose()),
+    ));
     let router = api::router(
         service.clone(),
         AlarmFacade::new(service),
-        config.token.expose(),
+        auth,
+        cache,
         vpn_access,
         sync,
     );
@@ -111,7 +118,7 @@ fn sync_sink(config: &Config) -> Arc<dyn SyncSink> {
         tracing::info!(sync_push = false, "sync pushes disabled");
         return Arc::new(NoSync);
     };
-    match PushSync::new(url, config.token.clone()) {
+    match PushSync::new(url, config.service_token.clone()) {
         Ok(push) => {
             tracing::info!(sync_push = true, "sync pushes enabled");
             Arc::new(Arc::new(push))
@@ -121,6 +128,40 @@ fn sync_sink(config: &Config) -> Arc<dyn SyncSink> {
             Arc::new(NoSync)
         }
     }
+}
+
+fn access_cache(config: &Config, store: &Store) -> anyhow::Result<AccessCache> {
+    let now = jiff::Timestamp::now().as_second();
+    let digest = home_app_auth::sha256_hex(config.token.expose());
+    store
+        .access_import_legacy(&digest, now)
+        .context("import legacy app token")?;
+    if let Some(path) = config.access_seed_file.as_deref() {
+        match std::fs::read(path) {
+            Ok(data) => match AccessSnapshot::parse(&data) {
+                Ok(snapshot) => {
+                    if store
+                        .access_import_seed(&snapshot, now)
+                        .context("import app token seed")?
+                    {
+                        tracing::info!("application access seed imported");
+                    }
+                }
+                Err(error) => tracing::warn!(%error, "application access seed is invalid"),
+            },
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => tracing::warn!(%error, "application access seed is unreadable"),
+        }
+    }
+    let snapshot = store
+        .access_snapshot()
+        .context("application access snapshot")?;
+    tracing::info!(
+        tokens = snapshot.tokens.len(),
+        revision = snapshot.revision,
+        "application access loaded"
+    );
+    Ok(AccessCache::new(snapshot))
 }
 
 fn vpn_access(config: &Config) -> VpnAccess {

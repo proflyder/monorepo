@@ -315,6 +315,51 @@ hairpin NAT для UDP, поэтому публичный `endpoint` из дом
 отвечает. Клиентский сертификат ocserv сервер не выпускает: приватный ключ
 CA хранится только у владельца.
 
+## Доступ приложения (модули)
+
+Источник правды — SQLite scheduler (schema v8): `app_tokens` хранит только
+sha256, имя, набор модулей и флаг owner; `access_meta` — монотонную ревизию.
+Токен создаётся только через admin API (значение показывается один раз), а
+старый общий токен при миграции импортируется как «Мама» с модулями обычного
+пользователя. Один owner-токен нельзя отозвать и нельзя лишить модуля
+`admin`.
+
+| Модуль | Эндпоинты |
+|---|---|
+| `base` | `SchedulerService/GetStatus`, `GET /v1/me`, `POST /v1/push/devices` (регистрация устройства) |
+| `home` | `SchedulerService/EnqueueTask`, `SchedulerService/CancelTask`, `GET /v1/catalog` (ha-control) |
+| `scenarios` | `ScenarioService/*` |
+| `alarms_timers` | `AlarmService/*`, `SchedulerService/*` по расписаниям и таймерам |
+| `intercom_call` | `IntercomService/*` |
+| `notifications` | `GET /v1/push/devices`, `/v1/push/devices/{remove,rename}`, `/v1/push/history*` |
+| `chat` | `mcp-gateway /v1/chat/*` (кроме сервисного `/v1/chat/alerts`) |
+| `vpn` | `POST /v1/vpn/profile`, `/v1/vpn/profile/remove` |
+| `system` | `mcp-gateway /v1/system/summary|hosts|k8s|devices` |
+| `infra_reports` | зарезервирован: app-эндпоинтов в PR1 нет |
+| `alerts` | фильтр alert-сообщений в `/v1/chat/messages` и `/v1/chat/events`; `/v1/chat/alerts` — service-token |
+| `admin` | `GET /v1/access/modules`, `GET/POST /v1/access/tokens`, `PATCH/DELETE /v1/access/tokens/{id}` |
+
+Любой действующий токен получает `base` неявно. Member-набор по умолчанию:
+`home, scenarios, alarms_timers, intercom_call, notifications`. Owner — все
+модули. Запрос без модуля получает `403
+{"error":"module_forbidden","module":"<id>"}`; без/с неверным токеном — `401`.
+
+Admin API:
+
+- `GET /v1/access/modules` — каталог `{id,title}`;
+- `GET /v1/access/tokens` — активные токены (без хэшей);
+- `POST /v1/access/tokens` `{name,modules}` → `{token,access}` (токен один раз);
+- `PATCH /v1/access/tokens/{id}` `{name?,modules?}`;
+- `DELETE /v1/access/tokens/{id}` — отзыв (owner запрещён);
+- `GET /v1/me` — `{name,modules,owner}` для текущего токена.
+
+Внутренний `GET /v1/access/snapshot` (service-token) отдаёт
+`{revision,tokens:[{id,name,sha256,owner,modules}]}`. Сервисы держат кэш 30 с и
+перечитывают его; после изменения токена scheduler также шлёт sync
+`entity=access` всем телефонам, чтобы приложение перечитало `/v1/me` раньше
+TTL. `service_token` живёт в том же секрете; до bootstrap он совпадает с
+legacy `token`, поэтому сервисные вызовы не ломаются.
+
 ## Конфигурация
 
 `SCHEDULER_*` и legacy fallback `ALARM_*`:
@@ -322,7 +367,9 @@ CA хранится только у владельца.
 ```text
 SCHEDULER_DB_PATH=scheduler.db              (ALARM_DB_PATH)
 SCHEDULER_LISTEN=127.0.0.1:8098             (ALARM_LISTEN; loopback default)
-SCHEDULER_TOKEN=...                         (или SCHEDULER_TOKEN_FILE)
+SCHEDULER_TOKEN=...                         (или SCHEDULER_TOKEN_FILE; legacy app token «Мама»)
+SCHEDULER_APP_TOKENS_FILE=...               (optional seed owner-токена из OpenBao)
+SCHEDULER_SERVICE_TOKEN_FILE=...            (optional service-token, fallback на legacy)
 SCHEDULER_MISSED_GRACE_SECONDS=600
 SCHEDULER_RING_WINDOW_SECONDS=900
 SCHEDULER_EVENT_RETENTION_SECONDS=2592000
@@ -342,7 +389,8 @@ Sync-пуши: если задан `SCHEDULER_PUSH_URL`, после каждой
 напоминания, таймера и сценария (RPC и тик движка) scheduler фоном шлёт
 `POST {url}/v1/push/sync` `{entity, op, id, originDeviceId}` с тем же
 bearer-токеном. `entity` — `alarms|reminders|timers|scenarios` (по `kind`
-расписания) и `notifications` (после изменения истории), `op` —
+расписания), `notifications` (после изменения истории) и `access` (после
+изменения токенов), `op` —
 `upsert|delete`. Необязательный `targetDeviceId` адресует пуш одному
 устройству (для истории); `originDeviceId` по-прежнему исключает инициатора. `originDeviceId` берётся из заголовка
 `Home-Device-Id` запроса; phone-push этому устройству пуш не шлёт. Ошибка

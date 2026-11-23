@@ -56,10 +56,22 @@ impl Config {
         read_file: &dyn Fn(&str) -> std::io::Result<Vec<u8>>,
     ) -> Result<Self, ConfigError> {
         let listen = value(getenv, "PUSH_LISTEN").unwrap_or_else(|| DEFAULT_LISTEN.to_owned());
-        let token = secret(read_file, getenv, "PUSH_TOKEN_FILE", true)?;
+        let token = secret_or_legacy(
+            read_file,
+            getenv,
+            "PUSH_SERVICE_TOKEN_FILE",
+            "PUSH_TOKEN_FILE",
+            true,
+        )?;
         let scheduler_url = value(getenv, "PUSH_SCHEDULER_URL")
             .ok_or(ConfigError::Required("PUSH_SCHEDULER_URL"))?;
-        let scheduler_token = secret(read_file, getenv, "PUSH_SCHEDULER_TOKEN_FILE", true)?;
+        let scheduler_token = secret_or_legacy(
+            read_file,
+            getenv,
+            "PUSH_SCHEDULER_SERVICE_TOKEN_FILE",
+            "PUSH_SCHEDULER_TOKEN_FILE",
+            true,
+        )?;
         let service_account = secret(read_file, getenv, "PUSH_FCM_SERVICE_ACCOUNT_FILE", false)?
             .expose()
             .to_owned();
@@ -107,6 +119,32 @@ fn value(getenv: &dyn Fn(&str) -> Option<String>, key: &str) -> Option<String> {
     let value = getenv(key).unwrap_or_default();
     let value = value.trim();
     (!value.is_empty()).then(|| value.to_owned())
+}
+
+fn secret_or_legacy(
+    read_file: &dyn Fn(&str) -> std::io::Result<Vec<u8>>,
+    getenv: &dyn Fn(&str) -> Option<String>,
+    primary: &'static str,
+    legacy: &'static str,
+    trim: bool,
+) -> Result<Token, ConfigError> {
+    let Some(path) = value(getenv, primary) else {
+        return secret(read_file, getenv, legacy, trim);
+    };
+    match read_file(&path) {
+        Ok(data) => {
+            let text = String::from_utf8_lossy(&data);
+            let value = if trim { text.trim() } else { text.as_ref() };
+            if value.is_empty() {
+                return Err(ConfigError::Empty(primary));
+            }
+            Ok(Token::new(value))
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            secret(read_file, getenv, legacy, trim)
+        }
+        Err(_) => Err(ConfigError::File(primary)),
+    }
 }
 
 fn secret(
@@ -159,6 +197,34 @@ mod tests {
         assert_eq!(config.timeout, DEFAULT_TIMEOUT);
         assert_eq!(config.service_account, "{\"project_id\":\"example\"}");
         assert!(format!("{config:?}").find("secret").is_none());
+    }
+
+    #[test]
+    fn a_service_token_falls_back_to_the_legacy_bearer() {
+        let pairs = [
+            ("PUSH_TOKEN_FILE", "/token"),
+            ("PUSH_SERVICE_TOKEN_FILE", "/service"),
+            ("PUSH_SCHEDULER_URL", "http://scheduler:8098"),
+            ("PUSH_SCHEDULER_TOKEN_FILE", "/scheduler"),
+            ("PUSH_FCM_SERVICE_ACCOUNT_FILE", "/sa"),
+        ];
+        let config = Config::load_from(&env(&pairs), &|path| {
+            Ok(match path {
+                "/service" => b"service-token\n".to_vec(),
+                _ => read(path)?,
+            })
+        })
+        .expect("config");
+        assert_eq!(config.token.expose(), "service-token");
+        let missing = Config::load_from(&env(&pairs), &|path| {
+            if path == "/service" {
+                Err(std::io::Error::from(std::io::ErrorKind::NotFound))
+            } else {
+                read(path)
+            }
+        })
+        .expect("fallback");
+        assert_eq!(missing.token.expose(), "secret");
     }
 
     #[test]

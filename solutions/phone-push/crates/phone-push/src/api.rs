@@ -72,12 +72,13 @@ pub struct SyncBody {
     pub target_device_id: Option<String>,
 }
 
-pub const SYNC_ENTITIES: [&str; 5] = [
+pub const SYNC_ENTITIES: [&str; 6] = [
     "alarms",
     "reminders",
     "timers",
     "scenarios",
     "notifications",
+    "access",
 ];
 pub const SYNC_OPS: [&str; 2] = ["upsert", "delete"];
 pub const MAX_SYNC_ID_CHARS: usize = 128;

@@ -43,10 +43,14 @@ spec:
               value: 0.0.0.0:8095
             - name: PUSH_TOKEN_FILE
               value: /run/secrets/phone-push/token
+            - name: PUSH_SERVICE_TOKEN_FILE
+              value: /run/secrets/phone-push/service_token
             - name: PUSH_SCHEDULER_URL
               value: http://scheduler.home-assistant.svc.cluster.local:8098
             - name: PUSH_SCHEDULER_TOKEN_FILE
               value: /run/secrets/phone-push/token
+            - name: PUSH_SCHEDULER_SERVICE_TOKEN_FILE
+              value: /run/secrets/phone-push/service_token
             - name: PUSH_FCM_SERVICE_ACCOUNT_FILE
               value: /run/secrets/phone-push/service_account_json
             - name: LOG_LEVEL
@@ -90,11 +94,6 @@ spec:
           secret:
             secretName: phone-push
             defaultMode: 0440
-            items:
-              - key: token
-                path: token
-              - key: service_account_json
-                path: service_account_json
 ---
 apiVersion: v1
 kind: Service

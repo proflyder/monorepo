@@ -43,6 +43,26 @@ mise run backup:verify [<id>] --dry-run|--yes
 через UI (HA backup) печатает `manual`. Restore не автоматизирован: вывод
 содержит `restore_doc`.
 
+App-токены (модули доступа) выпускаются после первого деплоя PR1:
+
+```bash
+mise run admin:app-token-bootstrap          # печатает owner-токен один раз
+mise run kubectl -- -n home-assistant annotate externalsecret scheduler-auth \
+  force-sync="$(date +%s)" --overwrite
+mise run kubectl -- -n home-assistant rollout restart deploy/scheduler
+```
+
+Принудительный `force-sync` нужен потому, что `scheduler-auth` обновляется
+ESO раз в час; без него pod перезапустится со старым секретом.
+
+Команда пишет в OpenBao `secret/k8s/home-assistant/scheduler-auth` только
+sha256 owner-токена (поле `app_tokens`) и `service_token`; старый `token`
+остаётся токеном «Мама» с обычными модулями; `service_token` при первом
+запуске копирует legacy-значение, чтобы старые сервисы не сломались, и
+ротируется отдельно. После рестарта scheduler импортирует seed, остальные
+сервисы подхватят snapshot в течение 30 с.
+Дальнейшие токены — через admin API (`/v1/access/tokens`) из приложения.
+
 Скрипты с секретами — только `mise run admin:*` (`mise tasks | grep admin:`),
 kubectl/helm — `mise run kubectl|helm -- …`. Разовая команда с kubeconfig:
 
