@@ -1,6 +1,7 @@
 package dev.proflyder.home.feature.push
 
 import android.content.Context
+import dev.proflyder.home.core.data.SyncSignalSink
 import dev.proflyder.home.core.runtime.AppStartable
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesIntoSet
@@ -21,6 +22,7 @@ class PushInbox internal constructor(
     private val notifications: PushNotifier,
     private val findPhone: FindPhoneController,
     private val history: NotificationHistoryRecorder,
+    private val sync: SyncSignalSink,
 ) : AppStartable {
     override fun start() {
         PushChannels.ensure(context)
@@ -40,6 +42,7 @@ class PushInbox internal constructor(
         when (message) {
             is PushMessage.Find -> ring(message)
             is PushMessage.Notify -> notify(message)
+            is PushMessage.Sync -> sync.publish(message.signal)
         }
     }
 
@@ -54,7 +57,7 @@ class PushInbox internal constructor(
         remember(message)
     }
 
-    private fun remember(message: PushMessage) {
+    private fun remember(message: PushMessage.Shown) {
         scope.launch { history.record(message) }
     }
 }

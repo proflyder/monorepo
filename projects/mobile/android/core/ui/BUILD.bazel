@@ -37,6 +37,7 @@ home_android_local_test(
     resources = glob(["src/test/resources/**"]),
     test_classes = [
         "dev.proflyder.home.core.ui.NoticeSwipeDismissTest",
+        "dev.proflyder.home.core.ui.PullToRefreshTest",
         "dev.proflyder.home.core.ui.ServerTextTest",
         "dev.proflyder.home.core.ui.UiTestSuite",
     ],
@@ -45,6 +46,9 @@ home_android_local_test(
         "@maven//:com_google_android_material_material",
         "@maven//:junit_junit",
         "@maven//:org_robolectric_robolectric",
+        "@maven//:androidx_coordinatorlayout_coordinatorlayout",
+        "@maven//:androidx_recyclerview_recyclerview",
+        "@maven//:androidx_swiperefreshlayout_swiperefreshlayout",
         "@maven//:org_jetbrains_kotlinx_kotlinx_serialization_core_jvm",
         "@maven//:org_jetbrains_kotlinx_kotlinx_serialization_json",
         "@maven//:org_jetbrains_kotlinx_kotlinx_serialization_json_jvm",

@@ -64,7 +64,6 @@ internal class UpcomingAlarmsViewModel(
 
     init {
         repository.items.onEach(::onAlarms).launchIn(viewModelScope)
-        repository.refreshOn(visibility.returned)
     }
 
     override fun handle(intent: UpcomingAlarmsIntent) {

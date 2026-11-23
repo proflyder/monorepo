@@ -1,5 +1,6 @@
 package dev.proflyder.home.feature.alarms.domain
 
+import dev.proflyder.home.core.testing.FakeSyncSignals
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.model.RepeatKind
@@ -89,5 +90,5 @@ class SaveAlarmLabelTest {
         private fun <T> unused(): Outcome<T> = Outcome.Failure(RemoteFailure.Storage(StorageReason.SETTINGS_WRITE))
     }
 
-    private fun RecordingRemote.saving(): SaveAlarm = SaveAlarm(StoreAlarmRepository(this, testLifetime()))
+    private fun RecordingRemote.saving(): SaveAlarm = SaveAlarm(StoreAlarmRepository(this, testLifetime(), FakeSyncSignals()))
 }

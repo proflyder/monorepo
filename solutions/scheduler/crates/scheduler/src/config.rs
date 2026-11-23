@@ -34,6 +34,7 @@ pub struct Config {
     pub scenario_execution: bool,
     pub vpn_settings_file: Option<PathBuf>,
     pub vpn_sync_token_file: Option<PathBuf>,
+    pub push_url: Option<String>,
 }
 
 impl std::fmt::Debug for Config {
@@ -54,6 +55,7 @@ impl std::fmt::Debug for Config {
             .field("scenario_execution", &self.scenario_execution)
             .field("vpn_settings_file", &self.vpn_settings_file)
             .field("vpn_sync_token_file", &self.vpn_sync_token_file)
+            .field("push_url", &self.push_url)
             .finish_non_exhaustive()
     }
 }
@@ -153,6 +155,9 @@ impl Config {
             vpn_settings_file: first(getenv, &["SCHEDULER_VPN_SETTINGS_FILE"]).map(PathBuf::from),
             vpn_sync_token_file: first(getenv, &["SCHEDULER_VPN_SYNC_TOKEN_FILE"])
                 .map(PathBuf::from),
+            push_url: first(getenv, &["SCHEDULER_PUSH_URL"])
+                .map(|value| value.trim().to_owned())
+                .filter(|value| !value.is_empty()),
         };
         config.validate()?;
         Ok(config)

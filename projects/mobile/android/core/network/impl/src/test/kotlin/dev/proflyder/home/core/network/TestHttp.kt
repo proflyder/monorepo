@@ -1,6 +1,7 @@
 package dev.proflyder.home.core.network
 
 import dev.proflyder.home.core.config.ConnectionSettingsStore
+import dev.proflyder.home.core.model.DeviceIdentity
 import dev.proflyder.home.core.runtime.AppVersion
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -25,7 +26,16 @@ internal fun testHttp(
     version = TestVersion,
     scope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
     io = Dispatchers.IO,
+    identity = TestIdentity,
 )
+
+internal object TestIdentity : DeviceIdentity {
+    const val ID: String = "test-device"
+
+    override suspend fun deviceId(): String = ID
+
+    override fun defaultName(): String = "Test"
+}
 
 internal object TestVersion : AppVersion {
     override val name: String = "test"

@@ -34,7 +34,7 @@ internal class RemindersFragment :
             content = binding.remindersList,
             errorText = binding.remindersErrorText,
         )
-        binding.remindersRefresh.setupPullToRefresh { dispatch(RemindersIntent.Refresh(RefreshMode.HARD)) }
+        binding.remindersRefresh.setupPullToRefresh(binding.remindersList) { dispatch(RemindersIntent.Refresh(RefreshMode.HARD)) }
         binding.remindersRetry.setOnClickListener { dispatch(RemindersIntent.Refresh(RefreshMode.HARD)) }
         binding.remindersAdd.setOnClickListener { dispatch(RemindersIntent.Add) }
         render({ it.load to it.reminders.isNotEmpty() }) { (load, hasItems) -> renderLoad(states, load, hasItems) }

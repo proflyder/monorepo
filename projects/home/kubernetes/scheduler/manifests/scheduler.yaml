@@ -70,6 +70,8 @@ spec:
               value: "600"
             - name: SCENARIO_EXECUTION
               value: "true"
+            - name: SCHEDULER_PUSH_URL
+              value: http://phone-push.home-assistant.svc.cluster.local:8095
           ports:
             - name: api
               containerPort: 8098

@@ -2,8 +2,11 @@ package dev.proflyder.home.feature.reminders.data
 
 import dev.proflyder.home.core.data.EntitySource
 import dev.proflyder.home.core.data.EntityStore
+import dev.proflyder.home.core.data.EntitySync
 import dev.proflyder.home.core.data.FeatureLifetime
 import dev.proflyder.home.core.data.RefreshMode
+import dev.proflyder.home.core.data.SyncEntity
+import dev.proflyder.home.core.data.SyncSignals
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.Schedule
 import dev.proflyder.home.core.model.map
@@ -20,8 +23,10 @@ internal class StoreReminderRepository private constructor(
     private val store: EntityStore<String, Schedule>,
 ) : ReminderRepository, EntitySource<String, Schedule> by store {
     @Inject
-    constructor(remote: ReminderRemote, lifetime: FeatureLifetime) :
-        this(remote, EntityStore(lifetime.scope, Schedule::id, ReminderOrder, remote::list))
+    constructor(remote: ReminderRemote, lifetime: FeatureLifetime, signals: SyncSignals) :
+        this(remote, EntityStore(lifetime.scope, Schedule::id, ReminderOrder, remote::list)) {
+        EntitySync(store, SyncEntity.REMINDERS, remote::get).follow(signals, lifetime.scope)
+    }
 
     init {
         store.refresh(RefreshMode.SOFT)

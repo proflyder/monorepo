@@ -10,7 +10,6 @@ import dev.proflyder.home.core.ui.Notices
 import dev.proflyder.home.core.ui.applyScrollBottomInset
 import dev.proflyder.home.core.ui.fabClearance
 import dev.proflyder.home.core.ui.liftAboveBottomInsets
-import dev.proflyder.home.core.ui.setupPullToRefresh
 import dev.proflyder.home.feature.alarms.UpcomingAlarmsSection
 import dev.proflyder.home.feature.control.SpeedDialItem
 import dev.proflyder.home.feature.control.impl.R
@@ -40,7 +39,7 @@ internal class ControlFragment :
         val dial = SpeedDialOverlay(binding.controlRoot, binding.controlQuickFab, ::dispatch).also { speedDial = it }
         binding.controlList.addOnScrollListener(FabOnScroll())
         addBackCallback(dialBack)
-        binding.controlRefresh.setupPullToRefresh { dispatch(ControlIntent.Refresh) }
+        wirePullToRefresh(binding) { dispatch(ControlIntent.Refresh) }
         binding.controlRetry.setOnClickListener { dispatch(ControlIntent.Refresh) }
         binding.controlOpenConnection.setOnClickListener { dispatch(ControlIntent.OpenConnection) }
         render(::controlListInputOf, list::render)

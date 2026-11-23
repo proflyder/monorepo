@@ -8,6 +8,7 @@ use serde_json::{Value, json};
 
 pub const FIND_TYPE: &str = "phone_find";
 pub const NOTIFY_TYPE: &str = "phone_notify";
+pub const SYNC_TYPE: &str = "sync";
 pub const NOTIFICATION_CHANNEL: &str = "home_notifications";
 
 #[derive(Debug, thiserror::Error)]
@@ -118,6 +119,11 @@ pub enum Message {
         body: String,
         deep_link: Option<String>,
     },
+    Sync {
+        entity: String,
+        op: String,
+        id: String,
+    },
 }
 
 impl Message {
@@ -126,6 +132,7 @@ impl Message {
         match self {
             Self::Find { .. } => FIND_TYPE,
             Self::Notification { .. } => NOTIFY_TYPE,
+            Self::Sync { .. } => SYNC_TYPE,
         }
     }
 
@@ -137,6 +144,13 @@ impl Message {
                     "token": token,
                     "android": {"priority": "high"},
                     "data": {"type": FIND_TYPE, "reason": reason},
+                }
+            }),
+            Self::Sync { entity, op, id } => json!({
+                "message": {
+                    "token": token,
+                    "android": {"priority": "normal", "collapse_key": format!("{SYNC_TYPE}-{entity}")},
+                    "data": {"type": SYNC_TYPE, "entity": entity, "op": op, "id": id},
                 }
             }),
             Self::Notification {
@@ -347,6 +361,23 @@ mod tests {
         assert_eq!(message["data"]["type"], FIND_TYPE);
         assert_eq!(message["data"]["reason"], "Рикардо");
         assert_eq!(message["token"], "token");
+    }
+
+    #[test]
+    fn a_sync_message_is_data_only_and_carries_no_content() {
+        let payload = Message::Sync {
+            entity: "alarms".to_owned(),
+            op: "upsert".to_owned(),
+            id: "alarm-1".to_owned(),
+        }
+        .payload("token");
+        let message = &payload["message"];
+        assert!(message.get("notification").is_none());
+        assert!(message["android"].get("notification").is_none());
+        assert_eq!(
+            message["data"],
+            json!({"type": SYNC_TYPE, "entity": "alarms", "op": "upsert", "id": "alarm-1"})
+        );
     }
 
     #[test]

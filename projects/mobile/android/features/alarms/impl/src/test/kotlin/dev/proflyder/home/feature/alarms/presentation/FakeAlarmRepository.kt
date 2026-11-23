@@ -1,5 +1,6 @@
 package dev.proflyder.home.feature.alarms.presentation
 
+import dev.proflyder.home.core.testing.FakeSyncSignals
 import dev.proflyder.home.core.data.FeatureLifetime
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RemoteFailure
@@ -14,6 +15,7 @@ import kotlinx.coroutines.SupervisorJob
 
 internal class FakeAlarmRemote(var alarms: List<Schedule> = emptyList()) : AlarmRemote {
     var listCalls = 0
+    val gets = mutableListOf<String>()
     var failure: RemoteFailure? = null
     val createKeys = mutableListOf<String>()
     private var created = 0
@@ -23,7 +25,10 @@ internal class FakeAlarmRemote(var alarms: List<Schedule> = emptyList()) : Alarm
         return failure?.let { Outcome.Failure(it) } ?: Outcome.Success(alarms)
     }
 
-    override suspend fun get(id: String): Outcome<Schedule> = Outcome.Success(alarms.first { it.id == id })
+    override suspend fun get(id: String): Outcome<Schedule> {
+        gets += id
+        return Outcome.Success(alarms.first { it.id == id })
+    }
 
     override suspend fun create(draft: AlarmDraft, idempotencyKey: String): Outcome<Schedule> {
         createKeys += idempotencyKey
@@ -55,4 +60,5 @@ internal class FakeAlarmRemote(var alarms: List<Schedule> = emptyList()) : Alarm
 
 internal fun testLifetime(): FeatureLifetime = FeatureLifetime(CoroutineScope(Dispatchers.Unconfined + SupervisorJob()))
 
-internal fun FakeAlarmRemote.repository(): StoreAlarmRepository = StoreAlarmRepository(this, testLifetime())
+internal fun FakeAlarmRemote.repository(signals: FakeSyncSignals = FakeSyncSignals()): StoreAlarmRepository =
+    StoreAlarmRepository(this, testLifetime(), signals)

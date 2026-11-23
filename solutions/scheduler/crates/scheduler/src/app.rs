@@ -12,6 +12,7 @@ use crate::config::Config;
 use crate::domain::SystemClock;
 use crate::engine::{DEFAULT_PURGE_INTERVAL, Engine};
 use crate::store::{Config as StoreConfig, Store};
+use crate::sync::{NoSync, PushSync, SyncSink};
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -28,7 +29,9 @@ pub async fn run() -> anyhow::Result<()> {
     let store = Arc::new(
         Store::open(&config.db_path, store_config(&config)).context("open scheduler store")?,
     );
-    let engine = Engine::new(clock.clone(), config.tick_interval, DEFAULT_PURGE_INTERVAL);
+    let sync = sync_sink(&config);
+    let engine = Engine::new(clock.clone(), config.tick_interval, DEFAULT_PURGE_INTERVAL)
+        .with_sync(Arc::clone(&sync));
     let status_engine = engine.clone();
     let service = Service::new(
         Arc::clone(&store),
@@ -37,7 +40,8 @@ pub async fn run() -> anyhow::Result<()> {
         Arc::new(move || status_engine.status()),
         config.allowed_consumers.clone(),
     )
-    .with_scenario_execution(config.scenario_execution);
+    .with_scenario_execution(config.scenario_execution)
+    .with_sync(sync);
     let vpn_access = vpn_access(&config);
     let router = api::router(
         service.clone(),
@@ -99,6 +103,23 @@ pub async fn run() -> anyhow::Result<()> {
     tracing::info!(event = "stopped", "scheduler stopped");
     serve_result.context("serve")?;
     Ok(())
+}
+
+fn sync_sink(config: &Config) -> Arc<dyn SyncSink> {
+    let Some(url) = config.push_url.as_deref() else {
+        tracing::info!(sync_push = false, "sync pushes disabled");
+        return Arc::new(NoSync);
+    };
+    match PushSync::new(url, config.token.clone()) {
+        Ok(push) => {
+            tracing::info!(sync_push = true, "sync pushes enabled");
+            Arc::new(Arc::new(push))
+        }
+        Err(error) => {
+            tracing::warn!(%error, "sync pushes disabled");
+            Arc::new(NoSync)
+        }
+    }
 }
 
 fn vpn_access(config: &Config) -> VpnAccess {

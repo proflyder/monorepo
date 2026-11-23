@@ -4,7 +4,6 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dev.proflyder.home.core.config.ConnectionSettingsStore
-import dev.proflyder.home.core.model.Clock
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.model.ServerClock
@@ -71,9 +70,7 @@ internal class TimersViewModel(
     private val serverClock: ServerClock,
     private val settings: ConnectionSettingsStore,
     private val defaultLabel: String,
-    clock: Clock,
 ) : StateViewModel<TimersUiState, TimersIntent, TimersEvent>(TimersUiState()) {
-    private val refreshPolicy = TimerRefreshPolicy(clock)
     private val actions = ExclusiveActions(
         scope = viewModelScope,
         onBusy = { id -> updateState { copy(busyId = id) } },
@@ -86,7 +83,6 @@ internal class TimersViewModel(
     init {
         combine(repository.items, repository.load, ::onStore).launchIn(viewModelScope)
         repository.backgroundFailures().onEach { emit(TimersEvent.Failure(it)) }.launchIn(viewModelScope)
-        visibility.returned.onEach { refresh(RefreshMode.SOFT) }.launchIn(viewModelScope)
         countdownWhileVisible()
     }
 
@@ -113,11 +109,9 @@ internal class TimersViewModel(
 
     private fun tick() {
         updateState { copy(rows = timers.toRows()) }
-        if (refreshPolicy.due(currentState.rows)) refresh(RefreshMode.SOFT)
     }
 
     private fun refresh(mode: RefreshMode) {
-        refreshPolicy.refreshed()
         repository.refresh(mode)
     }
 
@@ -169,7 +163,6 @@ class TimersViewModelSource internal constructor(
     private val scope: TimersFeatureScope,
     private val serverClock: ServerClock,
     private val settings: ConnectionSettingsStore,
-    private val clock: Clock,
     private val context: Context,
 ) : ViewModelSource {
     override fun create(): ViewModel = scope.viewModel(::build)
@@ -180,6 +173,5 @@ class TimersViewModelSource internal constructor(
         serverClock = serverClock,
         settings = settings,
         defaultLabel = context.getString(R.string.timers_default_label),
-        clock = clock,
     )
 }

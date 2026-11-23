@@ -1,5 +1,8 @@
 package dev.proflyder.home.feature.push
 
+import dev.proflyder.home.core.data.SyncEntity
+import dev.proflyder.home.core.data.SyncOp
+import dev.proflyder.home.core.data.SyncSignal
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -7,6 +10,26 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PushPayloadsTest {
+    @Test
+    fun aSyncDataMessageBecomesASyncSignalWithoutContent() {
+        val message = PushPayloads.decode(
+            data = mapOf("type" to "sync", "entity" to "reminders", "op" to "delete", "id" to " r-1 "),
+            notificationTitle = null,
+            notificationBody = null,
+        )
+        assertEquals(PushMessage.Sync(SyncSignal.Changed(SyncEntity.REMINDERS, SyncOp.DELETE, "r-1")), message)
+    }
+
+    @Test
+    fun anUnknownSyncEntityIsDropped() {
+        val message = PushPayloads.decode(
+            data = mapOf("type" to "sync", "entity" to "secrets", "op" to "upsert"),
+            notificationTitle = null,
+            notificationBody = null,
+        )
+        assertEquals(null, message)
+    }
+
     @Test
     fun aFindDataMessageIsDecodedWithItsReason() {
         val message = PushPayloads.decode(

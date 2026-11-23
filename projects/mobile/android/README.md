@@ -290,12 +290,35 @@ platform/android/         Bazel macros, Metro wiring, APK gate, signing, detekt 
   `render(state)` stays optional for tiny screens. Derived data (rows,
   selection summary, speed dial) is computed in `derive(previous, next)` of the
   ViewModel and stored in the state, recomputed only when its sources change.
-- Loading is explicit: a feature repository starts its store sync when its
-  scope is created, and a list ViewModel asks the repository to refresh on
-  `visibility.returned` (the screen came back: tab switch, back from an editor,
-  app back to foreground). `ScreenVisibility` is
-  fed by the screen's view lifecycle, never by `subscriptionCount`; tickers use
-  `visibility.visible`.
+- Loading is explicit: a feature repository loads its store once when its
+  scope is created; showing a screen or switching tabs never makes a request,
+  the screen reads the store. The server is asked again only on pull-to-refresh,
+  on a `SyncSignal` (`core/data` `SyncSignals`) and after the app's own
+  mutations (they update the store). `EntitySync` connects a store to the
+  signals: `Changed(entity, upsert, id)` fetches that one entity (or reloads
+  the list when the feature has no single fetch, e.g. timers),
+  `Changed(entity, delete, id)` removes it locally, `Stale` reloads the list.
+  Signals come from silent FCM pushes (`type=sync`, decoded by `PushInbox`,
+  sent by the scheduler after every mutation and engine tick, never to the
+  device named in `Home-Device-Id`) and from `AppSyncSignals`, which emits
+  `Stale` when the app returns from background after `StalenessPolicy`
+  (5 minutes). A signal reaches only live feature scopes; a scope created later
+  loads fresh data anyway. The control catalog (device states owned by Home
+  Assistant, no change feed) keeps its foreground polling. `ScreenVisibility`
+  is fed by the screen's view lifecycle, never by `subscriptionCount`; tickers
+  use `visibility.visible`.
+- Pull-to-refresh names its scrolling views: `setupPullToRefresh(list,
+  appBar) { }` installs `OnChildScrollUpCallback`, so a `SwipeRefreshLayout`
+  whose direct child is a wrapper (`FrameLayout`, `CoordinatorLayout` that does
+  not forward nested scroll) still refreshes only at the top of the list. A
+  `RecyclerView` is at the top when its first laid-out child is adapter
+  position 0 and starts at `paddingTop` (`isAtTop()`); `canScrollVertically`
+  is not used for lists because a zero-height first row (the empty hub on the
+  home screen) makes its offset estimate positive at the very top.
+- Sticky section headers (`StickySectionHeaders`) pin to the visible top of
+  the list (`paddingTop` with `clipToPadding`, otherwise the list edge), fill
+  the whole width with the window background and are pushed out by the next
+  header.
 - Results between screens and sheets are typed: `object X : ResultKey<T>(T.serializer())`
   with a `@Serializable` value; the sender calls `setResult(X, value)`, the
   host registers `onResult(X) { value -> Intent }` in `onScreenCreate`

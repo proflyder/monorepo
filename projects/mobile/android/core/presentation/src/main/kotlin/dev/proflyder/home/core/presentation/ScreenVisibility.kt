@@ -18,8 +18,6 @@ class ScreenVisibility {
 
     val shown: Flow<Unit> = shows.filter { it > 0 }.map { }
 
-    val returned: Flow<Unit> = shows.filter { it > 1 }.map { }
-
     fun started() {
         observers += 1
         if (observers > 1) return

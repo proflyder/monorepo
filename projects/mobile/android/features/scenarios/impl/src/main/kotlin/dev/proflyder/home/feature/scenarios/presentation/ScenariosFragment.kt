@@ -35,7 +35,7 @@ internal class ScenariosFragment :
             content = scenariosList,
             errorText = scenariosErrorText,
         )
-        scenariosRefresh.setupPullToRefresh { dispatch(ScenariosIntent.Refresh(RefreshMode.HARD)) }
+        scenariosRefresh.setupPullToRefresh(scenariosList) { dispatch(ScenariosIntent.Refresh(RefreshMode.HARD)) }
         scenariosRetry.setOnClickListener { dispatch(ScenariosIntent.Refresh(RefreshMode.HARD)) }
         scenariosOpenConnection.setOnClickListener { dispatch(ScenariosIntent.OpenConnection) }
         scenariosAdd.setOnClickListener { dispatch(ScenariosIntent.Add) }

@@ -6,6 +6,7 @@ import org.junit.runners.Suite
 @RunWith(Suite::class)
 @Suite.SuiteClasses(
     EntityStoreTest::class,
+    EntitySyncTest::class,
     FeatureScopeTest::class,
 )
 class AllDataTests

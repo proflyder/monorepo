@@ -6,8 +6,9 @@ use home_sqlite::SqliteError;
 use proto::ScenarioService;
 use proto::SchedulerService;
 
-use crate::domain::Clock;
+use crate::domain::{Clock, SyncChange, SyncEntity, SyncOp};
 use crate::store::{Store, StoreError};
+use crate::sync::{self, Announcement, NoSync, SyncSink};
 
 use super::convert::{
     ack_outcome, create_view_to_scenario, create_view_to_schedule, event_to_proto,
@@ -31,6 +32,7 @@ pub struct Service {
     engine: Arc<dyn Fn() -> EngineStatus + Send + Sync>,
     allowed: Vec<String>,
     scenario_execution: bool,
+    sync: Arc<dyn SyncSink>,
 }
 
 impl std::fmt::Debug for Service {
@@ -64,6 +66,7 @@ impl Service {
             engine,
             allowed,
             scenario_execution: false,
+            sync: Arc::new(NoSync),
         }
     }
 
@@ -71,6 +74,48 @@ impl Service {
     pub fn with_scenario_execution(mut self, supported: bool) -> Self {
         self.scenario_execution = supported;
         self
+    }
+
+    #[must_use]
+    pub fn with_sync(mut self, sync: Arc<dyn SyncSink>) -> Self {
+        self.sync = sync;
+        self
+    }
+
+    pub fn announce(&self, ctx: &RequestContext, change: impl Into<Option<SyncChange>>) {
+        let Some(change) = change.into() else {
+            return;
+        };
+        let origin = sync::origin(
+            ctx.header(sync::ORIGIN_HEADER)
+                .and_then(|value| value.to_str().ok()),
+        );
+        self.sync.publish(Announcement { change, origin });
+    }
+
+    pub async fn delete_schedule_synced(
+        &self,
+        ctx: &RequestContext,
+        id: String,
+    ) -> Result<bool, ConnectError> {
+        let now = self.now_unix();
+        let target = id.clone();
+        let (kind, deleted) = self
+            .store_call(move |store| {
+                let kind = store
+                    .get_schedule(&target)
+                    .ok()
+                    .map(|schedule| schedule.kind);
+                store
+                    .delete_schedule(&target, now)
+                    .map(|deleted| (kind, deleted))
+            })
+            .await?;
+        let change = kind
+            .filter(|_| deleted)
+            .and_then(|kind| SyncChange::schedule(kind, SyncOp::Delete, &id));
+        self.announce(ctx, change);
+        Ok(deleted)
     }
 
     #[must_use]
@@ -131,6 +176,10 @@ impl SchedulerService for Service {
         let created = self
             .store_call(move |store| store.create_schedule(&schedule, &key, now))
             .await?;
+        self.announce(
+            &ctx,
+            SyncChange::schedule(created.kind, SyncOp::Upsert, &created.id),
+        );
         response(proto::CreateScheduleResponse {
             schedule: schedule_to_proto(&created, &zone).into(),
             ..proto::CreateScheduleResponse::default()
@@ -201,6 +250,10 @@ impl SchedulerService for Service {
         let updated = self
             .store_call(move |store| store.update_schedule(&schedule, expected_revision, now))
             .await?;
+        self.announce(
+            &ctx,
+            SyncChange::schedule(updated.kind, SyncOp::Upsert, &updated.id),
+        );
         response(proto::UpdateScheduleResponse {
             schedule: schedule_to_proto(&updated, &zone).into(),
             ..proto::UpdateScheduleResponse::default()
@@ -209,14 +262,12 @@ impl SchedulerService for Service {
 
     async fn delete_schedule<'a>(
         &'a self,
-        _ctx: RequestContext,
+        ctx: RequestContext,
         request: ServiceRequest<'_, proto::DeleteScheduleRequest>,
     ) -> ServiceResult<impl connectrpc::Encodable<proto::DeleteScheduleResponse> + Send + use<'a>>
     {
-        let id = request.id.to_owned();
-        let now = self.now_unix();
         let deleted = self
-            .store_call(move |store| store.delete_schedule(&id, now))
+            .delete_schedule_synced(&ctx, request.id.to_owned())
             .await?;
         response(proto::DeleteScheduleResponse {
             deleted,
@@ -237,6 +288,10 @@ impl SchedulerService for Service {
         let schedule = self
             .store_call(move |store| store.set_schedule_enabled(&id, enabled, now))
             .await?;
+        self.announce(
+            &ctx,
+            SyncChange::schedule(schedule.kind, SyncOp::Upsert, &schedule.id),
+        );
         response(proto::SetScheduleEnabledResponse {
             schedule: schedule_to_proto(&schedule, &zone).into(),
             ..proto::SetScheduleEnabledResponse::default()
@@ -256,6 +311,10 @@ impl SchedulerService for Service {
         let (schedule, event) = self
             .store_call(move |store| store.snooze_schedule(&id, minutes, now))
             .await?;
+        self.announce(
+            &ctx,
+            SyncChange::schedule(schedule.kind, SyncOp::Upsert, &schedule.id),
+        );
         response(proto::SnoozeScheduleResponse {
             schedule: schedule_to_proto(&schedule, &zone).into(),
             event: event_to_proto(&event).into(),
@@ -275,6 +334,10 @@ impl SchedulerService for Service {
         let schedule = self
             .store_call(move |store| store.stop_schedule(&id, now))
             .await?;
+        self.announce(
+            &ctx,
+            SyncChange::schedule(schedule.kind, SyncOp::Upsert, &schedule.id),
+        );
         response(proto::StopScheduleResponse {
             schedule: schedule_to_proto(&schedule, &zone).into(),
             ..proto::StopScheduleResponse::default()
@@ -294,6 +357,10 @@ impl SchedulerService for Service {
         let schedule = self
             .store_call(move |store| store.skip_next_occurrence(&id, now))
             .await?;
+        self.announce(
+            &ctx,
+            SyncChange::schedule(schedule.kind, SyncOp::Upsert, &schedule.id),
+        );
         response(proto::SkipScheduleOccurrenceResponse {
             schedule: schedule_to_proto(&schedule, &zone).into(),
             ..proto::SkipScheduleOccurrenceResponse::default()
@@ -302,7 +369,7 @@ impl SchedulerService for Service {
 
     async fn start_timer<'a>(
         &'a self,
-        _ctx: RequestContext,
+        ctx: RequestContext,
         request: ServiceRequest<'_, proto::StartTimerRequest>,
     ) -> ServiceResult<impl connectrpc::Encodable<proto::StartTimerResponse> + Send + use<'a>> {
         let label = request.label.to_owned();
@@ -312,6 +379,7 @@ impl SchedulerService for Service {
         let timer = self
             .store_call(move |store| store.start_timer(&label, duration_seconds, &key, now))
             .await?;
+        self.announce(&ctx, SyncChange::upsert(SyncEntity::Timers, &timer.id));
         response(proto::StartTimerResponse {
             timer: timer_to_proto(&timer).into(),
             ..proto::StartTimerResponse::default()
@@ -348,7 +416,7 @@ impl SchedulerService for Service {
 
     async fn pause_timer<'a>(
         &'a self,
-        _ctx: RequestContext,
+        ctx: RequestContext,
         request: ServiceRequest<'_, proto::PauseTimerRequest>,
     ) -> ServiceResult<impl connectrpc::Encodable<proto::PauseTimerResponse> + Send + use<'a>> {
         let id = request.id.to_owned();
@@ -356,6 +424,7 @@ impl SchedulerService for Service {
         let timer = self
             .store_call(move |store| store.pause_timer(&id, now))
             .await?;
+        self.announce(&ctx, SyncChange::upsert(SyncEntity::Timers, &timer.id));
         response(proto::PauseTimerResponse {
             timer: timer_to_proto(&timer).into(),
             ..proto::PauseTimerResponse::default()
@@ -364,7 +433,7 @@ impl SchedulerService for Service {
 
     async fn resume_timer<'a>(
         &'a self,
-        _ctx: RequestContext,
+        ctx: RequestContext,
         request: ServiceRequest<'_, proto::ResumeTimerRequest>,
     ) -> ServiceResult<impl connectrpc::Encodable<proto::ResumeTimerResponse> + Send + use<'a>>
     {
@@ -373,6 +442,7 @@ impl SchedulerService for Service {
         let timer = self
             .store_call(move |store| store.resume_timer(&id, now))
             .await?;
+        self.announce(&ctx, SyncChange::upsert(SyncEntity::Timers, &timer.id));
         response(proto::ResumeTimerResponse {
             timer: timer_to_proto(&timer).into(),
             ..proto::ResumeTimerResponse::default()
@@ -381,7 +451,7 @@ impl SchedulerService for Service {
 
     async fn cancel_timer<'a>(
         &'a self,
-        _ctx: RequestContext,
+        ctx: RequestContext,
         request: ServiceRequest<'_, proto::CancelTimerRequest>,
     ) -> ServiceResult<impl connectrpc::Encodable<proto::CancelTimerResponse> + Send + use<'a>>
     {
@@ -390,6 +460,7 @@ impl SchedulerService for Service {
         let timer = self
             .store_call(move |store| store.cancel_timer(&id, now))
             .await?;
+        self.announce(&ctx, SyncChange::delete(SyncEntity::Timers, &timer.id));
         response(proto::CancelTimerResponse {
             timer: timer_to_proto(&timer).into(),
             ..proto::CancelTimerResponse::default()
@@ -559,7 +630,7 @@ fn check_scenario_kinds(
 impl ScenarioService for Service {
     async fn create_scenario<'a>(
         &'a self,
-        _ctx: RequestContext,
+        ctx: RequestContext,
         request: ServiceRequest<'_, proto::CreateScenarioRequest>,
     ) -> ServiceResult<impl connectrpc::Encodable<proto::CreateScenarioResponse> + Send + use<'a>>
     {
@@ -576,6 +647,7 @@ impl ScenarioService for Service {
         let created = self
             .store_call(move |store| store.create_scenario(&scenario, &key, now))
             .await?;
+        self.announce(&ctx, SyncChange::upsert(SyncEntity::Scenarios, &created.id));
         response(proto::CreateScenarioResponse {
             scenario: scenario_to_proto(&created).into(),
             ..proto::CreateScenarioResponse::default()
@@ -616,7 +688,7 @@ impl ScenarioService for Service {
 
     async fn update_scenario<'a>(
         &'a self,
-        _ctx: RequestContext,
+        ctx: RequestContext,
         request: ServiceRequest<'_, proto::UpdateScenarioRequest>,
     ) -> ServiceResult<impl connectrpc::Encodable<proto::UpdateScenarioResponse> + Send + use<'a>>
     {
@@ -645,6 +717,7 @@ impl ScenarioService for Service {
         let updated = self
             .store_call(move |store| store.update_scenario(&scenario, expected_revision, now))
             .await?;
+        self.announce(&ctx, SyncChange::upsert(SyncEntity::Scenarios, &updated.id));
         response(proto::UpdateScenarioResponse {
             scenario: scenario_to_proto(&updated).into(),
             ..proto::UpdateScenarioResponse::default()
@@ -653,15 +726,20 @@ impl ScenarioService for Service {
 
     async fn delete_scenario<'a>(
         &'a self,
-        _ctx: RequestContext,
+        ctx: RequestContext,
         request: ServiceRequest<'_, proto::DeleteScenarioRequest>,
     ) -> ServiceResult<impl connectrpc::Encodable<proto::DeleteScenarioResponse> + Send + use<'a>>
     {
         let id = request.id.to_owned();
         let now = self.now_unix();
+        let target = id.clone();
         let deleted = self
-            .store_call(move |store| store.delete_scenario(&id, now))
+            .store_call(move |store| store.delete_scenario(&target, now))
             .await?;
+        self.announce(
+            &ctx,
+            deleted.then(|| SyncChange::delete(SyncEntity::Scenarios, &id)),
+        );
         response(proto::DeleteScenarioResponse {
             deleted,
             ..proto::DeleteScenarioResponse::default()
@@ -670,7 +748,7 @@ impl ScenarioService for Service {
 
     async fn set_scenario_enabled<'a>(
         &'a self,
-        _ctx: RequestContext,
+        ctx: RequestContext,
         request: ServiceRequest<'_, proto::SetScenarioEnabledRequest>,
     ) -> ServiceResult<impl connectrpc::Encodable<proto::SetScenarioEnabledResponse> + Send + use<'a>>
     {
@@ -680,6 +758,10 @@ impl ScenarioService for Service {
         let scenario = self
             .store_call(move |store| store.set_scenario_enabled(&id, enabled, now))
             .await?;
+        self.announce(
+            &ctx,
+            SyncChange::upsert(SyncEntity::Scenarios, &scenario.id),
+        );
         response(proto::SetScenarioEnabledResponse {
             scenario: scenario_to_proto(&scenario).into(),
             ..proto::SetScenarioEnabledResponse::default()

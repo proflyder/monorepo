@@ -1,8 +1,8 @@
 use rusqlite::{Transaction, params};
 
 use crate::domain::{
-    EventAction, EventState, SourceKind, TimerState, classify_due, missed_grace_detail,
-    timer_trigger_key,
+    EventAction, EventState, ScheduleKind, SourceKind, SyncChange, SyncEntity, SyncOp, TimerState,
+    classify_due, missed_grace_detail, timer_trigger_key,
 };
 
 use super::event::{EventInsert, insert_event, release_expired_leases};
@@ -13,13 +13,21 @@ use super::{Store, StoreError, bool_to_int};
 const TICK_BATCH_SIZE: i64 = 200;
 const MAX_TICK_BATCHES: usize = 10;
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct TickStats {
     pub fired: i64,
     pub skipped: i64,
     pub timers: i64,
     pub expired: i64,
     pub leases_released: i64,
+    pub changes: std::collections::BTreeSet<SyncChange>,
+}
+
+impl TickStats {
+    fn schedule_changed(&mut self, kind: ScheduleKind, id: &str) {
+        self.changes
+            .extend(SyncChange::schedule(kind, SyncOp::Upsert, id));
+    }
 }
 
 impl Store {
@@ -31,7 +39,7 @@ impl Store {
                 ..TickStats::default()
             };
             expire_ring_windows(tx, now_unix, cfg.ring_window, &mut stats)?;
-            activate_snoozes(tx, now_unix, cfg.ring_window)?;
+            activate_snoozes(tx, now_unix, cfg.ring_window, &mut stats)?;
             for _ in 0..MAX_TICK_BATCHES {
                 let sql = format!(
                     "SELECT {SCHEDULE_COLS} FROM schedules
@@ -110,6 +118,9 @@ impl Store {
                         ],
                     )?;
                     stats.timers += 1;
+                    stats
+                        .changes
+                        .insert(SyncChange::upsert(SyncEntity::Timers, &timer.id));
                 }
                 if i64::try_from(count).unwrap_or(0) < TICK_BATCH_SIZE {
                     break;
@@ -152,6 +163,7 @@ fn expire_ring_windows(
             )?;
             if closed {
                 stats.expired += 1;
+                stats.schedule_changed(schedule.kind, &schedule.id);
             }
         }
         if i64::try_from(count).unwrap_or(0) < TICK_BATCH_SIZE {
@@ -165,6 +177,7 @@ fn activate_snoozes(
     tx: &Transaction<'_>,
     now_unix: i64,
     ring_window: i64,
+    stats: &mut TickStats,
 ) -> Result<(), StoreError> {
     let mut statement = tx.prepare(
         "SELECT DISTINCT source_id, occurrence_unix FROM events
@@ -182,7 +195,7 @@ fn activate_snoozes(
         .collect::<Result<Vec<_>, _>>()?;
     drop(statement);
     for (source_id, occurrence) in items {
-        tx.execute(
+        let activated = tx.execute(
             "UPDATE schedules SET active_occurrence_unix=?,
                 active_until_unix=?, snooze_until_unix=0, revision=revision+1, updated_unix=?
                 WHERE id=? AND snooze_until_unix>0",
@@ -193,6 +206,17 @@ fn activate_snoozes(
                 source_id,
             ],
         )?;
+        if activated > 0 {
+            let kind = tx.query_row(
+                "SELECT kind FROM schedules WHERE id=?",
+                params![source_id],
+                |row| row.get::<_, i32>(0),
+            )?;
+            stats.schedule_changed(
+                ScheduleKind::from_code(kind).unwrap_or_default(),
+                &source_id,
+            );
+        }
     }
     Ok(())
 }
@@ -209,6 +233,7 @@ fn tick_schedule(
     if occurrence <= 0 {
         return Ok(());
     }
+    stats.schedule_changed(schedule.kind, &schedule.id);
     if schedule.active_occurrence_unix > 0 && schedule.active_until_unix > now_unix {
         let (next, exhausted) = fast_forward(schedule, now_unix)?;
         return advance_schedule(tx, schedule, next, exhausted, now_unix, ring_window, false);

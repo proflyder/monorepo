@@ -6,6 +6,7 @@ pub mod occurrence;
 pub mod rule;
 pub mod scenario;
 pub mod schedule;
+pub mod sync;
 pub mod timer;
 pub mod validation;
 
@@ -25,6 +26,7 @@ pub use scenario::{
     ScenarioTrigger,
 };
 pub use schedule::{Schedule, ScheduleKind};
+pub use sync::{SyncChange, SyncEntity, SyncOp};
 pub use timer::{Timer, TimerState};
 pub use validation::{
     DomainError, ErrorKind, MAX_DETAIL_BYTES, MAX_IDEMPOTENCY_KEY_BYTES, MAX_LABEL_BYTES,

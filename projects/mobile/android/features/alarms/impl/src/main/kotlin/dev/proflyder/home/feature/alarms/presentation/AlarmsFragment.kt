@@ -57,7 +57,7 @@ internal class AlarmsFragment :
             errorText = binding.alarmsErrorText,
         )
         val selectionBars = AlarmSelectionBars(binding, ::dispatch)
-        binding.alarmsRefresh.setupPullToRefresh { dispatch(AlarmsIntent.Refresh(RefreshMode.HARD)) }
+        binding.alarmsRefresh.setupPullToRefresh(binding.alarmsList) { dispatch(AlarmsIntent.Refresh(RefreshMode.HARD)) }
         binding.alarmsRetry.setOnClickListener { dispatch(AlarmsIntent.Refresh(RefreshMode.HARD)) }
         binding.alarmsOpenConnection.setOnClickListener { dispatch(AlarmsIntent.OpenConnection) }
         binding.alarmsAdd.setOnClickListener { dispatch(AlarmsIntent.Add) }

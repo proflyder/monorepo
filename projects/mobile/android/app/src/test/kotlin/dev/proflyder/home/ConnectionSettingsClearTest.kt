@@ -1,5 +1,6 @@
 package dev.proflyder.home
 
+import dev.proflyder.home.core.model.DeviceIdentity
 import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
@@ -119,6 +120,7 @@ class ConnectionSettingsClearTest {
             version = TestAppVersion,
             scope = scope,
             io = Dispatchers.IO,
+            identity = NoIdentity,
         )
         val client = ConnectSchedulerClient(http, ServerClock(AndroidClock))
         assertEquals(
@@ -237,4 +239,10 @@ private object TestAppVersion : AppVersion {
     override val name: String = "test"
 
     override val debuggable: Boolean = false
+}
+
+private object NoIdentity : DeviceIdentity {
+    override suspend fun deviceId(): String = ""
+
+    override fun defaultName(): String = ""
 }

@@ -6,6 +6,7 @@ use tokio_util::sync::CancellationToken;
 use crate::api::EngineStatus;
 use crate::domain::Clock;
 use crate::store::{Store, StoreError};
+use crate::sync::{Announcement, NoSync, SyncSink};
 
 pub const DEFAULT_PURGE_INTERVAL: Duration = Duration::from_secs(60 * 60);
 
@@ -23,6 +24,7 @@ pub struct Engine {
     clock: Arc<dyn Clock>,
     tick: Duration,
     purge: Duration,
+    sync: Arc<dyn SyncSink>,
 }
 
 impl std::fmt::Debug for Engine {
@@ -50,7 +52,14 @@ impl Engine {
             } else {
                 purge
             },
+            sync: Arc::new(NoSync),
         }
+    }
+
+    #[must_use]
+    pub fn with_sync(mut self, sync: Arc<dyn SyncSink>) -> Self {
+        self.sync = sync;
+        self
     }
 
     pub fn status(&self) -> EngineStatus {
@@ -84,6 +93,12 @@ impl Engine {
                 state.last_error.clear();
                 state.last_error_unix = 0;
                 drop(state);
+                for change in &stats.changes {
+                    self.sync.publish(Announcement {
+                        change: change.clone(),
+                        origin: None,
+                    });
+                }
                 if stats.fired > 0
                     || stats.skipped > 0
                     || stats.timers > 0

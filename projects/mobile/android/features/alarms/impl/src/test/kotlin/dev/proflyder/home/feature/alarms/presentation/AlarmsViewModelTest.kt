@@ -1,6 +1,10 @@
 package dev.proflyder.home.feature.alarms.presentation
 
 import dev.proflyder.home.core.data.RefreshMode
+import dev.proflyder.home.core.data.SyncEntity
+import dev.proflyder.home.core.data.SyncOp
+import dev.proflyder.home.core.data.SyncSignal
+import dev.proflyder.home.core.testing.FakeSyncSignals
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.model.RepeatKind
 import dev.proflyder.home.core.testing.ScheduleFixtures.schedule
@@ -33,7 +37,9 @@ class AlarmsViewModelTest {
     @After
     fun tearDown() = Dispatchers.resetMain()
 
-    private val repository by lazy { remote.repository() }
+    private val signals = FakeSyncSignals()
+
+    private val repository by lazy { remote.repository(signals) }
 
     private fun viewModel() = AlarmsViewModel(repository)
 
@@ -54,13 +60,31 @@ class AlarmsViewModelTest {
     }
 
     @Test
-    fun onlyAReturnToTheScreenRefreshesNotTheFirstShow() {
+    fun showingTheScreenAgainMakesNoRequest() {
         val viewModel = viewModel()
         viewModel.visibility.started()
-        assertEquals(1, remote.listCalls)
         viewModel.visibility.stopped()
         viewModel.visibility.started()
-        assertEquals(2, remote.listCalls)
+        assertEquals(1, remote.listCalls)
+    }
+
+    @Test
+    fun aSyncUpsertFetchesOneAlarmIntoTheStoreWithoutReloadingTheList() {
+        val viewModel = viewModel()
+        remote.alarms = remote.alarms + schedule("pushed", hour = 7)
+        signals.publish(SyncSignal.Changed(SyncEntity.ALARMS, SyncOp.UPSERT, "pushed"))
+        assertEquals(listOf("pushed"), remote.gets)
+        assertEquals(1, remote.listCalls)
+        assertTrue(viewModel.state.value.alarms.any { it.id == "pushed" })
+    }
+
+    @Test
+    fun aSyncDeleteRemovesTheAlarmWithoutAnyRequest() {
+        val viewModel = viewModel()
+        signals.publish(SyncSignal.Changed(SyncEntity.ALARMS, SyncOp.DELETE, "late"))
+        assertEquals(1, remote.listCalls)
+        assertTrue(remote.gets.isEmpty())
+        assertEquals(listOf("early", "once"), viewModel.state.value.alarms.map { it.id })
     }
 
     @Test

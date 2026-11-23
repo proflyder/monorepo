@@ -2,8 +2,11 @@ package dev.proflyder.home.feature.scenarios.data
 
 import dev.proflyder.home.core.data.EntitySource
 import dev.proflyder.home.core.data.EntityStore
+import dev.proflyder.home.core.data.EntitySync
 import dev.proflyder.home.core.data.FeatureLifetime
 import dev.proflyder.home.core.data.RefreshMode
+import dev.proflyder.home.core.data.SyncEntity
+import dev.proflyder.home.core.data.SyncSignals
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.Scenario
 import dev.proflyder.home.core.model.ScenarioDraft
@@ -20,8 +23,10 @@ internal class StoreScenarioRepository private constructor(
     private val store: EntityStore<String, Scenario>,
 ) : ScenarioRepository, EntitySource<String, Scenario> by store {
     @Inject
-    constructor(remote: ScenarioRemote, lifetime: FeatureLifetime) :
-        this(remote, EntityStore(lifetime.scope, Scenario::id, ScenarioOrder, remote::list))
+    constructor(remote: ScenarioRemote, lifetime: FeatureLifetime, signals: SyncSignals) :
+        this(remote, EntityStore(lifetime.scope, Scenario::id, ScenarioOrder, remote::list)) {
+        EntitySync(store, SyncEntity.SCENARIOS, remote::get).follow(signals, lifetime.scope)
+    }
 
     init {
         store.refresh(RefreshMode.SOFT)

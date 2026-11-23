@@ -3,7 +3,6 @@ package dev.proflyder.home.feature.control.presentation
 import android.content.Context
 import dev.proflyder.home.core.navigation.Route
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
 import dev.proflyder.home.core.model.FavoritePreferences
 import dev.proflyder.home.core.model.ServerClock
 import dev.proflyder.home.core.presentation.StateViewModel
@@ -17,8 +16,6 @@ import dev.proflyder.home.core.data.Lease
 import dev.proflyder.home.feature.control.di.ControlGraph
 import dev.proflyder.home.core.presentation.holding
 import dev.proflyder.home.feature.control.di.ControlFeatureScope
-import kotlinx.coroutines.flow.launchIn
-import kotlinx.coroutines.flow.onEach
 import dev.proflyder.home.feature.reminders.ReminderRepository
 import dev.proflyder.home.feature.scenarios.ScenarioRepository
 import dev.proflyder.home.feature.timers.TimerRepository
@@ -61,7 +58,6 @@ internal class ControlViewModel(
         publish(currentState.copy(provided = tiles.tiles))
         launch { sources.state(devices.pendingEntries, devices.pendingScenarios, layout.state).collect(::publish) }
         launch { sources.loadFailures().collect { emit(ControlEvent.Failure(it)) } }
-        visibility.returned.onEach { sources.refreshHub() }.launchIn(viewModelScope)
     }
 
     override fun handle(intent: ControlIntent) {

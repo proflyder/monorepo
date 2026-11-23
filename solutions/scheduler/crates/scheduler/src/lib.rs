@@ -7,3 +7,4 @@ pub mod domain;
 pub mod engine;
 pub mod health;
 pub mod store;
+pub mod sync;

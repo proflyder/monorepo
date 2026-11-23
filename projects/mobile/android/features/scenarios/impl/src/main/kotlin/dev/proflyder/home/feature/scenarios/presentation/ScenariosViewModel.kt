@@ -75,7 +75,6 @@ internal class ScenariosViewModel(
     init {
         combine(repository.items, repository.load, ::onStore).launchIn(viewModelScope)
         repository.backgroundFailures().onEach { emit(ScenariosEvent.Failure(it)) }.launchIn(viewModelScope)
-        repository.refreshOn(visibility.returned)
         favorites.favorites.onEach { stored -> updateState { copy(favorites = stored.orEmpty()) } }.launchIn(viewModelScope)
     }
 

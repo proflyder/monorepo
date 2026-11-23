@@ -56,6 +56,46 @@ pub struct NotifyBody {
     pub device_id: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncBody {
+    pub entity: String,
+    pub op: String,
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub origin_device_id: Option<String>,
+}
+
+pub const SYNC_ENTITIES: [&str; 4] = ["alarms", "reminders", "timers", "scenarios"];
+pub const SYNC_OPS: [&str; 2] = ["upsert", "delete"];
+pub const MAX_SYNC_ID_CHARS: usize = 128;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Audience<'a> {
+    Everyone,
+    Only(&'a str),
+    AllBut(&'a str),
+}
+
+impl<'a> Audience<'a> {
+    #[must_use]
+    pub fn only(device_id: Option<&'a str>) -> Self {
+        device_id
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map_or(Self::Everyone, Self::Only)
+    }
+
+    #[must_use]
+    pub fn all_but(device_id: Option<&'a str>) -> Self {
+        device_id
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map_or(Self::Everyone, Self::AllBut)
+    }
+}
+
 #[derive(Debug, serde::Serialize, PartialEq, Eq)]
 pub struct Delivery {
     pub sent: usize,
@@ -72,6 +112,7 @@ pub fn router(state: PushState) -> Router {
     Router::new()
         .route("/v1/push/find", axum::routing::post(find))
         .route("/v1/push/notify", axum::routing::post(notify))
+        .route("/v1/push/sync", axum::routing::post(sync))
         .route("/v1/push/devices", axum::routing::get(devices))
         .with_state(state)
 }
@@ -94,7 +135,7 @@ pub async fn deliver(
     sender: &Sender,
     registry: &Registry,
     now: i64,
-    device_id: Option<&str>,
+    audience: Audience<'_>,
 ) -> Delivery {
     let devices = match registry.list().await {
         Ok(devices) => devices,
@@ -107,7 +148,7 @@ pub async fn deliver(
             };
         }
     };
-    let devices = select_devices(devices, device_id);
+    let devices = select_devices(devices, audience);
     let total = devices.len();
     let mut sent = 0;
     let mut failed = 0;
@@ -161,7 +202,7 @@ async fn find(
             &state.sender,
             &state.registry,
             now(),
-            body.device_id.as_deref(),
+            Audience::only(body.device_id.as_deref()),
         )
         .await,
     )
@@ -202,10 +243,47 @@ async fn notify(
             &state.sender,
             &state.registry,
             now(),
-            body.device_id.as_deref(),
+            Audience::only(body.device_id.as_deref()),
         )
         .await,
     )
+}
+
+async fn sync(
+    State(state): State<PushState>,
+    headers: HeaderMap,
+    Json(body): Json<SyncBody>,
+) -> Response {
+    if !authorized(&state.token, &headers) {
+        return error(StatusCode::UNAUTHORIZED, "unauthenticated");
+    }
+    let Some(message) = sync_message(&body) else {
+        return error(StatusCode::BAD_REQUEST, "unknown entity, op or id");
+    };
+    respond(
+        deliver(
+            &message,
+            &state.sender,
+            &state.registry,
+            now(),
+            Audience::all_but(body.origin_device_id.as_deref()),
+        )
+        .await,
+    )
+}
+
+fn sync_message(body: &SyncBody) -> Option<Message> {
+    let entity = body.entity.trim();
+    let op = body.op.trim();
+    let id = body.id.trim();
+    let valid = SYNC_ENTITIES.contains(&entity)
+        && SYNC_OPS.contains(&op)
+        && id.chars().count() <= MAX_SYNC_ID_CHARS;
+    valid.then(|| Message::Sync {
+        entity: entity.to_owned(),
+        op: op.to_owned(),
+        id: id.to_owned(),
+    })
 }
 
 async fn devices(State(state): State<PushState>, headers: HeaderMap) -> Response {
@@ -233,14 +311,15 @@ async fn devices(State(state): State<PushState>, headers: HeaderMap) -> Response
 
 fn select_devices(
     devices: Vec<crate::devices::Device>,
-    device_id: Option<&str>,
+    audience: Audience<'_>,
 ) -> Vec<crate::devices::Device> {
-    let Some(target) = device_id.map(str::trim).filter(|value| !value.is_empty()) else {
-        return devices;
-    };
     devices
         .into_iter()
-        .filter(|device| device.device_id == target)
+        .filter(|device| match audience {
+            Audience::Everyone => true,
+            Audience::Only(target) => device.device_id == target,
+            Audience::AllBut(origin) => device.device_id != origin,
+        })
         .collect()
 }
 
@@ -308,22 +387,62 @@ mod tests {
     #[test]
     fn an_explicit_device_id_selects_exactly_one_phone() {
         let devices = vec![device("one"), device("two")];
-        let selected = select_devices(devices, Some("two"));
+        let selected = select_devices(devices, Audience::only(Some("two")));
         assert_eq!(selected.len(), 1);
         assert_eq!(selected[0].device_id, "two");
-        assert!(select_devices(vec![device("one")], Some("missing")).is_empty());
+        assert!(select_devices(vec![device("one")], Audience::only(Some("missing"))).is_empty());
     }
 
     #[test]
     fn a_missing_or_blank_device_id_fans_out_to_every_phone() {
         assert_eq!(
-            select_devices(vec![device("one"), device("two")], None).len(),
+            select_devices(vec![device("one"), device("two")], Audience::only(None)).len(),
             2
         );
         assert_eq!(
-            select_devices(vec![device("one"), device("two")], Some("  ")).len(),
+            select_devices(
+                vec![device("one"), device("two")],
+                Audience::only(Some("  "))
+            )
+            .len(),
             2
         );
+    }
+
+    #[test]
+    fn a_sync_skips_the_device_that_made_the_change() {
+        let devices = vec![device("one"), device("two")];
+        let selected = select_devices(devices, Audience::all_but(Some("one")));
+        assert_eq!(selected.len(), 1);
+        assert_eq!(selected[0].device_id, "two");
+        assert_eq!(
+            select_devices(vec![device("one"), device("two")], Audience::all_but(None)).len(),
+            2
+        );
+    }
+
+    fn sync_body(entity: &str, op: &str, id: &str) -> SyncBody {
+        SyncBody {
+            entity: entity.to_owned(),
+            op: op.to_owned(),
+            id: id.to_owned(),
+            origin_device_id: None,
+        }
+    }
+
+    #[test]
+    fn a_sync_names_a_known_entity_and_operation() {
+        assert_eq!(
+            sync_message(&sync_body("timers", "delete", "t-1")),
+            Some(Message::Sync {
+                entity: "timers".to_owned(),
+                op: "delete".to_owned(),
+                id: "t-1".to_owned(),
+            })
+        );
+        assert!(sync_message(&sync_body("secrets", "upsert", "x")).is_none());
+        assert!(sync_message(&sync_body("alarms", "wipe", "x")).is_none());
+        assert!(sync_message(&sync_body("alarms", "upsert", &"x".repeat(200))).is_none());
     }
 
     #[test]

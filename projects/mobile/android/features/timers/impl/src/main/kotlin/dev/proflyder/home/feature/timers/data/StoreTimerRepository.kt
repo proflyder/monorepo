@@ -2,8 +2,11 @@ package dev.proflyder.home.feature.timers.data
 
 import dev.proflyder.home.core.data.EntitySource
 import dev.proflyder.home.core.data.EntityStore
+import dev.proflyder.home.core.data.EntitySync
 import dev.proflyder.home.core.data.FeatureLifetime
 import dev.proflyder.home.core.data.RefreshMode
+import dev.proflyder.home.core.data.SyncEntity
+import dev.proflyder.home.core.data.SyncSignals
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.Timer
 import dev.proflyder.home.feature.timers.TimerOrder
@@ -18,8 +21,10 @@ internal class StoreTimerRepository private constructor(
     private val store: EntityStore<String, Timer>,
 ) : TimerRepository, EntitySource<String, Timer> by store {
     @Inject
-    constructor(remote: TimerRemote, lifetime: FeatureLifetime) :
-        this(remote, EntityStore(lifetime.scope, Timer::id, TimerOrder, remote::list))
+    constructor(remote: TimerRemote, lifetime: FeatureLifetime, signals: SyncSignals) :
+        this(remote, EntityStore(lifetime.scope, Timer::id, TimerOrder, remote::list)) {
+        EntitySync(store, SyncEntity.TIMERS).follow(signals, lifetime.scope)
+    }
 
     init {
         store.refresh(RefreshMode.SOFT)

@@ -14,7 +14,7 @@ internal class NotificationHistoryRecorder(
     private val context: Context,
     private val history: FeatureScope<NotificationHistoryStore>,
 ) {
-    suspend fun record(message: PushMessage) {
+    suspend fun record(message: PushMessage.Shown) {
         val entry = when (message) {
             is PushMessage.Find -> findEntry(message.reason)
             is PushMessage.Notify -> notifyEntry(message)

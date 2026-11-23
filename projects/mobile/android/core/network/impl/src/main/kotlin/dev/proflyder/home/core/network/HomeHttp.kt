@@ -1,6 +1,7 @@
 package dev.proflyder.home.core.network
 
 import dev.proflyder.home.core.config.ConnectionSettingsStore
+import dev.proflyder.home.core.model.DeviceIdentity
 import dev.proflyder.home.core.runtime.AppVersion
 import dev.proflyder.home.core.runtime.IoDispatcher
 import dev.zacsweers.metro.AppScope
@@ -29,7 +30,9 @@ class HomeHttp(
     private val version: AppVersion,
     private val scope: CoroutineScope,
     @IoDispatcher private val io: CoroutineDispatcher,
+    private val identity: DeviceIdentity,
 ) {
+    private val origin by lazy { DeviceOriginInterceptor(identity) }
     private val userAgent by lazy { "home-android/${version.name}" }
     private val clients = ConcurrentHashMap<Pair<Target, Boolean>, OkHttpClient>()
     private val callAdapters by lazy { OutcomeCallAdapterFactory(gate, scope) }
@@ -60,6 +63,7 @@ class HomeHttp(
         .retryOnConnectionFailure(!streaming)
         .addInterceptor(ConnectionInterceptor(settings, target, userAgent, streaming))
         .addInterceptor(TimeZoneInterceptor())
+        .apply { if (target.connectProtocol) addInterceptor(origin) }
         .authenticator(TokenRefreshAuthenticator(settings))
         .apply { if (!streaming) inspection.forEach(::addInterceptor) }
         .build()
