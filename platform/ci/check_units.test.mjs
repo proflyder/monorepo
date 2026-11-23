@@ -567,3 +567,86 @@ test("check_units: android *_test outside android_tests is a problem", () => {
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("parallelStepProblems accepts background steps closed by wait-all", () => {
+  const text = [
+    "jobs:",
+    "  quality:",
+    "    steps:",
+    "      - uses: actions/checkout@abc",
+    "      - name: Audit",
+    "        id: audit",
+    "        background: true",
+    "        continue-on-error: true",
+    "        run: mise run audit",
+    "      - id: gitleaks",
+    "        background: true",
+    "        run: mise run scan:secrets",
+    "      - name: Wait for the checks",
+    "        wait-all:",
+    "      - name: Report",
+    "        run: node platform/ci/step_report.mjs",
+  ].join("\n");
+  assert.deepEqual(checkUnits.parallelStepProblems("w.yml", text), []);
+});
+
+test("parallelStepProblems rejects unwaited, unnamed and misreferenced background steps", () => {
+  const text = [
+    "jobs:",
+    "  a:",
+    "    steps:",
+    "      - run: one",
+    "        background: true",
+    "      - id: two",
+    "        background: true",
+    "        run: two",
+    "      - id: three",
+    "        background: true",
+    "        run: three",
+    "      - wait: [two, nope]",
+    "        if: always()",
+    "      - parallel:",
+    "          - run: x",
+    "      - name: empty",
+    "        env:",
+    "          A: b",
+  ].join("\n");
+  const problems = checkUnits.parallelStepProblems("w.yml", text);
+  assert.ok(problems.some((p) => /w\.yml:4: a background step needs an 'id'/.test(p)));
+  assert.ok(problems.some((p) => /'nope' is not a background step/.test(p)));
+  assert.ok(problems.some((p) => /do not support 'if'/.test(p)));
+  assert.ok(problems.some((p) => /instead of 'parallel:'/.test(p)));
+  assert.ok(problems.some((p) => /w\.yml:9: background step 'three' is never waited for/.test(p)));
+  assert.ok(!problems.some((p) => /'two' is never waited/.test(p)));
+  assert.ok(problems.some((p) => /w\.yml:16: a step needs exactly one of run/.test(p)));
+});
+
+test("parallelStepProblems caps concurrent background steps", () => {
+  const steps = [];
+  for (let index = 0; index < 11; index += 1) {
+    steps.push(`      - id: s${index}`, "        background: true", "        run: x");
+  }
+  const text = ["jobs:", "  a:", "    steps:", ...steps, "      - wait-all:"].join("\n");
+  const problems = checkUnits.parallelStepProblems("w.yml", text);
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /more than 10 background steps/);
+});
+
+test("parallelStepProblems forbids background steps in composite actions", () => {
+  const text = [
+    "runs:",
+    "  using: composite",
+    "  steps:",
+    "    - id: x",
+    "      background: true",
+    "      shell: bash",
+    "      run: x",
+  ].join("\n");
+  const problems = checkUnits.parallelStepProblems("a.yml", text, { composite: true });
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /composite actions cannot declare/);
+});
+
+test("the repository workflows pass the parallel step rules", () => {
+  assert.deepEqual(checkUnits.workflowParallelStepProblems(), []);
+});

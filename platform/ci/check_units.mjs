@@ -740,6 +740,175 @@ export function workflowMatrixOutputProblems(root = DEFAULT_ROOT) {
   return problems;
 }
 
+export const MAX_BACKGROUND_STEPS = 10;
+
+export function stepBlocks(text) {
+  const lines = String(text).split(/\r?\n/);
+  const blocks = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const header = /^(\s*)steps:\s*$/.exec(lines[index]);
+    if (!header) {
+      continue;
+    }
+    const base = header[1].length;
+    const steps = [];
+    let itemIndent = -1;
+    let current = null;
+    let cursor = index + 1;
+    for (; cursor < lines.length; cursor += 1) {
+      const line = lines[cursor];
+      if (!line.trim() || /^\s*#/.test(line)) {
+        continue;
+      }
+      const indent = line.length - line.trimStart().length;
+      if (indent <= base && !(indent === base && line.trimStart().startsWith("- "))) {
+        break;
+      }
+      const item = /^(\s*)-\s+(.*)$/.exec(line);
+      if (item && (itemIndent === -1 || item[1].length === itemIndent)) {
+        itemIndent = item[1].length;
+        current = { line: cursor + 1, keys: {} };
+        steps.push(current);
+        const key = /^([A-Za-z0-9_-]+):\s*(.*)$/.exec(item[2]);
+        if (key) {
+          current.keys[key[1]] = key[2].trim();
+        }
+        continue;
+      }
+      if (current && indent === itemIndent + 2) {
+        const key = /^\s*([A-Za-z0-9_-]+):\s*(.*)$/.exec(line);
+        if (key) {
+          current.keys[key[1]] = key[2].trim();
+        }
+      }
+    }
+    blocks.push({ line: index + 1, steps });
+    index = cursor - 1;
+  }
+  return blocks;
+}
+
+function unquote(value) {
+  return String(value ?? "").replace(/^["']|["']$/g, "");
+}
+
+export function waitTargets(value) {
+  const raw = String(value ?? "").trim();
+  const list = /^\[(.*)\]$/.exec(raw);
+  return (list ? list[1].split(",") : [raw]).map((item) => unquote(item.trim())).filter(Boolean);
+}
+
+export function parallelStepProblems(relative, text, { composite = false } = {}) {
+  const problems = [];
+  for (const block of stepBlocks(text)) {
+    const background = new Map();
+    const pending = new Set();
+    for (const step of block.steps) {
+      const where = `${relative}:${step.line}`;
+      const keys = step.keys;
+      if ("parallel" in keys) {
+        problems.push(
+          `${where}: use 'background: true' steps and 'wait'/'wait-all' instead of 'parallel:' ` +
+            "(actionlint does not check steps nested under 'parallel')",
+        );
+      }
+      const isBackground = unquote(keys.background) === "true";
+      const isWait = "wait" in keys || "wait-all" in keys || "cancel" in keys;
+      if (composite && (isBackground || isWait || "background" in keys)) {
+        problems.push(`${where}: composite actions cannot declare background, wait or cancel steps`);
+        continue;
+      }
+      if (isBackground) {
+        const id = unquote(keys.id);
+        if (!id) {
+          problems.push(`${where}: a background step needs an 'id' so a wait and the report can name it`);
+          continue;
+        }
+        background.set(id, step.line);
+        pending.add(id);
+        if (pending.size > MAX_BACKGROUND_STEPS) {
+          problems.push(
+            `${where}: more than ${MAX_BACKGROUND_STEPS} background steps run at once; ` +
+              "GitHub queues the rest, add a wait before starting more",
+          );
+        }
+        continue;
+      }
+      if ("wait-all" in keys) {
+        if (keys["wait-all"]) {
+          problems.push(`${where}: 'wait-all' takes no value`);
+        }
+        if (!pending.size) {
+          problems.push(`${where}: 'wait-all' with no background step started before it`);
+        }
+        pending.clear();
+      }
+      if ("wait" in keys || "cancel" in keys) {
+        const targets = "wait" in keys ? waitTargets(keys.wait) : waitTargets(keys.cancel);
+        if (!targets.length) {
+          problems.push(`${where}: '${"wait" in keys ? "wait" : "cancel"}' names no step`);
+        }
+        for (const target of targets) {
+          if (!background.has(target)) {
+            problems.push(`${where}: '${target}' is not a background step started earlier in this job`);
+          }
+          pending.delete(target);
+        }
+      }
+      const actions = ["run", "uses", "wait", "wait-all", "cancel", "parallel"].filter((key) => key in keys);
+      if (actions.length !== 1) {
+        problems.push(
+          `${where}: a step needs exactly one of run, uses, wait, wait-all or cancel` +
+            (actions.length ? ` (found ${actions.join(", ")})` : ""),
+        );
+      }
+      if (isWait && "if" in keys) {
+        problems.push(`${where}: wait, wait-all and cancel always run and do not support 'if'`);
+      }
+    }
+    for (const id of pending) {
+      problems.push(
+        `${relative}:${background.get(id)}: background step '${id}' is never waited for; ` +
+          "add 'wait' or 'wait-all' so its failure is reported before the job ends",
+      );
+    }
+  }
+  return problems;
+}
+
+export function workflowParallelStepProblems(root = DEFAULT_ROOT) {
+  const problems = [];
+  const workflows = path.resolve(root, ".github/workflows");
+  if (isDirectory(workflows)) {
+    for (const name of fs.readdirSync(workflows).sort()) {
+      if (name.endsWith(".yml") || name.endsWith(".yaml")) {
+        problems.push(
+          ...parallelStepProblems(
+            `.github/workflows/${name}`,
+            fs.readFileSync(path.join(workflows, name), "utf8"),
+          ),
+        );
+      }
+    }
+  }
+  const actions = path.resolve(root, ".github/actions");
+  if (isDirectory(actions)) {
+    for (const name of fs.readdirSync(actions).sort()) {
+      for (const file of ["action.yml", "action.yaml"]) {
+        const target = path.join(actions, name, file);
+        if (fs.existsSync(target)) {
+          problems.push(
+            ...parallelStepProblems(`.github/actions/${name}/${file}`, fs.readFileSync(target, "utf8"), {
+              composite: true,
+            }),
+          );
+        }
+      }
+    }
+  }
+  return problems;
+}
+
 function isRegistryLogin(line) {
   return REGISTRY_LOGIN_PATTERNS.some((pattern) => pattern.test(line));
 }
@@ -861,6 +1030,7 @@ export async function check(argv) {
       ...androidSuiteCoverageProblems(config, root),
       ...workflowCallerPermissionProblems(root),
       ...workflowMatrixOutputProblems(root),
+      ...workflowParallelStepProblems(root),
     ],
   };
 }

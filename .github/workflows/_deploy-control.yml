@@ -37,12 +37,18 @@ jobs:
           repository-cache: false
           cache-save: ${{ inputs.save_cache }}
 
-      - uses: ./.github/actions/bazel-repository-cache
+      - name: Restore the Bazel repository cache
+        id: bazel-repo
+        background: true
+        uses: ./.github/actions/bazel-repository-cache
         with:
           key: bazel-repo-rust-${{ runner.os }}-${{ hashFiles('MODULE.bazel', 'MODULE.bazel.lock', '.bazelversion', 'Cargo.lock', 'crate-universe.lock', 'rust-toolchain.toml') }}
           restore-prefix: bazel-repo-rust-${{ runner.os }}-
 
-      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+      - name: Restore the Bazel disk cache
+        id: disk-cache
+        background: true
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: ~/.cache/bazel-disk
           key: bazel-rust-${{ runner.os }}-deploy-control-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'Cargo.lock', 'crate-universe.lock', 'rust-toolchain.toml') }}
@@ -50,10 +56,16 @@ jobs:
             bazel-rust-${{ runner.os }}-warm-
             bazel-rust-${{ runner.os }}-
 
-      - uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b
+      - name: Set up mise
+        id: mise
+        background: true
+        uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b
         with:
           version: 2026.11.4
           install: false
+
+      - name: Wait for the toolchains and caches
+        wait-all:
 
       - name: Build the deploy CLI
         run: bazel build //platform/deploy-rs:home-deploy

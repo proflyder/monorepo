@@ -505,31 +505,21 @@ test("real repo: graph fixture exists and android roots cover the app", () => {
   assert.ok(app.bazelRoots.some((root) => root.startsWith("//projects/mobile/android")));
 });
 
-test("real repo: android lint unit is a separate job with the same paths", () => {
+test("real repo: android-app runs the APK build, tests, Android Lint and detekt in one job", () => {
   const config = affected.loadConfig();
   const app = config.get("android-app");
-  const lint = config.get("android-lint");
-  assert.deepEqual(lint.paths, app.paths);
-  assert.deepEqual(lint.bazelRoots, app.bazelRoots);
-  assert.deepEqual(lint.testTargets, ["//projects/mobile/android:android_lint"]);
-  assert.deepEqual(lint.buildTargets, []);
-  assert.deepEqual(lint.bazelSdkPackages, [
-    "cmdline-tools;23.0",
-    "ndk;28.2.13676358",
+  assert.deepEqual(app.testTargets, [
+    "//projects/mobile/android:android_tests",
+    "//projects/mobile/android:android_lint",
+    "//projects/mobile/android:detekt",
   ]);
+  assert.deepEqual(app.buildTargets, ["//projects/mobile/android:app"]);
+  assert.deepEqual(app.bazelSdkPackages, ["cmdline-tools;23.0", "ndk;28.2.13676358"]);
+  assert.equal(config.units.some((unit) => unit.id === "android-lint"), false);
+  assert.equal(config.units.some((unit) => unit.id === "android-detekt"), false);
 });
 
-test("real repo: android detekt unit is a separate job with the same paths", () => {
-  const config = affected.loadConfig();
-  const app = config.get("android-app");
-  const detekt = config.get("android-detekt");
-  assert.deepEqual(detekt.paths, app.paths);
-  assert.deepEqual(detekt.bazelRoots, app.bazelRoots);
-  assert.deepEqual(detekt.testTargets, ["//projects/mobile/android:detekt"]);
-  assert.deepEqual(detekt.buildTargets, []);
-});
-
-test("real repo: android module change selects the app and the lint unit", () => {
+test("real repo: android module change selects the app unit", () => {
   const config = affected.loadConfig();
   const result = withDeps({}, () =>
     affected.route(config, ["projects/mobile/android/features/alarms/impl/AlarmsFragment.kt"], {
@@ -540,11 +530,11 @@ test("real repo: android module change selects the app and the lint unit", () =>
   );
   assert.deepEqual(
     result.routes.android.units.map((unit) => unit.id),
-    ["android-app", "android-lint", "android-detekt"],
+    ["android-app"],
   );
 });
 
-test("real repo: shared kotlin change selects the lint unit through the graph", () => {
+test("real repo: shared kotlin change selects the app unit through the graph", () => {
   const config = affected.loadConfig();
   const result = withDeps({}, () =>
     affected.route(config, ["packages/kotlin/core/src/main/A.kt"], {
@@ -557,7 +547,7 @@ test("real repo: shared kotlin change selects the lint unit through the graph", 
   );
   assert.deepEqual(
     result.routes.android.units.map((unit) => unit.id),
-    ["android-app", "android-lint", "android-detekt", "kotlin-shared"],
+    ["android-app", "kotlin-shared"],
   );
 });
 
@@ -566,28 +556,29 @@ test("real repo: the Android-only bazelrc selects only android units", () => {
   assert.equal(result.routes.android.mode, "all");
   assert.deepEqual(
     result.routes.android.units.map((unit) => unit.id),
-    ["android-app", "android-lint", "android-detekt", "kotlin-shared"],
+    ["android-app", "kotlin-shared"],
   );
   for (const platform of ["bazel", "python", "js", "native"]) {
     assert.deepEqual(result.routes[platform].units, [], platform);
   }
 });
 
-test("real repo: lint rule change runs every android unit including lint", () => {
+test("real repo: lint rule change runs every android unit including lint in android-app", () => {
   const config = affected.loadConfig();
   const result = routeReal(["platform/android/lint.bzl"]);
   assert.equal(result.routes.android.mode, "all");
   assert.deepEqual(
     result.routes.android.units.map((unit) => unit.id),
-    ["android-app", "android-lint", "android-detekt", "kotlin-shared"],
+    ["android-app", "kotlin-shared"],
   );
   const entry = affected
     .matrixEntries(result, config)
-    .android.find((item) => item.id === "android-lint");
+    .android.find((item) => item.id === "android-app");
   assert.deepEqual(entry, {
-    id: "android-lint",
-    test_targets: "//projects/mobile/android:android_lint",
-    build_targets: "",
+    id: "android-app",
+    test_targets:
+      "//projects/mobile/android:android_tests //projects/mobile/android:android_lint //projects/mobile/android:detekt",
+    build_targets: "//projects/mobile/android:app",
     artifact: "",
     artifact_name: "",
     sdk_packages: "cmdline-tools;23.0 ndk;28.2.13676358",

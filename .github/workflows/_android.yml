@@ -70,12 +70,37 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
-      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78
+      - name: Set up Java
+        id: java
+        background: true
+        uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78
         with:
           distribution: temurin
           java-version: "21"
 
-      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd
+      - name: Set up the Android SDK
+        id: android-sdk
+        background: true
+        uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd
+
+      - name: Set up mise
+        id: mise
+        background: true
+        uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b
+        with:
+          version: 2026.11.4
+          install_args: "node"
+          cache: true
+
+      - name: Restore the Bazel disk cache
+        id: disk-cache
+        background: true
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: ~/.cache/bazel-disk
+          key: bazel-android-${{ runner.os }}-shared-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'projects/mobile/android/maven_install.json') }}
+          restore-keys: |
+            bazel-android-${{ runner.os }}-shared-
 
       - uses: bazel-contrib/setup-bazel@104e3eea9447cdaa4b00d0fb46191a3985d26ab3
         with:
@@ -84,51 +109,21 @@ jobs:
           repository-cache: false
           cache-save: ${{ inputs.save_cache }}
 
-      - uses: ./.github/actions/bazel-repository-cache
+      - name: Restore the Bazel repository cache
         id: bazel-repo
+        background: true
+        uses: ./.github/actions/bazel-repository-cache
         with:
           key: bazel-repo-android-${{ runner.os }}-${{ hashFiles('MODULE.bazel', 'MODULE.bazel.lock', '.bazelversion', 'projects/mobile/android/maven_install.json') }}
           restore-prefix: bazel-repo-android-${{ runner.os }}-
 
-      - uses: ./.github/actions/nexus-cache
+      - name: Configure the Nexus cache
+        id: nexus
+        background: true
+        uses: ./.github/actions/nexus-cache
         with:
           host: ${{ vars.NEXUS_HOST }}
           password: ${{ secrets.NEXUS_CI_PASSWORD }}
-
-      - uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b
-        with:
-          version: 2026.11.4
-          install_args: "node"
-          cache: true
-
-      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
-        with:
-          path: ~/.cache/bazel-disk
-          key: bazel-android-${{ runner.os }}-shared-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'projects/mobile/android/maven_install.json') }}
-          restore-keys: |
-            bazel-android-${{ runner.os }}-shared-
-
-      - name: Install Android SDK packages
-        env:
-          SDK_PACKAGES: ${{ inputs.sdk_packages }}
-        run: |
-          packages=("platforms;android-36" "build-tools;36.0.0")
-          if [ -n "$SDK_PACKAGES" ]; then
-            read -r -a extra <<< "$SDK_PACKAGES"
-            packages+=("${extra[@]}")
-          fi
-          sdkmanager --install "${packages[@]}"
-          # rules_android_ndk resolves the NDK from ANDROID_NDK_HOME; export it
-          # only for units that declared an `ndk;<version>` package.
-          for package in "${packages[@]}"; do
-            if [[ "$package" == ndk\;* ]]; then
-              echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/${package#ndk;}" >> "$GITHUB_ENV"
-            fi
-          done
-
-      - name: Release signing self-test
-        if: inputs.unit == 'android-app'
-        run: platform/android/sign-release_test.sh
 
       - name: Release version
         id: version
@@ -161,68 +156,82 @@ jobs:
           echo "enabled=true" >> "$GITHUB_OUTPUT"
           echo "google-services.json prepared"
 
-      - name: Select targets
-        id: targets
+      - name: Wait for the toolchains and caches
+        wait-all:
+
+      - name: Install Android SDK packages
         env:
-          TEST_CANDIDATES: ${{ inputs.test_targets }}
-          BUILD_CANDIDATES: ${{ inputs.build_targets }}
+          SDK_PACKAGES: ${{ inputs.sdk_packages }}
         run: |
-          {
-            echo "test_targets=${TEST_CANDIDATES}"
-            echo "build_targets=${BUILD_CANDIDATES}"
-          } >> "$GITHUB_OUTPUT"
+          packages=("platforms;android-36" "build-tools;36.0.0")
+          if [ -n "$SDK_PACKAGES" ]; then
+            read -r -a extra <<< "$SDK_PACKAGES"
+            packages+=("${extra[@]}")
+          fi
+          sdkmanager --install "${packages[@]}"
+          for package in "${packages[@]}"; do
+            if [[ "$package" == ndk\;* ]]; then
+              echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/${package#ndk;}" >> "$GITHUB_ENV"
+            fi
+          done
 
-      - name: bazel build android-app (release APK)
+      - name: Release signing self-test
+        id: signing
         if: inputs.unit == 'android-app'
-        env:
-          BAZEL_EXTRA_ARGS: ${{ steps.version.outputs.define_args }}
-        run: mise run build android-app
+        background: true
+        continue-on-error: true
+        run: platform/android/sign-release_test.sh
 
-      - name: bazel build ${{ inputs.unit }}
-        if: inputs.unit != 'android-app' && steps.targets.outputs.build_targets != ''
+      - name: bazel ${{ inputs.test_targets != '' && 'test' || 'build' }} ${{ inputs.unit }} (keep going, every target)
+        id: bazel
+        if: inputs.test_targets != '' || inputs.build_targets != ''
+        continue-on-error: true
         env:
-          BAZEL_TARGETS: ${{ steps.targets.outputs.build_targets }}
-        run: mise run build ${{ inputs.unit }}
+          BAZEL_BUILD_TARGETS: ${{ inputs.build_targets }}
+          BAZEL_TEST_TARGETS: ${{ inputs.test_targets }}
+          BAZEL_EXTRA_ARGS: >-
+            ${{ steps.version.outputs.define_args }}
+            --local_test_jobs=4
+            --build_event_json_file=${{ runner.temp }}/bazel-events.json
+          UNIT: ${{ inputs.unit }}
+        run: mise run ci:unit "$UNIT"
+
+      - name: Wait for the release signing self-test
+        wait-all:
+
+      - name: Report every failing build, test, lint and detekt target
+        if: steps.bazel.outcome != 'skipped'
+        env:
+          STEPS: ${{ toJSON(steps) }}
+          UNIT: ${{ inputs.unit }}
+          BAZEL_EVENTS: ${{ runner.temp }}/bazel-events.json
+        run: |
+          set -uo pipefail
+          status=0
+          node platform/ci/bazel_report.mjs --events "$BAZEL_EVENTS" --title "android / $UNIT" || status=1
+          node platform/ci/step_report.mjs --title "android / $UNIT" \
+            --check 'bazel=Bazel build, tests, Android Lint and detekt' \
+            --check 'signing?=Release signing self-test' || status=1
+          exit "$status"
 
       - name: Stash the release APK
         if: inputs.unit == 'android-app'
+        env:
+          DEFINE_ARGS: ${{ steps.version.outputs.define_args }}
         run: |
           set -euo pipefail
+          read -r -a defines <<< "${DEFINE_ARGS:-}"
+          apk=$(bazel cquery --config=android "${defines[@]}" --output=files //projects/mobile/android:app 2>/dev/null | grep '/app\.apk$' | head -n 1)
+          if [[ -z "$apk" || ! -f "$apk" ]]; then
+            echo "::error::bazel cquery did not resolve the built app.apk"
+            exit 1
+          fi
           mkdir -p "$RUNNER_TEMP/android-release"
-          cp -L bazel-bin/projects/mobile/android/app/app.apk "$RUNNER_TEMP/android-release/app.apk"
+          cp -L "$apk" "$RUNNER_TEMP/android-release/app.apk"
 
       - name: Show APK ABIs
         if: inputs.unit == 'android-app'
         run: platform/android/apk_abi_test.sh "$RUNNER_TEMP/android-release/app.apk"
-
-      - name: bazel test android-app (on the distributable APK)
-        if: inputs.unit == 'android-app' && steps.targets.outputs.test_targets != ''
-        env:
-          BAZEL_TARGETS: ${{ steps.targets.outputs.test_targets }}
-          BAZEL_EXTRA_ARGS: ${{ steps.version.outputs.define_args }} --local_test_jobs=4
-        run: mise run test android-app
-
-      - name: Android Lint
-        if: inputs.unit == 'android-lint' && steps.targets.outputs.test_targets != ''
-        env:
-          BAZEL_TARGETS: ${{ steps.targets.outputs.test_targets }}
-        run: mise run test ${{ inputs.unit }}
-
-      - name: detekt
-        if: inputs.unit == 'android-detekt' && steps.targets.outputs.test_targets != ''
-        env:
-          BAZEL_TARGETS: ${{ steps.targets.outputs.test_targets }}
-        run: mise run test ${{ inputs.unit }}
-
-      - name: bazel test ${{ inputs.unit }}
-        if: >-
-          inputs.unit != 'android-app' &&
-          inputs.unit != 'android-lint' &&
-          inputs.unit != 'android-detekt' &&
-          steps.targets.outputs.test_targets != ''
-        env:
-          BAZEL_TARGETS: ${{ steps.targets.outputs.test_targets }}
-        run: mise run test ${{ inputs.unit }}
 
       - name: Describe the release APK
         if: inputs.unit == 'android-app' && inputs.release_version && steps.firebase.outputs.enabled == 'true'
@@ -249,7 +258,7 @@ jobs:
           retention-days: 7
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
-        if: inputs.unit != 'android-app' && inputs.artifact != '' && steps.targets.outputs.build_targets != ''
+        if: inputs.unit != 'android-app' && inputs.artifact != '' && inputs.build_targets != ''
         with:
           name: ${{ inputs.artifact_name }}
           path: ${{ inputs.artifact }}

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -12,6 +13,11 @@ import {
   findUnit,
   formatTable,
   isDeployable,
+  runCommands,
+  foreignTestsQuery,
+  ciPlan,
+  isTargetPattern,
+  runCi,
   suggestIds,
   testCommands,
   unitHint,
@@ -228,6 +234,7 @@ test("testCommands builds the Rust deploy tool for deploy_tool units", () => {
   const [build, compile, unittest] = commands;
   assert.equal(build.command, "bazel");
   assert.deepEqual(build.args, ["build", "//platform/deploy-rs:home-deploy"]);
+  assert.equal(build.prerequisite, true);
   assert.match(compile.env.HOME_DEPLOY, /bazel-bin\/platform\/deploy-rs\/home-deploy$/);
   assert.equal(unittest.env.HOME_DEPLOY, compile.env.HOME_DEPLOY);
 });
@@ -270,4 +277,154 @@ test("testCommands mirrors the quality workflow gates", () => {
 test("unitHint names the platform command", () => {
   assert.match(unitHint(byId("ha-voice")), /unittest discover/);
   assert.match(unitHint(byId("heartbeat")), /node --test/);
+});
+
+function fakeSpawn(statuses) {
+  const calls = [];
+  return {
+    calls,
+    spawn: (command, args) => {
+      calls.push([command, ...args].join(" "));
+      return { status: statuses.shift() ?? 0 };
+    },
+  };
+}
+
+function sink() {
+  const lines = [];
+  return { lines, write: (text) => lines.push(text) };
+}
+
+test("runCommands keeps going and lists every failed test command", () => {
+  const { calls, spawn } = fakeSpawn([1, 0, 2]);
+  const log = sink();
+  const status = runCommands(
+    [
+      { command: "a", args: [] },
+      { command: "b", args: [] },
+      { command: "c", args: ["x"] },
+    ],
+    { keepGoing: true, spawn, log },
+  );
+  assert.equal(status, 1);
+  assert.deepEqual(calls, ["a", "b", "c x"]);
+  assert.match(log.lines.join(""), /2 of 3 commands failed:\n  exit 1: a\n  exit 2: c x/);
+});
+
+test("runCommands stops at a failed prerequisite even when keeping going", () => {
+  const { calls, spawn } = fakeSpawn([1]);
+  const status = runCommands(
+    [
+      { command: "bazel", args: ["build"], prerequisite: true },
+      { command: "python3", args: [] },
+    ],
+    { keepGoing: true, spawn, log: sink() },
+  );
+  assert.equal(status, 1);
+  assert.deepEqual(calls, ["bazel build"]);
+});
+
+test("runCommands stops at the first failure without keepGoing", () => {
+  const { calls, spawn } = fakeSpawn([3, 0]);
+  const status = runCommands(
+    [
+      { command: "a", args: [] },
+      { command: "b", args: [] },
+    ],
+    { spawn, log: sink() },
+  );
+  assert.equal(status, 3);
+  assert.deepEqual(calls, ["a"]);
+});
+
+test("isTargetPattern tells patterns from labels", () => {
+  assert.equal(isTargetPattern("//packages/rust/..."), true);
+  assert.equal(isTargetPattern("//a:all"), true);
+  assert.equal(isTargetPattern("//a:*"), true);
+  assert.equal(isTargetPattern("//apps/one:app"), false);
+});
+
+test("foreignTestsQuery finds the tests under build patterns the unit does not run", () => {
+  assert.equal(
+    foreignTestsQuery(["//a/...", "//b/..."], ["//a:t", "//c/..."]),
+    "tests(set(//a/... //b/...)) except set(//a:t //c/...)",
+  );
+  assert.equal(foreignTestsQuery(["//a/..."], []), "tests(set(//a/...))");
+});
+
+test("ciPlan splits tests, explicit build labels and build patterns", () => {
+  const plan = ciPlan(byId("proto"));
+  assert.equal(plan.command, "test");
+  assert.deepEqual(plan.config, []);
+  assert.deepEqual(plan.tests, ["//packages/rust/home-proto:unit_tests"]);
+  assert.deepEqual(plan.explicitBuilds, []);
+  assert.deepEqual(plan.patternBuilds, ["//packages/proto/..."]);
+  const android = ciPlan(byId("app-one"));
+  assert.deepEqual(android.config, ["--config=android"]);
+  assert.deepEqual(android.explicitBuilds, ["//apps/one:app"]);
+  assert.throws(() => ciPlan(byId("ha-voice")), /Bazel units only/);
+});
+
+test("runCi keeps build patterns and only builds the foreign tests under them", () => {
+  const calls = [];
+  let targets = "";
+  const spawn = (command, args) => {
+    calls.push([command, ...args]);
+    if (args[0] === "query") {
+      return { status: 0, stdout: "//packages/proto:proto_test\n" };
+    }
+    const file = args.find((arg) => arg.startsWith("--target_pattern_file=")).split("=")[1];
+    targets = fs.readFileSync(file, "utf8");
+    return { status: 0 };
+  };
+  const saved = process.env.BAZEL_EXTRA_ARGS;
+  process.env.BAZEL_EXTRA_ARGS = "--build_event_json_file=/tmp/x.json";
+  try {
+    const status = runCi(byId("proto"), { spawn, log: { write: () => {} } });
+    assert.equal(status, 0);
+  } finally {
+    if (saved === undefined) {
+      delete process.env.BAZEL_EXTRA_ARGS;
+    } else {
+      process.env.BAZEL_EXTRA_ARGS = saved;
+    }
+  }
+  assert.deepEqual(calls[0], [
+    "bazel",
+    "query",
+    "--output=label",
+    "tests(set(//packages/proto/...)) except set(//packages/rust/home-proto:unit_tests)",
+  ]);
+  assert.deepEqual(calls[1].slice(0, 4), [
+    "bazel",
+    "test",
+    "--build_event_json_file=/tmp/x.json",
+    "--keep_going",
+  ]);
+  assert.equal(
+    targets,
+    "//packages/rust/home-proto:unit_tests\n//packages/proto/...\n-//packages/proto:proto_test\n",
+  );
+});
+
+test("runCi honours the CI target lists and fails when the query fails", () => {
+  const saved = { tests: process.env.BAZEL_TEST_TARGETS, builds: process.env.BAZEL_BUILD_TARGETS };
+  process.env.BAZEL_TEST_TARGETS = "";
+  process.env.BAZEL_BUILD_TARGETS = "//x/...";
+  try {
+    const status = runCi(byId("proto"), {
+      spawn: () => ({ status: 7 }),
+      log: { write: () => {} },
+    });
+    assert.equal(status, 7);
+    assert.equal(ciPlan(byId("proto")).command, "build");
+  } finally {
+    for (const [key, name] of [["tests", "BAZEL_TEST_TARGETS"], ["builds", "BAZEL_BUILD_TARGETS"]]) {
+      if (saved[key] === undefined) {
+        delete process.env[name];
+      } else {
+        process.env[name] = saved[key];
+      }
+    }
+  }
 });

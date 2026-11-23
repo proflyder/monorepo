@@ -229,6 +229,46 @@ Push в `develop` CI не запускает: туда попадают толь
 `none < read < write`. Иначе GitHub падает на `startup_failure` до старта
 (`actionlint` не ловит). Проверка — `workflowCallerPermissionProblems`.
 
+### Правило: параллельные шаги и полный отчёт
+
+Независимые шаги job'а идут фоновыми шагами GitHub Actions
+([changelog 2026-06-25](https://github.blog/changelog/2026-06-25-actions-steps-can-now-be-run-in-parallel),
+[`background`](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#jobsjob_idstepsbackground),
+[`wait`](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#jobsjob_idstepswait),
+[`wait-all`](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#jobsjob_idstepswait-all)):
+
+- Подготовка (Java, Android SDK, mise, восстановление кэшей, Nexus, apt) —
+  `background: true`, затем `wait-all:`. Ограничение: `setup-bazel`
+  перезаписывает `~/.bazelrc`, поэтому он идёт обычным шагом до фоновых
+  `bazel-repository-cache` и `nexus-cache`, которые дописывают туда строки.
+- Независимые проверки (quality, тест + сборка native) — фоновые шаги или
+  шаги с `continue-on-error: true`; после `wait-all:` шаг-отчёт
+  `platform/ci/step_report.mjs` (по `toJSON(steps)`) пишет таблицу в
+  `$GITHUB_STEP_SUMMARY` и падает со списком **всех** упавших проверок.
+  Fail-fast нет: упавшая проверка не останавливает соседние.
+- Bazel не запускается параллельными шагами на один output base (сервер
+  держит блокировку): параллелизм — внутри одного вызова. Android и
+  Bazel-юниты собирают и тестируют всё одним `mise run ci:unit <unit>`:
+  `bazel test --keep_going --target_pattern_file=…` над тестами юнита и его
+  сборочными целями. Сборочный паттерн (`//packages/rust/...`) остаётся
+  паттерном, а чужие тесты под ним (`bazel query 'tests(set(P)) except
+  set(T)'`) идут отрицательными паттернами `-//label`: они только собираются,
+  как в отдельном `bazel build`. Явно названную несовместимую цель Bazel
+  считает ошибкой, через паттерн — пропускает (BEP `aborted: SKIPPED`), и
+  отчёт это ошибкой не считает. `platform/ci/bazel_report.mjs` читает BEP и группирует упавшие
+  цели по виду проверки (`build`, `test`, `lint`, `detekt`, `clippy`,
+  `format` — по имени цели) с хвостом `test.log`/stderr каждой.
+- Не больше 10 фоновых шагов одновременно, у каждого `id`, каждый закрыт
+  `wait`/`wait-all`; `parallel:` не используется (actionlint не проверяет
+  вложенные шаги), в composite actions фоновых шагов нет. Проверка —
+  `workflowParallelStepProblems` (`mise run ci:units`).
+- actionlint 1.7.12 не знает `background`/`wait-all`: `mise run
+  lint:actions` игнорирует ровно эти два сообщения, структуру проверяет
+  `workflowParallelStepProblems`.
+- `mise run test <unit>` для Python-юнита выполняет все сьюты и печатает
+  список упавших (стоп только на подготовительной сборке `home-deploy`).
+- Matrix — всегда `fail-fast: false`.
+
 ### Маршрутизация по юнитам
 
 Единица запуска — юнит из `platform/ci/units.mjs` (единственный источник:
@@ -237,12 +277,12 @@ Push в `develop` CI не запускает: туда попадают толь
 
 | Платформа | Reusable | Что делает |
 |---|---|---|
-| android | `_android.yml` | `bazel build` + `bazel test`, APK artifact |
-| unit | `_unit.yml` | `kind=bazel`/`python`, затем образы, push `tree-<hash>` и attestation в том же job |
+| android | `_android.yml` | один `bazel test --keep_going`: APK, тесты, Android Lint, detekt (`android-app`); отчёт по видам проверок; APK artifact |
+| unit | `_unit.yml` | `kind=bazel` (один `bazel test --keep_going` + отчёт) / `python`, затем образы, push `tree-<hash>` и attestation в том же job |
 | python | `_python.yml` | все затронутые Python-юниты одним job |
 | js | `_js.yml` | `node --test`, без npm |
 | native | `_native.yml` | кросс-сборка, `SHA256SUMS`, release-shaped `tree-<hash>` |
-| quality | `_quality.yml` | audit, lint:comments, static, ci:units, test:ci, shellcheck, actionlint, Gitleaks — всегда |
+| quality | `_quality.yml` | audit, lint:comments, static, ci:units, test:ci, shellcheck, actionlint, Gitleaks — параллельно, всегда; падает со списком всех упавших |
 
 Затронутость:
 

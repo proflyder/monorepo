@@ -228,6 +228,7 @@ export function testCommands(unit, root = ROOT) {
           command: "bazel",
           args: ["build", "//platform/deploy-rs:home-deploy"],
           cwd: root,
+          prerequisite: true,
         });
         env = { HOME_DEPLOY: binary };
       }
@@ -341,23 +342,127 @@ export function testCommands(unit, root = ROOT) {
   }
 }
 
-export function runCommands(commands) {
-  for (const { command, args, cwd, shell = false, env } of commands) {
-    const result = spawnSync(command, args, {
+export const TARGET_PATTERN = /(\.\.\.|:all(-targets)?|:\*)$/;
+
+function listFromEnv(name) {
+  const raw = process.env[name];
+  return raw === undefined ? null : raw.trim().split(/\s+/).filter(Boolean);
+}
+
+export function isTargetPattern(label) {
+  return TARGET_PATTERN.test(label);
+}
+
+export function foreignTestsQuery(patterns, tests) {
+  const under = `tests(set(${patterns.join(" ")}))`;
+  return tests.length ? `${under} except set(${tests.join(" ")})` : under;
+}
+
+export function ciPlan(unit) {
+  if (!["bazel", "android"].includes(unit.platform)) {
+    throw new Error(
+      `unit '${unit.id}' is platform '${unit.platform}'; ci runs Bazel units only.\n` +
+        unitHint(unit),
+    );
+  }
+  const tests = listFromEnv("BAZEL_TEST_TARGETS") ?? [...unit.testTargets];
+  const builds = listFromEnv("BAZEL_BUILD_TARGETS") ?? [...unit.buildTargets];
+  if (!tests.length && !builds.length) {
+    throw new Error(`unit '${unit.id}' declares no Bazel targets.\n${unitHint(unit)}`);
+  }
+  return {
+    command: tests.length ? "test" : "build",
+    config: needsAndroidConfig(unit) ? [ANDROID_CONFIG] : [],
+    tests,
+    explicitBuilds: builds.filter((label) => !isTargetPattern(label)),
+    patternBuilds: builds.filter(isTargetPattern),
+  };
+}
+
+export function ciCommand(plan, foreignTests, patternFile) {
+  const args = [plan.command, ...plan.config, ...bazelExtraArgs(), "--keep_going"];
+  if (plan.command === "test") {
+    args.push("--test_output=errors");
+  }
+  const patterns = [
+    ...new Set([...plan.tests, ...plan.explicitBuilds, ...plan.patternBuilds]),
+    ...[...new Set(foreignTests)].map((label) => `-${label}`),
+  ];
+  fs.writeFileSync(patternFile, `${patterns.join("\n")}\n`, "utf8");
+  args.push(`--target_pattern_file=${patternFile}`);
+  return { command: "bazel", args, cwd: ROOT, patterns };
+}
+
+export function runCi(unit, { spawn = spawnSync, log = process.stderr } = {}) {
+  const plan = ciPlan(unit);
+  let foreignTests = [];
+  if (plan.patternBuilds.length) {
+    const query = spawn(
+      "bazel",
+      ["query", "--output=label", foreignTestsQuery(plan.patternBuilds, plan.tests)],
+      {
+        cwd: ROOT,
+        encoding: "utf8",
+        maxBuffer: 64 * 1024 * 1024,
+        stdio: ["ignore", "pipe", "inherit"],
+      },
+    );
+    if (query.error || query.status !== 0) {
+      log.write(`bazel query for the tests under the build targets of '${unit.id}' failed\n`);
+      return query.status || 1;
+    }
+    foreignTests = String(query.stdout).split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  }
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "units-ci-"));
+  try {
+    const command = ciCommand(plan, foreignTests, path.join(directory, "targets.txt"));
+    log.write(
+      `bazel ${plan.command} ${unit.id}: tests ${plan.tests.join(" ") || "(none)"}; ` +
+        `build ${[...plan.explicitBuilds, ...plan.patternBuilds].join(" ") || "(none)"}; ` +
+        `${foreignTests.length} test(s) under the build patterns are built, not run\n`,
+    );
+    return runCommands([command], { spawn, log });
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+}
+
+export function describeCommand({ command, args = [] }) {
+  return [command, ...args].join(" ");
+}
+
+export function runCommands(commands, { keepGoing = false, spawn = spawnSync, log = process.stderr } = {}) {
+  const failed = [];
+  for (const entry of commands) {
+    const { command, args, cwd, shell = false, env, prerequisite = false } = entry;
+    const result = spawn(command, args, {
       cwd,
       shell,
       stdio: "inherit",
       env: env ? { ...process.env, ...env } : process.env,
     });
     if (result.error) {
-      process.stderr.write(`${result.error.message}\n`);
-      return 1;
+      log.write(`${result.error.message}\n`);
     }
-    if (result.status !== 0) {
-      return result.status ?? 1;
+    const status = result.error ? 1 : result.status ?? 1;
+    if (status === 0) {
+      continue;
+    }
+    failed.push({ entry, status });
+    if (!keepGoing || prerequisite) {
+      break;
     }
   }
-  return 0;
+  if (!failed.length) {
+    return 0;
+  }
+  if (keepGoing && commands.length > 1) {
+    log.write(`${failed.length} of ${commands.length} commands failed:\n`);
+    for (const { entry, status } of failed) {
+      log.write(`  exit ${status}: ${describeCommand(entry)}\n`);
+    }
+  }
+  return failed[0].status;
 }
 
 const USAGE = `Usage: units-cli.mjs <command>
@@ -366,6 +471,8 @@ const USAGE = `Usage: units-cli.mjs <command>
   ids            print unit ids, one per line (completion)
   build [unit]   bazel build //..., or one unit's Bazel targets
   test [unit]    hermetic suite or one unit's CI test commands
+  ci <unit>      one keep-going Bazel call: the unit's tests plus its build
+                 targets (tests under build patterns are built, not run)
 
 Android units (and the whole-workspace build) pass --config=android, which
 activates platform/android/android.bazelrc.
@@ -392,7 +499,13 @@ export function main(argv = process.argv.slice(2)) {
       }
       case "test": {
         const unit = rest.length ? findUnit(units(), rest[0]) : null;
-        return runCommands(testCommands(unit));
+        return runCommands(testCommands(unit), { keepGoing: true });
+      }
+      case "ci": {
+        if (!rest.length) {
+          throw new Error("ci needs a unit id");
+        }
+        return runCi(findUnit(units(), rest[0]));
       }
       default:
         process.stderr.write(USAGE);
