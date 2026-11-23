@@ -37,11 +37,11 @@ class DeviceStateScreenshotTest {
 
     @Test
     @Config(qualifiers = "notnight")
-    fun currentLight() = check(AppTheme.CURRENT, "light")
+    fun emeraldLight() = check(AppTheme.EMERALD, "light")
 
     @Test
     @Config(qualifiers = "night")
-    fun currentDark() = check(AppTheme.CURRENT, "dark")
+    fun emeraldDark() = check(AppTheme.EMERALD, "dark")
 
     @Test
     @Config(qualifiers = "notnight")

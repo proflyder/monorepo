@@ -1,0 +1,13 @@
+load("//platform/android:defs.bzl", "metro_android_library")
+
+package(default_visibility = ["//visibility:public"])
+
+metro_android_library(
+    name = "api",
+    srcs = glob(["src/main/kotlin/**/*.kt"]),
+    custom_package = "dev.proflyder.home.core.launchericon",
+    manifest = "src/main/AndroidManifest.xml",
+    deps = [
+        "//projects/mobile/android/core/theme",
+    ],
+)

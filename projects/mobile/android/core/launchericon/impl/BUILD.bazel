@@ -1,0 +1,37 @@
+load("//platform/android:defs.bzl", "home_android_local_test", "metro_android_library")
+
+package(default_visibility = ["//visibility:public"])
+
+metro_android_library(
+    name = "impl",
+    srcs = glob(["src/main/kotlin/**/*.kt"]),
+    custom_package = "dev.proflyder.home.core.launchericon.impl",
+    manifest = "src/main/AndroidManifest.xml",
+    deps = [
+        "//projects/mobile/android/core/launchericon/api",
+        "//projects/mobile/android/core/runtime",
+        "//projects/mobile/android/core/theme",
+        "@maven//:dev_zacsweers_metro_runtime_jvm",
+        "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_android",
+    ],
+)
+
+home_android_local_test(
+    name = "robolectric_test",
+    srcs = glob(["src/test/kotlin/**/*.kt"]),
+    associates = [":impl"],
+    custom_package = "dev.proflyder.home.core.launchericon",
+    manifest = "src/test/AndroidManifest.xml",
+    test_classes = [
+        "dev.proflyder.home.core.launchericon.LauncherIconSyncTest",
+        "dev.proflyder.home.core.launchericon.PackageManagerLauncherIconsTest",
+    ],
+    deps = [
+        "//projects/mobile/android/core/launchericon/api",
+        "//projects/mobile/android/core/theme",
+        "@maven//:androidx_datastore_datastore_preferences",
+        "@maven//:junit_junit",
+        "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_android",
+        "@maven//:org_robolectric_robolectric",
+    ],
+)

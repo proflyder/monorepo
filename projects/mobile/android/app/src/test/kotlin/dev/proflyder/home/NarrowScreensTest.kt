@@ -88,7 +88,7 @@ class NarrowScreensTest {
 
     private fun open(route: String, widthDp: Int): MainActivity {
         val app = RuntimeEnvironment.getApplication() as HomeApplication
-        runBlocking { app.graph.appearance.selectTheme(AppTheme.CURRENT) }
+        runBlocking { app.graph.appearance.selectTheme(AppTheme.EMERALD) }
         val activity = Robolectric.buildActivity(MainActivity::class.java).setup().get()
         idle(activity)
         activity.router.openRoute(route)

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="theme_emerald_primary">#0E7C66</color>
+    <color name="theme_emerald_on_primary">#FFFFFF</color>
+    <color name="theme_emerald_primary_container">#BDF2E0</color>
+    <color name="theme_emerald_on_primary_container">#00201A</color>
+    <color name="theme_emerald_secondary">#4A635B</color>
+    <color name="theme_emerald_on_secondary">#FFFFFF</color>
+    <color name="theme_emerald_secondary_container">#CCE8DE</color>
+    <color name="theme_emerald_on_secondary_container">#05201A</color>
+    <color name="theme_emerald_tertiary">#8A5100</color>
+    <color name="theme_emerald_on_tertiary">#FFFFFF</color>
+    <color name="theme_emerald_tertiary_container">#FFDDB6</color>
+    <color name="theme_emerald_on_tertiary_container">#2C1600</color>
+    <color name="theme_emerald_error">#BA1A1A</color>
+    <color name="theme_emerald_surface">#F5FBF7</color>
+    <color name="theme_emerald_on_surface">#171D1A</color>
+    <color name="theme_emerald_on_surface_variant">#3F4945</color>
+    <color name="theme_emerald_surface_container_low">#EFF5F1</color>
+    <color name="theme_emerald_surface_container">#E9F0EC</color>
+    <color name="theme_emerald_surface_container_high">#E3EAE6</color>
+    <color name="theme_emerald_surface_container_highest">#DDE4E0</color>
+    <color name="theme_emerald_outline">#6F7975</color>
+    <color name="theme_emerald_outline_variant">#BFC9C4</color>
+    <color name="theme_emerald_state_on_text">#0A6B58</color>
+    <color name="theme_emerald_warning">#8A5100</color>
+    <color name="theme_emerald_on_warning">#FFFFFF</color>
+    <color name="theme_emerald_success">#1B6E35</color>
+    <color name="theme_emerald_on_success">#FFFFFF</color>
+</resources>

@@ -24,7 +24,7 @@ import kotlinx.coroutines.runBlocking
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class ThemeScreenshotTest {
     @Test
-    fun currentThemeScreens() = shootAll(AppTheme.CURRENT)
+    fun emeraldThemeScreens() = shootAll(AppTheme.EMERALD)
 
     @Test
     fun systemThemeScreens() = shootAll(AppTheme.SYSTEM)

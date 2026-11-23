@@ -543,8 +543,10 @@ navigate by route string, not by an impl destination.
   navigation hides while the keyboard is open; pinned panels use
   `pinAboveKeyboard`, lists `applyScrollBottomInset`.
 - **Themes** are `ThemeOverlay`s applied in `onActivityPreCreated` before
-  inflation (Material You: dynamic colours over Emerald). Stored keys
-  (`current`, `system`, `neon`) never change. Screens use only theme
+  inflation (Material You: dynamic colours over Emerald). Stored keys are
+  `emerald`, `system`, `neon`; a retired key stays in `AppTheme.legacyKeys`
+  (`current` reads as `emerald`), so a rename never drops the user's choice.
+  Screens use only theme
   attributes; `AndroidThemeColorTests` rejects literal colours and segmented
   buttons. No effect exists in only one theme. Adding a theme: one `AppTheme`
   entry, its palette, `@color/theme_<key>_*` and the overlay. Components and
@@ -556,3 +558,24 @@ navigate by route string, not by an impl destination.
 ## App identity
 
 `dev.proflyder.home`, minSdk 26, target/compile SDK 36, JVM target 17.
+
+## Launcher icon per theme
+
+Each `AppTheme` has an `activity-alias` `dev.proflyder.home.launcher.<Name>`
+targeting `MainActivity`, with its own adaptive icon
+(`app_ic_launcher_<theme>`), built by one rule for every theme from colour
+roles in `launcher_icon_colors.xml`: `background` = the theme's surface,
+`symbol` = its primary, `glow` = its primary container (a radial halo in the
+background), plus a shared monochrome layer. Roles reference the theme
+palette, so icons follow light/dark mode; the system theme maps the same roles
+to wallpaper colours on API 31+. Only the alias of
+`AppTheme.DEFAULT` is enabled in the manifest. `LauncherIcons`
+(`core/launchericon/api`) is implemented by `PackageManagerLauncherIcons`
+(`core/launchericon/impl`), which enables the target alias first, then
+disables the others with `DONT_KILL_APP`, skipping writes when the state
+already matches. `LauncherIconSync` (an `AppStartable`) waits for the stored
+appearance and applies every distinct theme, so the startup sync and theme
+changes share one path. `MainActivity` stays exported without a launcher
+filter, so explicit intents and `getLaunchIntentForPackage` (push, VPN
+notifications) keep working. A new `AppTheme` entry fails compilation in
+`LauncherAliases` until its alias and icon exist.

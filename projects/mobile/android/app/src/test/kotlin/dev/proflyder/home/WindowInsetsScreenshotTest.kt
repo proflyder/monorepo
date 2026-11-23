@@ -54,7 +54,7 @@ class WindowInsetsScreenshotTest {
     fun saveBarSitsOnTheKeyboardInNeon() = alarmEditorWithKeyboard(AppTheme.NEON)
 
     @Test
-    fun saveBarSitsOnTheKeyboardInCurrent() = alarmEditorWithKeyboard(AppTheme.CURRENT)
+    fun saveBarSitsOnTheKeyboardInEmerald() = alarmEditorWithKeyboard(AppTheme.EMERALD)
 
     @Test
     @Config(qualifiers = LIGHT)
@@ -62,7 +62,7 @@ class WindowInsetsScreenshotTest {
 
     @Test
     @Config(qualifiers = LIGHT)
-    fun saveBarSitsOnTheKeyboardInCurrentLight() = alarmEditorWithKeyboard(AppTheme.CURRENT)
+    fun saveBarSitsOnTheKeyboardInEmeraldLight() = alarmEditorWithKeyboard(AppTheme.EMERALD)
 
     @Test
     @Config(qualifiers = RU_DARK)
@@ -70,7 +70,7 @@ class WindowInsetsScreenshotTest {
 
     @Test
     @Config(qualifiers = RU_DARK)
-    fun pushNameFieldAndTitleInCurrent() = pushSettings(AppTheme.CURRENT)
+    fun pushNameFieldAndTitleInEmerald() = pushSettings(AppTheme.EMERALD)
 
     @Test
     @Config(qualifiers = RU_LIGHT)
@@ -78,7 +78,7 @@ class WindowInsetsScreenshotTest {
 
     @Test
     @Config(qualifiers = RU_LIGHT)
-    fun pushNameFieldAndTitleInCurrentLight() = pushSettings(AppTheme.CURRENT)
+    fun pushNameFieldAndTitleInEmeraldLight() = pushSettings(AppTheme.EMERALD)
 
     @Test
     @Config(qualifiers = LIGHT)
@@ -86,7 +86,7 @@ class WindowInsetsScreenshotTest {
 
     @Test
     @Config(qualifiers = LIGHT)
-    fun connectionFieldsUseTheHomeStyleInCurrentLight() = connectionFields(AppTheme.CURRENT)
+    fun connectionFieldsUseTheHomeStyleInEmeraldLight() = connectionFields(AppTheme.EMERALD)
 
     @Test
     fun everyFieldInTheAppUsesTheHomeStyle() {
@@ -100,19 +100,19 @@ class WindowInsetsScreenshotTest {
     fun homeLastItemClearsBottomNavigationInNeon() = homeScrolledToEnd(AppTheme.NEON)
 
     @Test
-    fun homeLastItemClearsBottomNavigationInCurrent() = homeScrolledToEnd(AppTheme.CURRENT)
+    fun homeLastItemClearsBottomNavigationInEmerald() = homeScrolledToEnd(AppTheme.EMERALD)
 
     @Test
     fun connectionFieldsUseTheHomeStyleInNeon() = connectionFields(AppTheme.NEON)
 
     @Test
-    fun connectionFieldsUseTheHomeStyleInCurrent() = connectionFields(AppTheme.CURRENT)
+    fun connectionFieldsUseTheHomeStyleInEmerald() = connectionFields(AppTheme.EMERALD)
 
     @Test
     fun chatPanelSitsOnTheKeyboardInNeon() = chatWithKeyboard(AppTheme.NEON)
 
     @Test
-    fun chatPanelSitsOnTheKeyboardInCurrent() = chatWithKeyboard(AppTheme.CURRENT)
+    fun chatPanelSitsOnTheKeyboardInEmerald() = chatWithKeyboard(AppTheme.EMERALD)
 
     private fun chatWithKeyboard(theme: AppTheme) {
         val activity = launch(theme)

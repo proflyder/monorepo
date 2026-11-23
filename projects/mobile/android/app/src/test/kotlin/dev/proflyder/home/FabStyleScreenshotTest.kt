@@ -36,7 +36,7 @@ class FabStyleScreenshotTest {
     fun neon() = check(AppTheme.NEON)
 
     @Test
-    fun current() = check(AppTheme.CURRENT)
+    fun emerald() = check(AppTheme.EMERALD)
 
     @Test
     fun system() = check(AppTheme.SYSTEM)

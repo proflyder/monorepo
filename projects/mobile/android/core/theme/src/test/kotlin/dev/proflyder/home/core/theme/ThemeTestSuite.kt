@@ -10,5 +10,6 @@ import org.junit.runners.Suite
     ThemeNamesTest::class,
     ThemeEffectsTest::class,
     AppearanceControllerTest::class,
+    NotificationAccentTest::class,
 )
 class ThemeTestSuite

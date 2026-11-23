@@ -1,7 +1,7 @@
 package dev.proflyder.home.core.theme
 
 internal object Palettes {
-    val current = ThemePalette(
+    val emerald = ThemePalette(
         light = ColorScheme(
             primary = rgb(0x0E7C66),
             onPrimary = rgb(0xFFFFFF),

@@ -17,6 +17,8 @@ metro_android_library(
     view_binding = True,
     deps = [
         "//projects/mobile/android/core/data",
+        "//projects/mobile/android/core/launchericon/api",
+        "//projects/mobile/android/core/launchericon/impl",
         "//projects/mobile/android/core/config",
         "//projects/mobile/android/core/model",
         "//projects/mobile/android/core/navigation",
@@ -135,6 +137,7 @@ home_android_local_test(
         "dev.proflyder.home.FabStyleScreenshotTest",
         "dev.proflyder.home.HomeFabActivityTest",
         "dev.proflyder.home.KeyScreensScreenshotTest",
+        "dev.proflyder.home.LauncherAliasesTest",
         "dev.proflyder.home.NarrowScreensTest",
         "dev.proflyder.home.NoticeSwipeActivityTest",
         "dev.proflyder.home.ThemeScreenshotTest",
@@ -143,6 +146,7 @@ home_android_local_test(
     ],
     deps = [
         "//projects/mobile/android/core/config",
+        "//projects/mobile/android/core/launchericon/api",
         "//projects/mobile/android/core/model",
         "//projects/mobile/android/core/network/api",
         "//projects/mobile/android/core/network/impl",
