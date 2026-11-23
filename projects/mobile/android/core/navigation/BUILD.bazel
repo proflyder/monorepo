@@ -1,4 +1,5 @@
-load("@rules_kotlin//kotlin:android.bzl", "kt_android_library", "kt_android_local_test")
+load("//platform/android:defs.bzl", "home_android_local_test")
+load("@rules_kotlin//kotlin:android.bzl", "kt_android_library")
 load(":robolectric_android_all.bzl", "android_all_dir")
 
 package(default_visibility = ["//visibility:public"])
@@ -26,7 +27,7 @@ android_all_dir(
     jar_name = "android-all-instrumented-15-robolectric-13954326-i7.jar",
 )
 
-kt_android_local_test(
+home_android_local_test(
     name = "navigation_test",
     srcs = glob(["src/test/kotlin/**/*.kt"]),
     custom_package = "dev.proflyder.home.core.navigation",

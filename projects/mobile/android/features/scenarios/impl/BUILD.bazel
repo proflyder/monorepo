@@ -1,5 +1,4 @@
-load("@rules_kotlin//kotlin:android.bzl", "kt_android_local_test")
-load("//platform/android:defs.bzl", "metro_android_library")
+load("//platform/android:defs.bzl", "home_android_local_test", "metro_android_library")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -35,7 +34,7 @@ metro_android_library(
     ],
 )
 
-kt_android_local_test(
+home_android_local_test(
     name = "scenario_use_cases_test",
     srcs = glob(["src/test/kotlin/**/*.kt"]),
     associates = [":impl"],

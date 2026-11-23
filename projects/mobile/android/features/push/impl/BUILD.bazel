@@ -1,5 +1,4 @@
-load("@rules_kotlin//kotlin:android.bzl", "kt_android_local_test")
-load("//platform/android:defs.bzl", "metro_android_library")
+load("//platform/android:defs.bzl", "home_android_local_test", "metro_android_library")
 load(":robolectric_android_all.bzl", "android_all_dir")
 
 package(default_visibility = ["//visibility:public"])
@@ -40,7 +39,7 @@ metro_android_library(
     ],
 )
 
-kt_android_local_test(
+home_android_local_test(
     name = "impl_test",
     srcs = [
         "src/test/kotlin/dev/proflyder/home/feature/push/AllPushImplTests.kt",
@@ -56,7 +55,7 @@ kt_android_local_test(
     ],
 )
 
-kt_android_local_test(
+home_android_local_test(
     name = "registration_policy_test",
     srcs = ["src/test/kotlin/dev/proflyder/home/feature/push/PushRegistrationPolicyTest.kt"],
     associates = [":impl"],
@@ -72,7 +71,7 @@ kt_android_local_test(
     ],
 )
 
-kt_android_local_test(
+home_android_local_test(
     name = "registrar_test",
     srcs = ["src/test/kotlin/dev/proflyder/home/feature/push/HomePushRegistrarTest.kt"],
     associates = [":impl"],
@@ -94,7 +93,7 @@ kt_android_local_test(
     ],
 )
 
-kt_android_local_test(
+home_android_local_test(
     name = "identity_test",
     srcs = [
         "src/test/kotlin/dev/proflyder/home/feature/push/AllPushIdentityTests.kt",
@@ -132,7 +131,7 @@ kt_android_local_test(
     ],
 )
 
-kt_android_local_test(
+home_android_local_test(
     name = "history_test",
     srcs = ["src/test/kotlin/dev/proflyder/home/feature/push/NotificationHistoryStoreTest.kt"],
     associates = [":impl"],
@@ -171,7 +170,7 @@ android_all_dir(
     jar_name = "android-all-instrumented-15-robolectric-13954326-i7.jar",
 )
 
-kt_android_local_test(
+home_android_local_test(
     name = "audio_test",
     srcs = ["src/test/kotlin/dev/proflyder/home/feature/push/FindPhoneAudioTest.kt"],
     associates = [":impl"],
@@ -201,7 +200,7 @@ kt_android_local_test(
     ],
 )
 
-kt_android_local_test(
+home_android_local_test(
     name = "channels_test",
     srcs = ["src/test/kotlin/dev/proflyder/home/feature/push/PushChannelsTest.kt"],
     associates = [":impl"],
@@ -237,7 +236,7 @@ kt_android_local_test(
     ],
 )
 
-kt_android_local_test(
+home_android_local_test(
     name = "settings_screenshot_test",
     srcs = ["src/test/kotlin/dev/proflyder/home/feature/push/presentation/PushSettingsScreenshotTest.kt"],
     associates = [":impl"],
