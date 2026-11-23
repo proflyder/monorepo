@@ -228,6 +228,7 @@ export function testCommands(unit, root = ROOT) {
           command: "bazel",
           args: ["build", "//platform/deploy-rs:home-deploy"],
           cwd: root,
+          prerequisite: true,
         });
         env = { HOME_DEPLOY: binary };
       }
@@ -341,23 +342,42 @@ export function testCommands(unit, root = ROOT) {
   }
 }
 
-export function runCommands(commands) {
-  for (const { command, args, cwd, shell = false, env } of commands) {
-    const result = spawnSync(command, args, {
+export function describeCommand({ command, args = [] }) {
+  return [command, ...args].join(" ");
+}
+
+export function runCommands(commands, { keepGoing = false, spawn = spawnSync, log = process.stderr } = {}) {
+  const failed = [];
+  for (const entry of commands) {
+    const { command, args, cwd, shell = false, env, prerequisite = false } = entry;
+    const result = spawn(command, args, {
       cwd,
       shell,
       stdio: "inherit",
       env: env ? { ...process.env, ...env } : process.env,
     });
     if (result.error) {
-      process.stderr.write(`${result.error.message}\n`);
-      return 1;
+      log.write(`${result.error.message}\n`);
     }
-    if (result.status !== 0) {
-      return result.status ?? 1;
+    const status = result.error ? 1 : result.status ?? 1;
+    if (status === 0) {
+      continue;
+    }
+    failed.push({ entry, status });
+    if (!keepGoing || prerequisite) {
+      break;
     }
   }
-  return 0;
+  if (!failed.length) {
+    return 0;
+  }
+  if (keepGoing && commands.length > 1) {
+    log.write(`${failed.length} of ${commands.length} commands failed:\n`);
+    for (const { entry, status } of failed) {
+      log.write(`  exit ${status}: ${describeCommand(entry)}\n`);
+    }
+  }
+  return failed[0].status;
 }
 
 const USAGE = `Usage: units-cli.mjs <command>
@@ -392,7 +412,7 @@ export function main(argv = process.argv.slice(2)) {
       }
       case "test": {
         const unit = rest.length ? findUnit(units(), rest[0]) : null;
-        return runCommands(testCommands(unit));
+        return runCommands(testCommands(unit), { keepGoing: true });
       }
       default:
         process.stderr.write(USAGE);

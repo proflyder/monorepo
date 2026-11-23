@@ -39,8 +39,11 @@ bazelisk test  --config=android //projects/mobile/android:detekt
 adb install -r bazel-bin/projects/mobile/android/app/app.apk
 ```
 
-- **Android Lint** is not part of `android_tests`: it is its own CI unit
-  (`android / android-lint`) so a finding does not hide test results. It uses
+- **Android Lint** is not part of `android_tests`, but CI runs it in the
+  same `android / android-app` job and the same `bazel test --keep_going`
+  call as the APK, the tests and detekt, so compilation happens once and a
+  finding does not hide test results: the job summary lists every failing
+  test, Lint and detekt target together. It uses
   the SDK `cmdline-tools;23.0` Lint CLI (`@android_lint_sdk`, a symlink of
   `ANDROID_HOME` whose jars are action inputs) with partial analysis: one
   cacheable `AndroidLintAnalyze` action per module (`--analyze-only` over that
@@ -54,7 +57,7 @@ adb install -r bazel-bin/projects/mobile/android/app/app.apk
   reads the application theme only from a manifest visited in the same Lint
   process; per-module analysis of a library cannot see the app manifest and
   falls back to `Theme.Holo`.
-- **detekt** (`android / android-detekt`): `detekt.yml` plus the first-party
+- **detekt** (`android / android-app`, same Bazel call): `detekt.yml` plus the first-party
   `home-rules` plug-in in `platform/android/detekt-rules`. There is no
   baseline; every finding fails.
 

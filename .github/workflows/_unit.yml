@@ -116,11 +116,27 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
-      - uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b
+      - name: Set up mise
+        id: mise
+        background: true
+        uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b
         with:
           version: 2026.11.3
           install_args: ${{ inputs.kind == 'python' && 'python node' || 'node' }}
           cache: true
+
+      - name: Restore the Bazel disk cache
+        id: disk-cache
+        if: inputs.kind == 'bazel' || inputs.images != ''
+        background: true
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: ~/.cache/bazel-disk
+          key: bazel-rust-${{ runner.os }}-${{ inputs.unit }}-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'Cargo.lock', 'crate-universe.lock', 'rust-toolchain.toml') }}
+          restore-keys: |
+            bazel-rust-${{ runner.os }}-${{ inputs.unit }}-
+            bazel-rust-${{ runner.os }}-warm-
+            bazel-rust-${{ runner.os }}-
 
       - uses: bazel-contrib/setup-bazel@104e3eea9447cdaa4b00d0fb46191a3985d26ab3
         if: inputs.kind == 'bazel' || inputs.images != ''
@@ -130,26 +146,25 @@ jobs:
           repository-cache: false
           cache-save: ${{ inputs.save_cache }}
 
-      - uses: ./.github/actions/bazel-repository-cache
+      - name: Restore the Bazel repository cache
+        id: bazel-repo
         if: inputs.kind == 'bazel' || inputs.images != ''
+        background: true
+        uses: ./.github/actions/bazel-repository-cache
         with:
           key: bazel-repo-rust-${{ runner.os }}-${{ hashFiles('MODULE.bazel', 'MODULE.bazel.lock', '.bazelversion', 'Cargo.lock', 'crate-universe.lock', 'rust-toolchain.toml') }}
           restore-prefix: bazel-repo-rust-${{ runner.os }}-
 
-      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
-        if: inputs.kind == 'bazel' || inputs.images != ''
-        with:
-          path: ~/.cache/bazel-disk
-          key: bazel-rust-${{ runner.os }}-${{ inputs.unit }}-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'Cargo.lock', 'crate-universe.lock', 'rust-toolchain.toml') }}
-          restore-keys: |
-            bazel-rust-${{ runner.os }}-${{ inputs.unit }}-
-            bazel-rust-${{ runner.os }}-warm-
-            bazel-rust-${{ runner.os }}-
-
-      - uses: ./.github/actions/nexus-cache
+      - name: Configure the Nexus cache
+        id: nexus
+        background: true
+        uses: ./.github/actions/nexus-cache
         with:
           host: ${{ vars.NEXUS_HOST }}
           password: ${{ secrets.NEXUS_CI_PASSWORD }}
+
+      - name: Wait for the toolchains and caches
+        wait-all:
 
       - name: Install Python test dependencies
         if: inputs.kind == 'python'
@@ -157,13 +172,35 @@ jobs:
           python3 -m pip install --upgrade pip
           python3 -m pip install -r requirements-test.txt
 
-      - name: bazel build ${{ inputs.unit }}
-        if: inputs.kind == 'bazel' && inputs.build_targets != ''
-        run: mise run build ${{ inputs.unit }}
+      - name: bazel ${{ inputs.test_targets != '' && 'test' || 'build' }} ${{ inputs.unit }} (keep going, every target)
+        id: bazel
+        if: inputs.kind == 'bazel' && (inputs.build_targets != '' || inputs.test_targets != '')
+        continue-on-error: true
+        env:
+          BAZEL_TARGETS: ${{ inputs.build_targets }} ${{ inputs.test_targets }}
+          BAZEL_EXTRA_ARGS: >-
+            ${{ inputs.images != '' && '--platforms=//platform/bazel:linux_amd64' || '' }}
+            --keep_going
+            --build_event_json_file=${{ runner.temp }}/bazel-events.json
+          COMMAND: ${{ inputs.test_targets != '' && 'test' || 'build' }}
+          UNIT: ${{ inputs.unit }}
+        run: mise run "$COMMAND" "$UNIT"
 
-      - name: bazel test ${{ inputs.unit }}
-        if: inputs.kind == 'bazel' && inputs.test_targets != ''
-        run: mise run test ${{ inputs.unit }}
+      - name: Report every failing build, test, clippy and rustfmt target
+        if: steps.bazel.outcome != 'skipped'
+        env:
+          UNIT: ${{ inputs.unit }}
+          BAZEL_OUTCOME: ${{ steps.bazel.outcome }}
+          BAZEL_EVENTS: ${{ runner.temp }}/bazel-events.json
+        run: |
+          set -uo pipefail
+          status=0
+          node platform/ci/bazel_report.mjs --events "$BAZEL_EVENTS" --title "bazel / $UNIT" || status=1
+          if [[ "$BAZEL_OUTCOME" != "success" ]]; then
+            echo "::error title=bazel / $UNIT::bazel finished with $BAZEL_OUTCOME"
+            status=1
+          fi
+          exit "$status"
 
       - name: test ${{ inputs.unit }}
         if: inputs.kind == 'python'

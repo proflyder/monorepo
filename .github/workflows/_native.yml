@@ -224,20 +224,31 @@ jobs:
           repository-cache: false
           cache-save: ${{ inputs.save_cache }}
 
-      - uses: ./.github/actions/bazel-repository-cache
+      - name: Restore the Bazel repository cache
+        id: bazel-repo
+        background: true
+        uses: ./.github/actions/bazel-repository-cache
         with:
           key: bazel-repo-rust-${{ runner.os }}-${{ hashFiles('MODULE.bazel', 'MODULE.bazel.lock', '.bazelversion', 'Cargo.lock', 'crate-universe.lock', 'rust-toolchain.toml') }}
           restore-prefix: bazel-repo-rust-${{ runner.os }}-
 
-      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+      - name: Restore the Bazel disk cache
+        id: disk-cache
+        background: true
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: ~/.cache/bazel-disk
           key: bazel-logon-${{ runner.os }}-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'Cargo.lock', 'crate-universe.lock', 'rust-toolchain.toml', 'platform/bazel/windows/**', 'platform/bazel/zig/**') }}
           restore-keys: |
             bazel-logon-${{ runner.os }}-
 
+      - name: Wait for the toolchains and caches
+        wait-all:
+
       - name: Test ${{ inputs.unit }}
+        id: test
         if: inputs.test != ''
+        continue-on-error: true
         env:
           TEST_COMMAND: ${{ inputs.test }}
         run: bash -eu -o pipefail -c "$TEST_COMMAND"
@@ -246,6 +257,15 @@ jobs:
         env:
           BUILD_COMMAND: ${{ inputs.build }}
         run: bash -eu -o pipefail -c "$BUILD_COMMAND"
+
+      - name: Report the test and build results
+        env:
+          STEPS: ${{ toJSON(steps) }}
+          UNIT: ${{ inputs.unit }}
+        working-directory: .
+        run: >-
+          node platform/ci/step_report.mjs --title "native / $UNIT"
+          --check "test=Test $UNIT"
 
       - name: Checksums ${{ inputs.unit }}
         if: inputs.checksums != ''
@@ -319,17 +339,26 @@ jobs:
           repository-cache: false
           cache-save: ${{ inputs.save_cache }}
 
-      - uses: ./.github/actions/bazel-repository-cache
+      - name: Restore the Bazel repository cache
+        id: bazel-repo
+        background: true
+        uses: ./.github/actions/bazel-repository-cache
         with:
           key: bazel-repo-rust-${{ runner.os }}-${{ hashFiles('MODULE.bazel', 'MODULE.bazel.lock', '.bazelversion', 'Cargo.lock', 'crate-universe.lock', 'rust-toolchain.toml') }}
           restore-prefix: bazel-repo-rust-${{ runner.os }}-
 
-      - uses: ./.github/actions/nexus-cache
+      - name: Configure the Nexus cache
+        id: nexus
+        background: true
+        uses: ./.github/actions/nexus-cache
         with:
           host: ${{ vars.NEXUS_HOST }}
           password: ${{ secrets.NEXUS_CI_PASSWORD }}
 
-      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+      - name: Restore the Bazel disk cache
+        id: disk-cache
+        background: true
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: ~/.cache/bazel-disk
           key: bazel-pulsar-${{ runner.os }}-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'Cargo.lock', 'crate-universe.lock', 'rust-toolchain.toml') }}
@@ -337,9 +366,14 @@ jobs:
             bazel-pulsar-${{ runner.os }}-
 
       - name: Release verification prerequisites
+        id: qemu
+        background: true
         run: |
           sudo apt-get update -q
           sudo apt-get install -yq qemu-user libc6-arm64-cross libc6-armhf-cross
+
+      - name: Wait for the toolchains and caches
+        wait-all:
 
       - name: Release identity
         env:
@@ -415,24 +449,38 @@ jobs:
           repository-cache: false
           cache-save: ${{ inputs.save_cache }}
 
-      - uses: ./.github/actions/bazel-repository-cache
+      - name: Restore the Bazel repository cache
+        id: bazel-repo
+        background: true
+        uses: ./.github/actions/bazel-repository-cache
         with:
           key: bazel-repo-rust-${{ runner.os }}-${{ hashFiles('MODULE.bazel', 'MODULE.bazel.lock', '.bazelversion', 'Cargo.lock', 'crate-universe.lock', 'rust-toolchain.toml') }}
           restore-prefix: bazel-repo-rust-${{ runner.os }}-
 
-      - uses: ./.github/actions/nexus-cache
+      - name: Configure the Nexus cache
+        id: nexus
+        background: true
+        uses: ./.github/actions/nexus-cache
         with:
           host: ${{ vars.NEXUS_HOST }}
           password: ${{ secrets.NEXUS_CI_PASSWORD }}
 
-      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+      - name: Restore the Bazel disk cache
+        id: disk-cache
+        background: true
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: ~/.cache/bazel-disk
           key: bazel-installer-${{ runner.os }}-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'Cargo.lock', 'crate-universe.lock', 'rust-toolchain.toml', 'platform/bazel/windows/**', 'platform/bazel/zig/**') }}
           restore-keys: |
             bazel-installer-${{ runner.os }}-
 
+      - name: Wait for the toolchains and caches
+        wait-all:
+
       - name: Test installer
+        id: test
+        continue-on-error: true
         working-directory: ${{ inputs.workdir }}
         run: |
           set -euo pipefail
@@ -459,6 +507,13 @@ jobs:
           build linux-arm64 "" --platforms=//platform/bazel/zig:aarch64_linux
           build windows-amd64 .exe --platforms=//platform/bazel/windows:x86_64_windows
 
+      - name: Report the test and build results
+        env:
+          STEPS: ${{ toJSON(steps) }}
+        run: >-
+          node platform/ci/step_report.mjs --title "native / pulsar-installer"
+          --check "test=Test installer"
+
   pulsar-radio:
     name: native / pulsar-radio
     needs: promote
@@ -469,20 +524,30 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
       - name: Set up zig
+        id: zig
+        background: true
         uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29
         timeout-minutes: 5
         with:
           version: "0.14.1"
 
       - name: i386 C library (the Telink toolchain is 32-bit x86)
+        id: i386
+        background: true
         run: sudo dpkg --add-architecture i386 && sudo apt-get update -q && sudo apt-get install -yq libc6:i386
 
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+      - name: Restore the radio toolchain and SDK
+        id: radio-cache
+        background: true
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: |
             ${{ inputs.workdir }}/radio/src
             ${{ inputs.workdir }}/radio/toolchain
           key: pulsar-radio-${{ hashFiles(format('{0}/radio/build.sh', inputs.workdir), format('{0}/radio/sdk.patch', inputs.workdir)) }}
+
+      - name: Wait for the toolchains and caches
+        wait-all:
 
       - name: Build radio firmware
         working-directory: ${{ inputs.workdir }}
@@ -542,15 +607,23 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
       - name: Set up zig
+        id: zig
+        background: true
         uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29
         timeout-minutes: 5
         with:
           version: "0.14.1"
 
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+      - name: Restore the dropbear sources
+        id: ssh-cache
+        background: true
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: ${{ inputs.workdir }}/ssh/out/src
           key: pulsar-ssh-${{ hashFiles(format('{0}/ssh/build.sh', inputs.workdir)) }}
+
+      - name: Wait for the toolchains and caches
+        wait-all:
 
       - name: Build dropbear and sftp-server
         working-directory: ${{ inputs.workdir }}

@@ -497,37 +497,18 @@ export const config = {
     {
       id: "android-app",
       platform: "android",
-      title: "projects/mobile/android (Home client, dev.proflyder.home)",
+      title: "projects/mobile/android (Home client: APK, tests, Android Lint, detekt)",
       paths: ["projects/mobile/android/**"],
       bazel: {
         roots: ["//projects/mobile/android"],
-        test_targets: ["//projects/mobile/android:android_tests"],
+        test_targets: [
+          "//projects/mobile/android:android_tests",
+          "//projects/mobile/android:android_lint",
+          "//projects/mobile/android:detekt",
+        ],
         build_targets: ["//projects/mobile/android:app"],
         release: true,
-        sdk_packages: ["ndk;28.2.13676358"],
-      },
-    },
-
-    {
-      id: "android-lint",
-      platform: "android",
-      title: "projects/mobile/android (Android Lint, per-module analysis)",
-      paths: ["projects/mobile/android/**"],
-      bazel: {
-        roots: ["//projects/mobile/android"],
-        test_targets: ["//projects/mobile/android:android_lint"],
         sdk_packages: ["cmdline-tools;23.0", "ndk;28.2.13676358"],
-      },
-    },
-
-    {
-      id: "android-detekt",
-      platform: "android",
-      title: "projects/mobile/android (detekt, whole app graph)",
-      paths: ["projects/mobile/android/**"],
-      bazel: {
-        roots: ["//projects/mobile/android"],
-        test_targets: ["//projects/mobile/android:detekt"],
       },
     },
 

@@ -12,6 +12,7 @@ import {
   findUnit,
   formatTable,
   isDeployable,
+  runCommands,
   suggestIds,
   testCommands,
   unitHint,
@@ -228,6 +229,7 @@ test("testCommands builds the Rust deploy tool for deploy_tool units", () => {
   const [build, compile, unittest] = commands;
   assert.equal(build.command, "bazel");
   assert.deepEqual(build.args, ["build", "//platform/deploy-rs:home-deploy"]);
+  assert.equal(build.prerequisite, true);
   assert.match(compile.env.HOME_DEPLOY, /bazel-bin\/platform\/deploy-rs\/home-deploy$/);
   assert.equal(unittest.env.HOME_DEPLOY, compile.env.HOME_DEPLOY);
 });
@@ -270,4 +272,62 @@ test("testCommands mirrors the quality workflow gates", () => {
 test("unitHint names the platform command", () => {
   assert.match(unitHint(byId("ha-voice")), /unittest discover/);
   assert.match(unitHint(byId("heartbeat")), /node --test/);
+});
+
+function fakeSpawn(statuses) {
+  const calls = [];
+  return {
+    calls,
+    spawn: (command, args) => {
+      calls.push([command, ...args].join(" "));
+      return { status: statuses.shift() ?? 0 };
+    },
+  };
+}
+
+function sink() {
+  const lines = [];
+  return { lines, write: (text) => lines.push(text) };
+}
+
+test("runCommands keeps going and lists every failed test command", () => {
+  const { calls, spawn } = fakeSpawn([1, 0, 2]);
+  const log = sink();
+  const status = runCommands(
+    [
+      { command: "a", args: [] },
+      { command: "b", args: [] },
+      { command: "c", args: ["x"] },
+    ],
+    { keepGoing: true, spawn, log },
+  );
+  assert.equal(status, 1);
+  assert.deepEqual(calls, ["a", "b", "c x"]);
+  assert.match(log.lines.join(""), /2 of 3 commands failed:\n  exit 1: a\n  exit 2: c x/);
+});
+
+test("runCommands stops at a failed prerequisite even when keeping going", () => {
+  const { calls, spawn } = fakeSpawn([1]);
+  const status = runCommands(
+    [
+      { command: "bazel", args: ["build"], prerequisite: true },
+      { command: "python3", args: [] },
+    ],
+    { keepGoing: true, spawn, log: sink() },
+  );
+  assert.equal(status, 1);
+  assert.deepEqual(calls, ["bazel build"]);
+});
+
+test("runCommands stops at the first failure without keepGoing", () => {
+  const { calls, spawn } = fakeSpawn([3, 0]);
+  const status = runCommands(
+    [
+      { command: "a", args: [] },
+      { command: "b", args: [] },
+    ],
+    { spawn, log: sink() },
+  );
+  assert.equal(status, 3);
+  assert.deepEqual(calls, ["a"]);
 });

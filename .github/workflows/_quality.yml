@@ -29,25 +29,66 @@ jobs:
           cache: true
 
       - name: Repository audit (private data, links, gitlinks)
+        id: audit
+        background: true
+        continue-on-error: true
         run: mise run audit
 
       - name: No comments in code
+        id: comments
+        background: true
+        continue-on-error: true
         run: mise run lint:comments
 
       - name: Python product gates (syntax, shellcheck, secret patterns)
+        id: static
+        background: true
+        continue-on-error: true
         run: mise run test:static
 
       - name: CI unit map is valid and every source/test file is routed
+        id: units
+        background: true
+        continue-on-error: true
         run: mise run ci:units
 
       - name: CI routing and gate tests
+        id: ci-tests
+        background: true
+        continue-on-error: true
         run: mise run test:ci
 
       - name: Shellcheck (harness, CI scripts and deployment scripts)
+        id: shellcheck
+        background: true
+        continue-on-error: true
         run: mise run lint:shell
 
       - name: actionlint (all workflows)
+        id: actionlint
+        background: true
+        continue-on-error: true
         run: mise run lint:actions
 
       - name: Gitleaks (working tree; version and checksum from mise.lock)
+        id: gitleaks
+        background: true
+        continue-on-error: true
         run: mise run scan:secrets
+
+      - name: Wait for every quality check
+        wait-all:
+
+      - name: Report the quality checks
+        env:
+          STEPS: ${{ toJSON(steps) }}
+        run: >-
+          node platform/ci/step_report.mjs --title quality
+          --check 'audit=Repository audit'
+          --check 'comments=No comments in code'
+          --check 'static=Python product gates'
+          --check 'units=CI unit map is valid and every source/test file is routed'
+          --check 'ci-tests=CI routing and gate tests'
+          --check 'shellcheck=Shellcheck'
+          --check 'actionlint=actionlint'
+          --check 'gitleaks=Gitleaks'

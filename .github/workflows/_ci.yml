@@ -83,7 +83,9 @@ jobs:
           fetch-depth: 0
 
       - name: Ensure base branch history
+        id: base-history
         if: inputs.mode == 'pull_request'
+        background: true
         env:
           BASE_REF: ${{ github.base_ref || 'develop' }}
         run: git fetch --no-tags origin "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
@@ -95,10 +97,16 @@ jobs:
           repository-cache: false
           cache-save: ${{ inputs.mode != 'pull_request' }}
 
-      - uses: ./.github/actions/bazel-repository-cache
+      - name: Restore the Bazel repository cache
+        id: bazel-repo
+        background: true
+        uses: ./.github/actions/bazel-repository-cache
         with:
           key: bazel-repo-rust-${{ runner.os }}-${{ hashFiles('MODULE.bazel', 'MODULE.bazel.lock', '.bazelversion', 'Cargo.lock', 'crate-universe.lock', 'rust-toolchain.toml') }}
           restore-prefix: bazel-repo-rust-${{ runner.os }}-
+
+      - name: Wait for the base history and the Bazel caches
+        wait-all:
 
       - name: Resolve pull request base
         id: pr-base
