@@ -12,6 +12,7 @@ import javax.net.ssl.SSLException
 import javax.net.ssl.SSLHandshakeException
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.SerializationException
+import kotlinx.serialization.Serializable
 import okhttp3.ResponseBody
 
 internal const val MAX_RESPONSE_BYTES = 8L * 1024L * 1024L
@@ -60,12 +61,18 @@ internal fun ResponseBody.readBounded(): String {
     return source().readUtf8()
 }
 
+@Serializable
+internal data class PlainErrorDto(val error: String = "")
+
 internal fun parseConnectFailure(httpCode: Int, text: String): RemoteFailure {
     val parsed = runCatching {
         if (text.isBlank()) null else NetworkJson.decodeFromString(ConnectErrorDto.serializer(), text)
     }.getOrNull()
-    val reason = sanitizeMessage(parsed?.code).orEmpty()
-    val message = sanitizeMessage(parsed?.message).orEmpty()
+    val plain = runCatching {
+        if (text.isBlank()) null else NetworkJson.decodeFromString(PlainErrorDto.serializer(), text)
+    }.getOrNull()?.error
+    val reason = sanitizeMessage(parsed?.code?.takeIf { it.isNotBlank() } ?: plain).orEmpty()
+    val message = sanitizeMessage(parsed?.message?.takeIf { it.isNotBlank() } ?: plain).orEmpty()
     val localized = parsed?.details?.firstNotNullOfOrNull { detail ->
         detail.debug?.takeIf { it.key.isNotBlank() }?.let { it.key to it.args }
     }

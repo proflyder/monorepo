@@ -182,7 +182,7 @@ pub async fn history(
         return error(StatusCode::UNAUTHORIZED, "unauthenticated");
     }
     let Some(device_id) = header_device(&headers) else {
-        return error(StatusCode::BAD_REQUEST, "Home-Device-Id is required");
+        return error(StatusCode::BAD_REQUEST, "device_required");
     };
     let cursor = query
         .cursor
@@ -206,7 +206,7 @@ pub async fn unread(State(state): State<NotificationState>, headers: HeaderMap) 
         return error(StatusCode::UNAUTHORIZED, "unauthenticated");
     }
     let Some(device_id) = header_device(&headers) else {
-        return error(StatusCode::BAD_REQUEST, "Home-Device-Id is required");
+        return error(StatusCode::BAD_REQUEST, "device_required");
     };
     match blocking(Arc::clone(&state.store), move |store| {
         store.unread_notifications(&device_id)
@@ -227,7 +227,7 @@ pub async fn set_read(
         return error(StatusCode::UNAUTHORIZED, "unauthenticated");
     }
     let Some(device_id) = header_device(&headers) else {
-        return error(StatusCode::BAD_REQUEST, "Home-Device-Id is required");
+        return error(StatusCode::BAD_REQUEST, "device_required");
     };
     let now = now_unix();
     let id = body.id;
@@ -259,7 +259,7 @@ pub async fn read_all(State(state): State<NotificationState>, headers: HeaderMap
         return error(StatusCode::UNAUTHORIZED, "unauthenticated");
     }
     let Some(device_id) = header_device(&headers) else {
-        return error(StatusCode::BAD_REQUEST, "Home-Device-Id is required");
+        return error(StatusCode::BAD_REQUEST, "device_required");
     };
     let now = now_unix();
     let target = device_id.clone();
@@ -293,7 +293,7 @@ pub async fn remove(
         return error(StatusCode::UNAUTHORIZED, "unauthenticated");
     }
     let Some(device_id) = header_device(&headers) else {
-        return error(StatusCode::BAD_REQUEST, "Home-Device-Id is required");
+        return error(StatusCode::BAD_REQUEST, "device_required");
     };
     let id = body.id;
     let key = id.clone();
@@ -324,7 +324,7 @@ pub async fn clear(State(state): State<NotificationState>, headers: HeaderMap) -
         return error(StatusCode::UNAUTHORIZED, "unauthenticated");
     }
     let Some(device_id) = header_device(&headers) else {
-        return error(StatusCode::BAD_REQUEST, "Home-Device-Id is required");
+        return error(StatusCode::BAD_REQUEST, "device_required");
     };
     let target = device_id.clone();
     match blocking(Arc::clone(&state.store), move |store| {
@@ -581,8 +581,9 @@ mod tests {
             .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
             .body(Body::empty())
             .expect("request");
-        let (status, _) = call(router, request).await;
+        let (status, response) = call(router, request).await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(response, r#"{"error":"device_required"}"#);
     }
 
     #[tokio::test]

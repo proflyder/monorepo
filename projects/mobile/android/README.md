@@ -267,17 +267,21 @@ its source and its own actions.
    commands. Mutations are `ListEdit.Update` / `Remove` / `UpdateAll` committed
    through `PagedList.commit`, which rolls back only the edited keys on failure.
    `hide(key)` filters an item from the current state and from every incoming
-   page (pending delete); `reveal(key)` restores it. Sync signals dispatch
-   `PagingAction.Reload` or `hide`, never a full reset.
+   page (pending delete); `reveal(key)` restores it; `drop(key)` removes a
+   server-confirmed item without hiding its key. Sync signals dispatch
+   `PagingAction.Reload` or `drop`, never a full reset.
 4. The screen ViewModel extends `PagedStateViewModel<T, S, I, E>` where `S :
    PagedScreenState<T>` (`pages`, `pendingRemoval`). The base owns
    `UndoableRemoval` and a private `PagingHandler`, and exposes
    `dispatch(PagingIntent)`, `dispatch(ListItemIntent)` and the normal
    `dispatch(I)`; every action enters the ViewModel. The screen intent keeps
-   only its own actions (Open/ToggleRead/ReadAll/Clear). The base copies pages
-   and the pending removal into `S` via `copyPaging`; the screen also derives
-   rows/day sections and `hasUnread` there with its injected `Clock`, so the
-   fragment only renders slices. A failed removal commit (revealed item) maps
+   only its own actions (Open/ToggleRead/ReadAll/Clear). The base starts
+   collection itself in `init` and receives a `derive: (pages, pendingRemoval)
+   -> S` lambda in its constructor; the screen derives rows/day sections and
+   `hasUnread` there with its injected `Clock`, so the fragment only renders
+   slices. The lambda must capture constructor parameters/locals, never fields
+   initialised after `super`; then `Dispatchers.Main.immediate` is safe and no
+   `startPaging()` call is needed. A failed removal commit (revealed item) maps
    to `E` via `pagingFailure`.
 5. The fragment wires the list with one `PagingBinder` call (RecyclerView,
    `ListStateViews`, content adapter, failure text, `PagingIntent` sink,
@@ -440,7 +444,8 @@ badges are selectors in `render`.
   request win.
 - Long server lists use the reusable paging stack; see `Paged lists` below.
   Notification history is owned by the scheduler and fetched this way; the app
-  has no local history copy.
+  has no local history copy. A one-shot startup cleanup removes the obsolete
+  `push_notification_history` key left by earlier versions.
 - Lists use `KeyedDiff`, which always returns a payload, so a partial change
   rebinds the same holder (`aspectPayload` per aspect) and never cross-fades.
 - Editors share `EditorDraftSession`: draft, the create idempotency key bound

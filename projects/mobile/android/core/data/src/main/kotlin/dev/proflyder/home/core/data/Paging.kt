@@ -171,6 +171,17 @@ class PagedList<T : Keyed>(
         synchronized(lock) { revealLocked(key) }
     }
 
+    fun drop(key: String) {
+        synchronized(lock) { dropLocked(key) }
+    }
+
+    private fun dropLocked(key: String) {
+        hidden.remove(key)
+        val items = mutable.value.items
+        if (items.none { it.key == key }) return
+        mutable.value = mutable.value.copy(items = items.filterNot { it.key == key })
+    }
+
     private fun hideLocked(key: String): Boolean {
         if (hidden.contains(key)) return true
         val items = mutable.value.items

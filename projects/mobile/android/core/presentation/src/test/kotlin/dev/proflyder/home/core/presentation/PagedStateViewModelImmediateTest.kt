@@ -34,27 +34,19 @@ class PagedStateViewModelImmediateTest {
     }
 
     @Test
-    fun derivedStateCanUseSubclassFieldsWhenMainIsImmediate() {
-        val viewModel = ImmediateViewModel()
+    fun derivedStateStartsAutomaticallyWithImmediateMain() {
+        val viewModel = ImmediateViewModel("ok")
 
         assertEquals("ok:2", viewModel.state.value.derived)
     }
 
-    private class ImmediateViewModel : PagedStateViewModel<Row, ImmediateState, ImmediateIntent, ImmediateEvent>(
+    private class ImmediateViewModel(prefix: String) : PagedStateViewModel<Row, ImmediateState, ImmediateIntent, ImmediateEvent>(
         ImmediateState(),
         list(),
         CoroutineScope(Dispatchers.Main),
         { Outcome.Success(Unit) },
+        derive = { pages, pendingRemoval -> ImmediateState(pages, pendingRemoval, "$prefix:${pages.items.size}") },
     ) {
-        private val prefix = "ok"
-
-        init {
-            startPaging()
-        }
-
-        override fun copyPaging(pages: PagedState<Row>, pendingRemoval: Row?): ImmediateState =
-            ImmediateState(pages, pendingRemoval, "$prefix:${pages.items.size}")
-
         override fun pagingFailure(failure: RemoteFailure): ImmediateEvent = ImmediateEvent.Failure(failure)
 
         override fun handle(intent: ImmediateIntent) = Unit

@@ -186,13 +186,14 @@ pub async fn deliver(
     let mut sent = 0;
     let mut failed = 0;
     let row = history_row(message);
+    let mut records = Vec::new();
     for device in devices {
         let record_id = uuid::Uuid::new_v4().to_string();
         match sender.send(&device.token, message, &record_id, now).await {
             Ok(()) => {
                 sent += 1;
-                if let Some(row) = &row {
-                    remember(history, &device.device_id, &record_id, row).await;
+                if row.is_some() {
+                    records.push((device.device_id, record_id));
                 }
             }
             Err(fcm::Error::Unregistered) => {
@@ -205,6 +206,9 @@ pub async fn deliver(
                 tracing::warn!(error = %error, "push delivery failed");
             }
         }
+    }
+    if let Some(row) = row {
+        remember_later(history, records, &row);
     }
     tracing::info!(
         event = "push.deliver",
@@ -344,17 +348,22 @@ fn history_row(message: &Message) -> Option<HistoryRow> {
     }
 }
 
-async fn remember(history: &HistoryClient, device_id: &str, id: &str, row: &HistoryRow) {
-    let entry = HistoryEntry {
-        device_id: device_id.to_owned(),
-        id: id.to_owned(),
-        kind: row.kind.to_owned(),
-        title: row.title.clone(),
-        body: row.body.clone(),
-        deep_link: row.deep_link.clone(),
-    };
-    if let Err(error) = history.record(&entry).await {
-        tracing::warn!(%error, "notification history write failed");
+fn remember_later(history: &HistoryClient, records: Vec<(String, String)>, row: &HistoryRow) {
+    for (device_id, id) in records {
+        let history = history.clone();
+        let entry = HistoryEntry {
+            device_id,
+            id,
+            kind: row.kind.to_owned(),
+            title: row.title.clone(),
+            body: row.body.clone(),
+            deep_link: row.deep_link.clone(),
+        };
+        tokio::spawn(async move {
+            if let Err(error) = history.record(&entry).await {
+                tracing::warn!(%error, "notification history write failed");
+            }
+        });
     }
 }
 
@@ -458,7 +467,57 @@ pub fn summary(detail: &Delivery) -> Value {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::time::{Duration, Instant};
+
     use super::*;
+
+    #[tokio::test]
+    async fn history_writes_do_not_block_the_caller() {
+        let recorded = Arc::new(AtomicUsize::new(0));
+        let app = Router::new()
+            .route(history::HISTORY_PATH, axum::routing::post(slow_record))
+            .with_state(Arc::clone(&recorded));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind");
+        let address = listener.local_addr().expect("addr");
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+        let client = HistoryClient::new(
+            &format!("http://{address}"),
+            Token::new("scheduler-token"),
+            Duration::from_secs(5),
+        )
+        .expect("client");
+        let row = HistoryRow {
+            kind: history::NOTIFY_KIND,
+            title: "Дом".to_owned(),
+            body: "Готово".to_owned(),
+            deep_link: None,
+        };
+
+        let started = Instant::now();
+        remember_later(
+            &client,
+            vec![
+                ("device-a".to_owned(), "n-1".to_owned()),
+                ("device-b".to_owned(), "n-2".to_owned()),
+            ],
+            &row,
+        );
+        assert!(started.elapsed() < Duration::from_millis(100));
+
+        tokio::time::sleep(Duration::from_millis(1_200)).await;
+        assert_eq!(recorded.load(Ordering::SeqCst), 2);
+    }
+
+    async fn slow_record(State(recorded): State<Arc<AtomicUsize>>) -> Json<Value> {
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        recorded.fetch_add(1, Ordering::SeqCst);
+        Json(serde_json::json!({"entry": {"id": "n-1"}}))
+    }
 
     #[test]
     fn a_bearer_is_required_and_must_match() {

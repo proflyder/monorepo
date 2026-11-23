@@ -50,6 +50,7 @@ home_android_local_test(
         "dev.proflyder.home.feature.push.AllPushIdentityTests",
         "dev.proflyder.home.feature.push.FindPhoneAudioTest",
         "dev.proflyder.home.feature.push.HomePushRegistrarTest",
+        "dev.proflyder.home.feature.push.LegacyNotificationHistoryCleanupTest",
         "dev.proflyder.home.feature.push.SchedulerNotificationHistoryRepositoryTest",
         "dev.proflyder.home.feature.push.PushChannelsTest",
         "dev.proflyder.home.feature.push.PushPayloadsTest",

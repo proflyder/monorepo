@@ -4,6 +4,7 @@ use home_secret::Token;
 use serde::Serialize;
 
 pub const HISTORY_PATH: &str = "/v1/push/history";
+const MAX_TIMEOUT: Duration = Duration::from_secs(5);
 pub const NOTIFY_KIND: &str = "notify";
 pub const FIND_KIND: &str = "find";
 
@@ -40,7 +41,7 @@ impl HistoryClient {
     pub fn new(base_url: &str, token: Token, timeout: Duration) -> Result<Self, String> {
         let http = home_tls::public_https_client()
             .map_err(|error| format!("history TLS: {error}"))?
-            .timeout(timeout)
+            .timeout(timeout.min(MAX_TIMEOUT))
             .build()
             .map_err(|error| format!("history HTTP client: {error}"))?;
         Ok(Self {

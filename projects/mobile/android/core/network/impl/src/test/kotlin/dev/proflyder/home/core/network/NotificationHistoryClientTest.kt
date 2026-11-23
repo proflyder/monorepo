@@ -17,7 +17,6 @@ import okhttp3.mockwebserver.MockWebServer
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
@@ -76,13 +75,24 @@ class NotificationHistoryClientTest {
     }
 
     @Test
-    fun aMissingDeviceHeaderIsReportedAsABadRequest() = runBlocking {
+    fun aMissingDeviceHeaderCarriesItsOwnReason() = runBlocking {
+        server.enqueue(MockResponse().setResponseCode(400).setBody(TestFixtures.read("history/device_required.json")))
+
+        val result = client().page(null, 20)
+
+        val failure = (result as Outcome.Failure).failure as RemoteFailure.Server
+        assertEquals(400, failure.httpStatus)
+        assertEquals("device_required", failure.reason)
+    }
+
+    @Test
+    fun anotherBadRequestRemainsARealFailure() = runBlocking {
         server.enqueue(MockResponse().setResponseCode(400).setBody(TestFixtures.read("history/bad_request.json")))
 
         val result = client().page(null, 20)
 
-        val failure = (result as Outcome.Failure).failure
-        assertTrue(failure is RemoteFailure.Server)
-        assertEquals(400, (failure as RemoteFailure.Server).httpStatus)
+        val failure = (result as Outcome.Failure).failure as RemoteFailure.Server
+        assertEquals(400, failure.httpStatus)
+        assertEquals("invalid argument", failure.reason)
     }
 }
