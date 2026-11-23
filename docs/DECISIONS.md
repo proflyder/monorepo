@@ -365,15 +365,15 @@
     крейт `home-app-auth` в каждом сервисе; ответ без модуля —
     `403 {"error":"module_forbidden","module":"…"}`. Остальные сервисы
     получают snapshot (`GET /v1/access/snapshot`, service-token): refresh 30 с,
-    singleflight, fail-closed после 5 мин без успешного обновления;
-    scheduler после изменения токенов шлёт sync `entity=access`
-    телефонам. Причина: один список модулей и одна проверка вместо ролей,
+    singleflight, fail-closed после 1 ч без успешного обновления;
+    sync `entity=access` публикуется, обработка в Android — отдельным PR.
+    Причина: один список модулей и одна проверка вместо ролей,
     копипасты и расхождений между сервисами; сервис-к-сервису остаётся на
     отдельном `service_token`, а не на app-токенах. Service-token обязателен
     везде, fallback на legacy нет; scheduler падает, если он совпадает с
     app-токеном. ESO отдаёт только явные ключи, и все они создаются в OpenBao
     до деплоя (`admin:service-token-init`); финализация ротации пишет `""`.
     Push-устройства и VPN-peer'ы привязаны к `token_id` (v9/v10), legacy-строки
-    при старте назначаются «Маме», перехват — только тем же FCM-токеном/ключом
-    или owner'ом;
+    при старте назначаются «Маме», перехват push — тем же FCM-токеном или
+    owner'ом, VPN — только owner'ом;
     `EnqueueTask/CancelTask` для `home` ограничены `control`/`home.control`.

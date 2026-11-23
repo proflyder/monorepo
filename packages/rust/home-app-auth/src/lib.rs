@@ -13,7 +13,6 @@ use subtle::ConstantTimeEq;
 use thiserror::Error;
 
 const BEARER_PREFIX: &str = "bearer ";
-pub const LEGACY_NAME: &str = "mama";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -302,7 +301,7 @@ impl AccessSnapshot {
 }
 
 pub const REFRESH_INTERVAL: Duration = Duration::from_secs(30);
-pub const MAX_SNAPSHOT_AGE: Duration = Duration::from_secs(300);
+pub const MAX_SNAPSHOT_AGE: Duration = Duration::from_secs(3600);
 const ON_DEMAND_REFRESH_INTERVAL: Duration = Duration::from_secs(1);
 
 struct CacheState {
@@ -607,13 +606,16 @@ impl AccessClient {
             return Some(principal);
         }
         let seen = self.generation.load(Ordering::Acquire);
-        let mut flight = self.flight.lock().await;
+        let mut flight = match self.flight.try_lock() {
+            Ok(flight) => flight,
+            Err(_) if self.cache.is_fresh() => self.flight.lock().await,
+            Err(_) => return None,
+        };
         if flight.generation == seen {
             let now = Instant::now();
             let allowed = flight
                 .last_on_demand
-                .is_none_or(|previous| now.duration_since(previous) >= ON_DEMAND_REFRESH_INTERVAL)
-                || !self.cache.is_fresh();
+                .is_none_or(|previous| now.duration_since(previous) >= ON_DEMAND_REFRESH_INTERVAL);
             if allowed {
                 flight.last_on_demand = Some(now);
                 if let Err(error) = self.refresh_locked(&mut flight).await {
@@ -790,6 +792,9 @@ mod tests {
     #[tokio::test]
     async fn concurrent_requests_with_a_new_token_share_one_refresh() {
         let (client, calls) = counting(Ok(snapshot()), Duration::from_millis(50));
+        let mut before = snapshot();
+        before.tokens.retain(|token| token.owner);
+        client.cache.replace(before);
         let mama = header("Bearer mama-token");
         let tasks: Vec<_> = (0..8)
             .map(|_| {
@@ -842,6 +847,40 @@ mod tests {
                 .authenticate(Some(&header("Bearer mama-token")))
                 .await
                 .is_some()
+        );
+    }
+
+    #[test]
+    fn the_snapshot_survives_an_hour_long_scheduler_outage() {
+        assert_eq!(MAX_SNAPSHOT_AGE, Duration::from_secs(3600));
+        assert!(MAX_SNAPSHOT_AGE >= REFRESH_INTERVAL * 100);
+    }
+
+    #[tokio::test]
+    async fn a_stale_cache_does_not_queue_requests_behind_a_slow_refresh() {
+        let (client, calls) = counting(
+            Err(Error::Client("down".into())),
+            Duration::from_millis(300),
+        );
+        let wrong = header("Bearer mama-token");
+        let started = Instant::now();
+        let tasks: Vec<_> = (0..8)
+            .map(|_| {
+                let client = Arc::clone(&client);
+                let wrong = wrong.clone();
+                tokio::spawn(async move { client.authenticate(Some(&wrong)).await })
+            })
+            .collect();
+        for task in tasks {
+            assert!(task.await.expect("join").is_none());
+        }
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        assert!(started.elapsed() < Duration::from_millis(600));
+        let again = Instant::now();
+        assert!(client.authenticate(Some(&wrong)).await.is_none());
+        assert!(
+            again.elapsed() < Duration::from_millis(100),
+            "rate limit holds while stale"
         );
     }
 

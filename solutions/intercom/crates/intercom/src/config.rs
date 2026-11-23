@@ -389,10 +389,7 @@ mod tests {
     #[test]
     fn defaults_and_tokens() {
         let config = Config::load_from(
-            &env(&[
-                ("INTERCOM_TOKEN", "phone-secret"),
-                ("INTERCOM_STATION_TOKEN", "station-secret"),
-            ]),
+            &env(&[("INTERCOM_STATION_TOKEN", "station-secret")]),
             &no_file,
         )
         .expect("load");
@@ -453,9 +450,8 @@ mod tests {
     fn the_service_token_is_required_and_separate_from_the_phone_token() {
         let error = Config::load_from(
             &|key| {
-                (key == "INTERCOM_TOKEN")
-                    .then(|| "legacy".to_owned())
-                    .or_else(|| (key == "INTERCOM_STATION_TOKEN").then(|| "station".to_owned()))
+                (key == "INTERCOM_STATION_TOKEN")
+                    .then(|| "station".to_owned())
                     .or_else(|| {
                         (key == "INTERCOM_ACCESS_URL")
                             .then(|| "http://scheduler:8098/v1/access/snapshot".to_owned())
@@ -471,7 +467,6 @@ mod tests {
     fn ice_configuration_is_optional_and_validated() {
         let config = Config::load_from(
             &env(&[
-                ("INTERCOM_TOKEN", "p"),
                 ("INTERCOM_STATION_TOKEN", "s"),
                 (
                     "INTERCOM_STUN_URLS",
@@ -486,7 +481,6 @@ mod tests {
 
         let error = Config::load_from(
             &env(&[
-                ("INTERCOM_TOKEN", "p"),
                 ("INTERCOM_STATION_TOKEN", "s"),
                 ("INTERCOM_TURN_URLS", "turn:turn.example.com:3478"),
             ]),
@@ -501,7 +495,6 @@ mod tests {
     fn endpoint_ids_are_validated() {
         let error = Config::load_from(
             &env(&[
-                ("INTERCOM_TOKEN", "p"),
                 ("INTERCOM_STATION_TOKEN", "s"),
                 ("INTERCOM_PHONE_ENDPOINT_ID", "bad id"),
             ]),

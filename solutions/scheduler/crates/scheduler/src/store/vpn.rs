@@ -197,7 +197,6 @@ impl Store {
                 && !current.token_id.is_empty()
                 && !token_id.is_empty()
                 && current.token_id != token_id
-                && current.public_key != peer.public_key
                 && !allow_claim
             {
                 return Err(StoreError::precondition(
@@ -478,6 +477,19 @@ mod tests {
         let error = store
             .register_vpn_peer_for(pool(), &input("device-aaaaaaaa", KEY_B), "mama", false, 102)
             .expect_err("a foreign key cannot take the peer");
+        assert_eq!(error.kind(), Some(crate::domain::ErrorKind::Precondition));
+        let error = store
+            .register_vpn_peer_for(pool(), &input("device-aaaaaaaa", KEY_A), "mama", false, 103)
+            .expect_err("the public key is not a secret and proves nothing");
+        assert_eq!(error.kind(), Some(crate::domain::ErrorKind::Precondition));
+        assert_eq!(
+            store
+                .vpn_peer("device-aaaaaaaa")
+                .expect("peer")
+                .expect("still there")
+                .token_id,
+            "owner"
+        );
         assert_eq!(error.kind(), Some(crate::domain::ErrorKind::Precondition));
         assert!(
             !store

@@ -265,7 +265,7 @@ pub const MIGRATIONS: &[Migration] = &[
         statements: V9,
     },
     Migration {
-        version: SCHEMA_VERSION,
+        version: 10,
         description: "scheduler v10 vpn peer ownership",
         statements: V10,
     },

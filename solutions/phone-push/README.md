@@ -34,7 +34,7 @@ Bearer — service-token (`PUSH_SERVICE_TOKEN_FILE`, обязателен, бе�
 | Метод | Назначение |
 |---|---|
 | `POST /v1/push/find` `{reason?, deviceId?}` | data-only сообщение высокого приоритета, без `notification`: приложение включает громкий звонок (`USAGE_ALARM`, обход DND, full-screen intent), стоп по «Нашёл» или через 60 с |
-| `POST /v1/push/notify` `{title, body, deepLink?, deviceId?}` | обычное уведомление (data-only): заголовок/текст/deep link; приложение рисует его в канале `home_notifications` в цвете темы |
+| `POST /v1/push/notify` `{title, body, deepLink?, deviceId?, module?}` | обычное уведомление (data-only): заголовок/текст/deep link; приложение рисует его в канале `home_notifications` в цвете темы |
 | `GET /v1/push/devices` | идентификаторы, имена и платформы зарегистрированных телефонов — **без токенов**; gateway сопоставляет по ним имя |
 | `GET /healthz`, `GET /readyz` | пробы без токена |
 
@@ -56,6 +56,15 @@ Bearer — service-token (`PUSH_SERVICE_TOKEN_FILE`, обязателен, бе�
 `mcp-gateway` по списку из `GET /v1/push/devices`: сервис отправки остаётся
 простым fan-out и не знает про падежи и уменьшительные. Токен по-прежнему не
 возвращается ни в один ответ.
+
+`module` (id модуля из `home-app-auth`, например `alerts`, `chat`) сужает
+адресатов до устройств токенов с этим модулем; phone-push передаёт его в
+`GET /v1/push/devices?module=` без проверки. Неизвестный id scheduler
+отклоняет `400`, и phone-push отвечает `{sent:0,failed:0,devices:0}` с
+`warn` «push registry unavailable … HTTP 400» в логах: пуш не уходит никому
+(fail-closed), а не всем. Отдельной метрики нет (у phone-push нет
+метрик-эндпоинта); алерт на это — по логу. Отправители (mcp-gateway) берут id
+из enum `Module`, а не из строки.
 
 ## FCM
 
@@ -82,7 +91,6 @@ Bearer — service-token (`PUSH_SERVICE_TOKEN_FILE`, обязателен, бе�
 | `PUSH_TOKEN_URL` | нет | `https://oauth2.googleapis.com/token` | OAuth endpoint (тесты) |
 | `PUSH_FCM_URL` | нет | `https://fcm.googleapis.com` | база FCM API (тесты) |
 | `PUSH_TIMEOUT` | нет | `10s` | таймаут одного запроса (0.5–60 с) |
-| `LOG_LEVEL` | нет | `info` | уровень логов |
 
 ## Сборка и тесты
 

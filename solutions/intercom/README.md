@@ -108,7 +108,7 @@ RINGING --Answer(callee)--> CONNECTING --offer+answer--> ACTIVE
 ## Авторизация
 
 - телефон — `Authorization: Bearer <app_token>`: любой действующий app-токен
-  с модулем `intercom_call` (общий AccessClient, refresh 30 с / 5 с на неизвестный токен);
+  с модулем `intercom_call` (общий AccessClient, refresh 30 с, по требованию при неизвестном токене не чаще раза в секунду);
 - колонка — отдельный `station_token` (device secret);
 - identity endpoint'а **выводится из токена**, поля `id`/`kind` в запросе
   игнорируются; `WatchRequest.endpoint_id` допустим только равный identity;

@@ -299,14 +299,10 @@ class AndroidDesignSystemTests(unittest.TestCase):
         self.assertEqual(problems, [], "inflate design-system components from layouts:\n" + "\n".join(problems))
 
 
-
-
 class KubernetesConfigMapSecretTests(unittest.TestCase):
     KUBERNETES = ROOT / "projects/home/kubernetes"
 
     def test_config_maps_do_not_carry_token_fields_or_values(self):
-        import re
-
         key_pattern = re.compile(r"(token|secret|password|credential|private_key)", re.I)
         problems = []
         for path in self.KUBERNETES.rglob("*.yaml"):
@@ -324,7 +320,6 @@ class KubernetesConfigMapSecretTests(unittest.TestCase):
                     if isinstance(value, str) and key_pattern.search(value):
                         problems.append(f"{path}: data.{key} value")
         self.assertEqual(problems, [])
-
 
 
 ENV_CONTRACT = {

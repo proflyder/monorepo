@@ -769,6 +769,17 @@ mod tests {
     }
 
     #[test]
+    fn migrations_are_numbered_one_by_one_up_to_the_schema_version() {
+        for (index, migration) in MIGRATIONS.iter().enumerate() {
+            assert_eq!(migration.version, i64::try_from(index + 1).expect("index"));
+        }
+        assert_eq!(
+            MIGRATIONS.last().expect("migrations").version,
+            crate::store::SCHEMA_VERSION
+        );
+    }
+
+    #[test]
     fn the_same_app_install_can_move_to_a_new_token_but_others_cannot_take_it() {
         let store = store();
         store

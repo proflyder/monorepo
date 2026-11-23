@@ -608,7 +608,12 @@ class ManifestTests(unittest.TestCase):
         scheduler = by_name["mcp-gateway-scheduler"]["spec"]
         self.assertEqual(
             {entry["secretKey"] for entry in scheduler["data"]},
-            {"token", "service_token"},
+            {"service_token"},
+        )
+        self.assertNotIn(
+            "token",
+            {entry["remoteRef"]["property"] for entry in scheduler["data"]},
+            "the legacy app token must not reach mcp-gateway",
         )
         for entry in scheduler["data"]:
             self.assertEqual(

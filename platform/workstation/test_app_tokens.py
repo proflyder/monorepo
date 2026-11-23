@@ -64,6 +64,8 @@ class FakeCluster:
         self.secrets = {name: self.snapshot(name) for name in app_tokens.SERVICE_SECRETS}
         self.loaded = self.secrets["scheduler-auth"]["service_token"]
         self.restarts = []
+        self.restarted_at = {}
+        self.stuck = set()
         self.commands = []
 
     def snapshot(self, name):
@@ -102,10 +104,20 @@ class FakeCluster:
         if args[0] == "annotate":
             self.pending[args[1].split("/", 1)[1]] = self.lag + 1
             return done()
-        if args[0] == "get" and args[1] == "deployment/hermes" and len(args) > 2:
+        if args[0] == "get" and args[1].startswith("deployment/") and len(args) > 2:
+            name = args[1].split("/", 1)[1]
+            if name not in self.deployments:
+                return missing
             ref = {"secretKeyRef": {"name": "scheduler-auth", "key": self.hermes_key}}
             container = {"name": "voice-proxy", "env": [{"name": "HERMES_SCHEDULER_TOKEN", "valueFrom": ref}]}
-            return done(json.dumps({"spec": {"template": {"spec": {"containers": [container]}}}}))
+            annotations = {}
+            if name in self.restarted_at:
+                annotations["kubectl.kubernetes.io/restartedAt"] = self.restarted_at[name]
+            return done(json.dumps({
+                "metadata": {"generation": 2},
+                "spec": {"template": {"metadata": {"annotations": annotations}, "spec": {"containers": [container]}}},
+                "status": {"observedGeneration": 2, "replicas": 1, "updatedReplicas": 1, "readyReplicas": 1},
+            }))
         if args[0] == "get" and args[1].startswith("deployment/"):
             return done() if args[1].split("/", 1)[1] in self.deployments else missing
         if args[:2] == ["get", "secrets"] or args[:2] == ["get", "configmaps"]:
@@ -113,6 +125,8 @@ class FakeCluster:
         if args[:2] == ["rollout", "restart"]:
             name = args[2].split("/", 1)[1]
             self.restarts.append(name)
+            if name not in self.stuck:
+                self.restarted_at[name] = "9999-01-01T00:00:00Z"
             if name == app_tokens.SCHEDULER:
                 self.loaded = self.secrets["scheduler-auth"]["service_token"]
             return done()
@@ -198,17 +212,32 @@ class BootstrapTests(unittest.TestCase):
         self.assertEqual(self.token_file.read_text(), "previous\n")
         self.assertEqual(list(pathlib.Path(self.directory.name).iterdir()), [self.token_file])
 
-    def test_rotation_restarts_existing_consumers_and_finalizes_with_an_empty_previous(self):
+    def test_rotation_restarts_every_consumer_and_finalizes_with_an_empty_previous(self):
         bao = FakeBao(initial_values())
-        cluster = FakeCluster(bao, deployments=["scheduler", "phone-push", "hermes"], lag=2)
+        cluster = FakeCluster(bao, lag=2)
         self.run_bootstrap(bao, cluster, rotate_service=True)
         self.assertNotEqual(bao.values["service_token"], "service-1")
-        self.assertIn("service_token_previous", bao.values)
         self.assertEqual(bao.values["service_token_previous"], "")
-        self.assertEqual(cluster.restarts, ["scheduler", "phone-push", "hermes", "scheduler"])
+        self.assertEqual(
+            cluster.restarts,
+            ["scheduler", *app_tokens.SERVICE_CONSUMERS, "scheduler"],
+        )
         self.assertEqual(cluster.secrets["scheduler-auth"]["service_token_previous"], "")
         for name in app_tokens.SERVICE_SECRETS:
             self.assertEqual(cluster.secrets[name]["service_token"], bao.values["service_token"])
+
+    def test_rotation_never_finalizes_while_a_consumer_is_missing_or_not_restarted(self):
+        for case in ("missing", "stuck"):
+            bao = FakeBao(initial_values())
+            cluster = FakeCluster(bao)
+            if case == "missing":
+                cluster.deployments.discard("ha-scenario")
+            else:
+                cluster.stuck.add("intercom")
+            with self.assertRaises(SystemExit) as error:
+                self.run_bootstrap(bao, cluster, rotate_service=True)
+            self.assertIn("was not restarted", str(error.exception))
+            self.assertEqual(bao.values["service_token_previous"], "service-1", case)
 
     def test_an_interrupted_rotation_is_finished_without_a_second_rotation(self):
         values = initial_values()
@@ -307,7 +336,7 @@ class PreflightTests(unittest.TestCase):
 
 class InitTests(unittest.TestCase):
     def test_init_creates_every_key_once_and_never_prints(self):
-        bao = FakeBao({"token": "mama", "vpn.json": "{}"})
+        bao = FakeBao({"token": "mama", "vpn.json": "{}", "vpn_sync_token": "sync"})
         output = io.StringIO()
         with redirect_stdout(output):
             self.assertTrue(app_tokens.init_service_token(bao, app_tokens.PATH))
@@ -321,11 +350,23 @@ class InitTests(unittest.TestCase):
         self.assertEqual(output.getvalue(), "")
 
     def test_init_fills_missing_keys_without_rotating_an_existing_token(self):
-        bao = FakeBao({"token": "mama", "service_token": "kept"})
+        bao = FakeBao({"token": "mama", "service_token": "kept", "vpn.json": "{}", "vpn_sync_token": "s"})
         self.assertTrue(app_tokens.init_service_token(bao, app_tokens.PATH))
         self.assertEqual(bao.values["service_token"], "kept")
         self.assertEqual(bao.values["service_token_previous"], "")
         self.assertIn("app_tokens", bao.values)
+
+    def test_init_covers_every_declared_key_or_refuses(self):
+        declared = app_tokens.declared_properties()
+        self.assertLessEqual(app_tokens.INIT_KEYS, declared)
+        bao = FakeBao({"token": "mama"})
+        with self.assertRaises(SystemExit) as error:
+            app_tokens.init_service_token(bao, app_tokens.PATH)
+        self.assertIn("vpn_sync_token", str(error.exception))
+        self.assertEqual([call[0] for call in bao.calls], ["GET"])
+        complete = FakeBao({key: "x" for key in declared - app_tokens.INIT_KEYS})
+        app_tokens.init_service_token(complete, app_tokens.PATH)
+        self.assertTrue(all(str(complete.values.get(key, "")) or key == "service_token_previous" for key in declared))
 
 
 if __name__ == "__main__":

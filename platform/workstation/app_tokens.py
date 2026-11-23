@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 import pathlib
+import re
 import secrets
 import subprocess
 import sys
@@ -53,6 +54,11 @@ SERVICE_CONSUMERS = [
 ]
 HERMES_CONTAINER = "voice-proxy"
 HERMES_TOKEN_ENV = "HERMES_SCHEDULER_TOKEN"
+SCHEDULER_EXTERNAL_SECRET = (
+    pathlib.Path(__file__).resolve().parents[2]
+    / "projects/home/kubernetes/scheduler/manifests/external-secrets.yaml"
+)
+INIT_KEYS = {"service_token", "service_token_previous", "app_tokens"}
 EMPTY_SEED = json.dumps({"revision": 0, "tokens": []}, separators=(",", ":"))
 SYNC_TIMEOUT = 300.0
 POLL_INTERVAL = 3.0
@@ -132,8 +138,23 @@ def encode_seed(seed: dict) -> str:
     return json.dumps(seed, ensure_ascii=False, separators=(",", ":"))
 
 
+def declared_properties(manifest: pathlib.Path = SCHEDULER_EXTERNAL_SECRET) -> set[str]:
+    pattern = re.compile(
+        r"key:\s*" + re.escape(PATH) + r"\s*\n\s*property:\s*(\S+)"
+    )
+    return set(pattern.findall(manifest.read_text(encoding="utf-8")))
+
+
 def init_service_token(bao: ws.Bao, path: str, dry_run: bool = False) -> bool:
     values, version = read_secret(bao, path)
+    foreign = sorted(
+        key for key in declared_properties() - INIT_KEYS if not str(values.get(key, "")).strip()
+    )
+    if foreign:
+        raise Failure(
+            "OpenBao scheduler-auth lacks keys the ExternalSecret needs and init cannot "
+            "invent: " + ", ".join(foreign)
+        )
     before = dict(values)
     if not values.get("service_token"):
         values["service_token"] = new_token()
@@ -249,6 +270,26 @@ class Kube:
         self.run("rollout", "status", f"deployment/{name}", "--timeout=300s")
         return True
 
+    def restarted_since(self, name: str, since: str) -> bool:
+        result = self.run("get", f"deployment/{name}", "-o", "json", check=False)
+        if result.returncode != 0:
+            return False
+        document = json.loads(result.stdout or "{}")
+        annotations = (
+            document.get("spec", {}).get("template", {}).get("metadata", {}).get("annotations")
+            or {}
+        )
+        restarted = str(annotations.get("kubectl.kubernetes.io/restartedAt", ""))
+        status = document.get("status") or {}
+        replicas = int(status.get("replicas", 0))
+        settled = (
+            int(status.get("observedGeneration", 0))
+            >= int(document.get("metadata", {}).get("generation", 0))
+            and int(status.get("updatedReplicas", 0)) == replicas
+            and int(status.get("readyReplicas", 0)) == replicas
+        )
+        return bool(restarted) and restarted >= since and settled
+
     def scheduler_service_hash(self) -> str:
         result = self.run(
             "exec",
@@ -355,6 +396,10 @@ def service_expectations(values: dict) -> dict[str, dict[str, str]]:
     return expected
 
 
+def utc_now() -> str:
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+
 def require_clean(problems: list[str], stage: str) -> None:
     if problems:
         raise Failure(f"{stage}: stale or missing: " + ", ".join(problems))
@@ -400,12 +445,20 @@ def bootstrap(
     else:
         out("Owner application token is unchanged")
     owner_digest = owner_entry(decode_seed(updated["app_tokens"]))["sha256"]
+    rotation_started = utc_now()
     kube.force_sync(service_expectations(updated) if rotating else scheduler_expectations(updated))
     kube.restart(SCHEDULER)
     if rotating:
         for consumer in SERVICE_CONSUMERS:
             kube.restart(consumer)
-    require_clean(verify(updated, kube, owner_digest), "verify")
+    problems = verify(updated, kube, owner_digest)
+    if rotating:
+        problems += [
+            f"deployment/{consumer} was not restarted onto the new service token"
+            for consumer in SERVICE_CONSUMERS
+            if not kube.restarted_since(consumer, rotation_started)
+        ]
+    require_clean(problems, "verify")
     if not rotating:
         out("Bootstrap complete; the service token was not rotated")
         return

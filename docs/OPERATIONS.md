@@ -48,9 +48,14 @@ mise run backup:verify [<id>] --dry-run|--yes
 App-токены (модули доступа) и service-token. Порядок раскатки:
 
 ```bash
-# 1. до merge: создать в OpenBao все ключи, которые объявлены в ExternalSecret
-#    (service_token, service_token_previous="", app_tokens пустым snapshot);
-#    идемпотентно, ничего не печатает, существующие значения не трогает
+# 0. до merge: консистентная копия БД scheduler (схема 7 -> 10 необратима)
+mise run admin:scheduler-backup
+
+# 1. до merge: init создаёт три новых ключа (service_token,
+#    service_token_previous="", app_tokens пустым snapshot) и проверяет, что
+#    остальные свойства scheduler-auth из ExternalSecret (token, vpn_sync_token,
+#    vpn.json) уже есть; иначе падает, ничего не записав. Идемпотентно, ничего
+#    не печатает, существующие значения не трогает
 mise run admin:service-token-init
 
 # 2. merge -> deploy-home: scheduler и сервисы стартуют на service_token,
@@ -63,6 +68,14 @@ mise run admin:app-token-bootstrap
 # ротация service-token (тот же шаг, но с окном previous и финализацией)
 mise run admin:app-token-bootstrap -- --rotate-service
 ```
+
+Откат этого релиза: одного `mise run rollback scheduler` (предыдущий digest)
+мало: старый бинарь отказывается открывать схему v10 (`NewerSchema`), а
+манифесты требуют новых env и ключей. Порядок: `flux suspend` для
+`app-ha-executors`, revert коммита merge (манифесты, ExternalSecret и pins
+вместе), restore БД scheduler из копии шага 0 (`docs/REBUILD.md`, раздел
+scheduler), resume. Записи, сделанные после merge (новые токены, привязки
+устройств, расписания), при этом теряются.
 
 Bootstrap повторяем. Owner-токен выпускается один раз; повторный запуск
 сверяет файл с seed и ничего не меняет, потерянный файл — только явный

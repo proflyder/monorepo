@@ -184,6 +184,24 @@ fn access_cache(config: &Config, store: &Store) -> anyhow::Result<AccessCache> {
     let snapshot = store
         .access_snapshot()
         .context("application access snapshot")?;
+    backfill_owners(store, &snapshot)?;
+    tracing::info!(
+        tokens = snapshot.tokens.len(),
+        revision = snapshot.revision,
+        "application access loaded"
+    );
+    Ok(AccessCache::new(snapshot))
+}
+
+fn backfill_owners(store: &Store, snapshot: &AccessSnapshot) -> anyhow::Result<()> {
+    if !snapshot
+        .tokens
+        .iter()
+        .any(|token| token.id == LEGACY_TOKEN_ID)
+    {
+        tracing::warn!("legacy token is revoked; devices without an owner stay unassigned");
+        return Ok(());
+    }
     let devices = store
         .backfill_push_device_owners(LEGACY_TOKEN_ID)
         .context("assign push device owners")?;
@@ -197,12 +215,7 @@ fn access_cache(config: &Config, store: &Store) -> anyhow::Result<AccessCache> {
             "legacy devices assigned to the legacy token"
         );
     }
-    tracing::info!(
-        tokens = snapshot.tokens.len(),
-        revision = snapshot.revision,
-        "application access loaded"
-    );
-    Ok(AccessCache::new(snapshot))
+    Ok(())
 }
 
 fn vpn_access(config: &Config) -> VpnAccess {
@@ -270,6 +283,30 @@ fn seconds(duration: Duration) -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn legacy_rows_are_assigned_only_while_the_legacy_token_is_active() {
+        let store = Store::open_in_memory(crate::store::Config::default()).expect("store");
+        let device = crate::store::PushDeviceInput {
+            device_id: "device-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_owned(),
+            token: "token-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_owned(),
+            platform: "android".to_owned(),
+            app_version: String::new(),
+            device_name: String::new(),
+        };
+        store.register_push_device(&device, 1).expect("legacy row");
+        backfill_owners(&store, &AccessSnapshot::default()).expect("no legacy token");
+        assert_eq!(store.list_push_devices().expect("list")[0].token_id, "");
+        store
+            .access_import_legacy(&home_app_auth::sha256_hex("legacy"), 2)
+            .expect("legacy token");
+        let snapshot = store.access_snapshot().expect("snapshot");
+        backfill_owners(&store, &snapshot).expect("backfill");
+        assert_eq!(
+            store.list_push_devices().expect("list")[0].token_id,
+            LEGACY_TOKEN_ID
+        );
+    }
 
     fn config_with_vpn() -> Config {
         Config::load_from(
