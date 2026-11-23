@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="app_launcher_emerald_background">@color/theme_emerald_surface</color>
+    <color name="app_launcher_emerald_background">@color/theme_emerald_surface_container_high</color>
     <color name="app_launcher_emerald_symbol">@color/theme_emerald_primary</color>
     <color name="app_launcher_emerald_glow">@color/theme_emerald_primary_container</color>
-    <color name="app_launcher_system_background">@color/theme_emerald_surface</color>
+    <color name="app_launcher_system_background">@color/theme_emerald_surface_container_high</color>
     <color name="app_launcher_system_symbol">@color/theme_emerald_primary</color>
     <color name="app_launcher_system_glow">@color/theme_emerald_primary_container</color>
-    <color name="app_launcher_neon_background">@color/theme_neon_surface</color>
+    <color name="app_launcher_neon_background">@color/theme_neon_surface_container_high</color>
     <color name="app_launcher_neon_symbol">@color/theme_neon_primary</color>
     <color name="app_launcher_neon_glow">@color/theme_neon_primary_container</color>
 </resources>

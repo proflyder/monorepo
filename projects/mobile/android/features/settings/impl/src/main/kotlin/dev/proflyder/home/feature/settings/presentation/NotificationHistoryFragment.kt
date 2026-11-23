@@ -27,8 +27,10 @@ internal class NotificationHistoryFragment :
         binding.historyList.adapter = adapter
         binding.historyList.addHistoryDecorations()
         binding.historyClear.setOnClickListener { confirmClear() }
+        binding.historyReadAll.setOnClickListener { dispatch(HistoryIntent.ReadAll) }
         render(NotificationHistoryUiState::rows, adapter::submitList)
         render({ it.entries.size }, ::renderCount)
+        render(NotificationHistoryUiState::unread) { binding.historyReadAll.setVisible(it > 0) }
     }
 
     override fun onBindingDestroyed() {

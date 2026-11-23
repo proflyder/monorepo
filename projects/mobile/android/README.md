@@ -564,9 +564,10 @@ navigate by route string, not by an impl destination.
 Each `AppTheme` has an `activity-alias` `dev.proflyder.home.launcher.<Name>`
 targeting `MainActivity`, with its own adaptive icon
 (`app_ic_launcher_<theme>`), built by one rule for every theme from colour
-roles in `launcher_icon_colors.xml`: `background` = the theme's surface,
-`symbol` = its primary, `glow` = its primary container (a radial halo in the
-background), plus a shared monochrome layer. Roles reference the theme
+roles in `launcher_icon_colors.xml`: `background` = the theme's surface
+container high, `glow` = its primary container (a wide radial halo),
+`symbol` = its primary (the house and a soft primary light at the halo's
+centre), plus a shared monochrome layer. Roles reference the theme
 palette, so icons follow light/dark mode; the system theme maps the same roles
 to wallpaper colours on API 31+. Only the alias of
 `AppTheme.DEFAULT` is enabled in the manifest. `LauncherIcons`
@@ -579,3 +580,23 @@ changes share one path. `MainActivity` stays exported without a launcher
 filter, so explicit intents and `getLaunchIntentForPackage` (push, VPN
 notifications) keep working. A new `AppTheme` entry fails compilation in
 `LauncherAliases` until its alias and icon exist.
+
+## Notification icon per theme
+
+Every notification uses its monochrome small icon tinted with the current
+theme's primary (`NotificationAccent`). `phone-push` sends notifications
+data-only, so the app, not the FCM SDK, builds them even in the background;
+the `default_notification_*` meta-data in the push manifest only covers
+messages still carrying a `notification` block. HyperOS in its own
+notification style draws the cached application icon instead of the small
+icon; that is a system choice and the app does not work around it.
+
+## Notification bell
+
+`NotificationBellContribution` (settings feature) adds a bell to the toolbar
+end slot on every tab; it opens the notification history (`settings/history`),
+which is no longer listed in Settings. Every received notification is stored
+unread (`NotificationHistoryEntry.read`); tapping an entry or "Mark all read"
+marks it read, and the bell badge shows the unread count (capped at `99+`).
+Entries saved before read state existed decode as read, so an upgrade does not
+light the badge with old history.

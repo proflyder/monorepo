@@ -1,5 +1,6 @@
 package dev.proflyder.home.feature.settings.presentation
 
+import android.graphics.Typeface
 import android.view.LayoutInflater
 import android.view.ViewGroup
 import androidx.core.view.ViewCompat
@@ -70,6 +71,8 @@ internal class NotificationHistoryAdapter(
             views.historyItemIcon.setImageResource(icon(entry.type))
             views.historyItemIcon.contentDescription = views.root.context.getString(label(entry.type))
             views.historyItemChevron.setVisible(entry.deepLink != null)
+            views.historyItemUnread.setVisible(!entry.read)
+            views.historyItemTitle.setTypeface(null, if (entry.read) Typeface.NORMAL else Typeface.BOLD)
         }
     }
 

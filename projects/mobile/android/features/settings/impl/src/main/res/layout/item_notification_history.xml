@@ -60,6 +60,15 @@
                 tools:text="5 min ago" />
         </LinearLayout>
 
+        <View
+            android:id="@+id/history_item_unread"
+            android:layout_width="@dimen/settings_history_unread_dot"
+            android:layout_height="@dimen/settings_history_unread_dot"
+            android:layout_marginStart="@dimen/ds_space_s"
+            android:background="@drawable/settings_unread_dot"
+            android:visibility="gone"
+            tools:visibility="visible" />
+
         <ImageView
             android:id="@+id/history_item_chevron"
             android:layout_width="@dimen/settings_row_chevron"

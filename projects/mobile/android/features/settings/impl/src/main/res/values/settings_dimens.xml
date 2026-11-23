@@ -13,4 +13,8 @@
     <dimen name="settings_appearance_swatch">20dp</dimen>
     <dimen name="settings_appearance_swatch_gap">8dp</dimen>
     <dimen name="settings_appearance_selected_stroke">2dp</dimen>
+    <dimen name="settings_history_unread_dot">8dp</dimen>
+    <dimen name="settings_bell_badge_height">16dp</dimen>
+    <dimen name="settings_bell_badge_padding">4dp</dimen>
+    <dimen name="settings_bell_badge_offset">6dp</dimen>
 </resources>

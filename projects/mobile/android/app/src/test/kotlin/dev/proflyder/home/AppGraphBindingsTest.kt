@@ -35,7 +35,7 @@ class AppGraphBindingsTest {
     fun chromeAndDeepLinksAreContributedByFeatures() {
         val activity = Robolectric.buildActivity(MainActivity::class.java).setup().get()
         assertEquals(
-            setOf("VoiceProfileToolbarChip", "VpnToolbarContribution"),
+            setOf("NotificationBellContribution", "VoiceProfileToolbarChip", "VpnToolbarContribution"),
             activity.toolbarContributions.map { it::class.java.simpleName }.toSet(),
         )
         assertEquals(

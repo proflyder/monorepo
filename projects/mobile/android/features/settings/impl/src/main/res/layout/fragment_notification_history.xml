@@ -29,6 +29,13 @@
             tools:text="12 saved" />
 
         <com.google.android.material.button.MaterialButton
+            android:id="@+id/history_read_all"
+            style="@style/Widget.Home.Button.Text.M"
+            android:layout_width="wrap_content"
+            android:text="@string/history_read_all"
+            android:visibility="gone" />
+
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/history_clear"
             style="@style/Widget.Home.Button.Destructive.M"
             android:layout_width="wrap_content"

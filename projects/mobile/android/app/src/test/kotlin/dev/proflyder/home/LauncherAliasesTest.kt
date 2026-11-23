@@ -44,6 +44,14 @@ class LauncherAliasesTest {
     }
 
     @Test
+    fun backgroundFcmNotificationsHaveDefaultIconColorAndChannel() {
+        val meta = packageManager.getApplicationInfo(app.packageName, PackageManager.GET_META_DATA).metaData
+        assertTrue(meta.getInt("com.google.firebase.messaging.default_notification_icon") != 0)
+        assertTrue(meta.getInt("com.google.firebase.messaging.default_notification_color") != 0)
+        assertEquals("home_notifications", meta.getString("com.google.firebase.messaging.default_notification_channel_id"))
+    }
+
+    @Test
     fun startablesSyncLauncherIcon() {
         val names = app.graph.startables.map { it::class.java.simpleName }
         assertTrue(names.toString(), "LauncherIconSync" in names)

@@ -71,6 +71,30 @@ class NotificationHistoryStoreTest {
     }
 
     @Test
+    fun newMessagesAreUnreadAndReadStateSurvivesARestart() = runBlocking {
+        val context = RuntimeEnvironment.getApplication()
+        val dataStore = store(context, "history-read")
+        val store = DataStoreNotificationHistoryStore(dataStore, lifetime())
+        store.record(entry("a", NotificationHistoryType.NOTIFY, 1_000))
+        store.record(entry("b", NotificationHistoryType.NOTIFY, 2_000))
+        assertEquals(2, NotificationHistoryRules.unread(store.settled(2)))
+
+        store.markRead("a")
+        val afterOne = DataStoreNotificationHistoryStore(dataStore, lifetime())
+        assertEquals(listOf(false, true), afterOne.settledUnread(1).map { it.read })
+
+        afterOne.markAllRead()
+        val afterAll = DataStoreNotificationHistoryStore(dataStore, lifetime())
+        assertEquals(0, NotificationHistoryRules.unread(afterAll.settledUnread(0)))
+    }
+
+    @Test
+    fun entriesSavedBeforeReadStateExistedCountAsRead() {
+        val legacy = checkNotNull(javaClass.getResource("/fixtures/legacy_history.json")).readText()
+        assertTrue(NotificationHistoryCodec.decode(legacy).single().read)
+    }
+
+    @Test
     fun clearingRemovesEveryMessage() = runBlocking {
         val context = RuntimeEnvironment.getApplication()
         val dataStore = store(context, "history-clear")
@@ -122,6 +146,9 @@ class NotificationHistoryStoreTest {
 
     private suspend fun NotificationHistoryStore.settled(size: Int, first: String? = null): List<NotificationHistoryEntry> =
         withTimeout(TIMEOUT_MILLIS) { entries.first { it.size == size && (first == null || it.first().id == first) } }
+
+    private suspend fun NotificationHistoryStore.settledUnread(unread: Int): List<NotificationHistoryEntry> =
+        withTimeout(TIMEOUT_MILLIS) { entries.first { it.size == 2 && NotificationHistoryRules.unread(it) == unread } }
 
     private class FixedHistory(private val store: NotificationHistoryStore) : FeatureScope<NotificationHistoryStore> {
         override val owners: Int = 0

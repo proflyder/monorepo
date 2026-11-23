@@ -12,6 +12,7 @@ internal class NotificationHistoryRecord(
     val body: String = "",
     val deepLink: String? = null,
     val receivedAtMillis: Long = 0,
+    val read: Boolean = true,
 )
 
 internal object NotificationHistoryCodec {
@@ -36,6 +37,7 @@ internal object NotificationHistoryCodec {
             body = entry.body,
             deepLink = entry.deepLink,
             receivedAtMillis = entry.receivedAtMillis,
+            read = entry.read,
         )
 
     private fun toEntry(record: NotificationHistoryRecord): NotificationHistoryEntry? {
@@ -47,6 +49,7 @@ internal object NotificationHistoryCodec {
             body = record.body,
             deepLink = record.deepLink,
             receivedAtMillis = record.receivedAtMillis,
+            read = record.read,
         )
     }
 

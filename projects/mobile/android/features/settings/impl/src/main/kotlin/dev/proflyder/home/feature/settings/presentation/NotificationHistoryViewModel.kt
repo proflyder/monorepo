@@ -7,6 +7,7 @@ import dev.proflyder.home.core.presentation.viewModel
 import dev.proflyder.home.core.navigation.Route
 import dev.proflyder.home.core.presentation.StateViewModel
 import dev.proflyder.home.feature.push.NotificationHistoryEntry
+import dev.proflyder.home.feature.push.NotificationHistoryRules
 import dev.proflyder.home.feature.push.NotificationHistoryStore
 import dev.proflyder.home.core.ui.ViewModelSource
 import dev.zacsweers.metro.AppScope
@@ -22,10 +23,12 @@ internal data class NotificationHistoryUiState(
     val rows: List<HistoryRow> = emptyList(),
 ) {
     val isEmpty: Boolean get() = entries.isEmpty()
+    val unread: Int get() = NotificationHistoryRules.unread(entries)
 }
 
 internal sealed interface HistoryIntent {
     data class Open(val entry: NotificationHistoryEntry) : HistoryIntent
+    data object ReadAll : HistoryIntent
     data object Clear : HistoryIntent
 }
 
@@ -49,9 +52,15 @@ internal class NotificationHistoryViewModel(
 
     override fun handle(intent: HistoryIntent) {
         when (intent) {
-            is HistoryIntent.Open -> intent.entry.deepLink?.let { emit(HistoryEvent.OpenRoute(Route.Link(it))) }
+            is HistoryIntent.Open -> open(intent.entry)
+            HistoryIntent.ReadAll -> launch { store.markAllRead() }
             HistoryIntent.Clear -> clear()
         }
+    }
+
+    private fun open(entry: NotificationHistoryEntry) {
+        if (!entry.read) launch { store.markRead(entry.id) }
+        entry.deepLink?.let { emit(HistoryEvent.OpenRoute(Route.Link(it))) }
     }
 
     private fun clear() {
