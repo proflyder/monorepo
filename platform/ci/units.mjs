@@ -180,6 +180,7 @@ export const config = {
         ],
         routing_roots: ["//solutions/scheduler"],
         test_targets: [
+          "//packages/rust/home-app-auth:unit_tests",
           "//solutions/scheduler/crates/scheduler:unit_tests",
           "//solutions/scheduler/crates/scheduler:contract_tests",
           "//solutions/scheduler/crates/scheduler:go_database_test",

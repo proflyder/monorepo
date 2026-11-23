@@ -6,7 +6,7 @@ use axum::extract::State;
 use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
-use home_secret::Token;
+use home_app_auth::{AccessClient, Forbidden, Module};
 use serde::Serialize;
 
 use crate::catalog::{Catalog, Entry, Light, Volume};
@@ -93,11 +93,11 @@ struct CatalogResponse {
 #[derive(Clone)]
 struct AppState {
     source: Arc<dyn CatalogSource>,
-    token: Token,
+    access: Arc<AccessClient>,
 }
 
-pub fn router(source: Arc<dyn CatalogSource>, token: Token) -> Router {
-    let state = AppState { source, token };
+pub fn router(source: Arc<dyn CatalogSource>, access: Arc<AccessClient>) -> Router {
+    let state = AppState { source, access };
     Router::new()
         .route("/v1/catalog", get(catalog))
         .route("/healthz", get(healthz))
@@ -110,8 +110,15 @@ async fn healthz() -> StatusCode {
 }
 
 async fn catalog(State(state): State<AppState>, headers: HeaderMap) -> Response {
-    if !authorized(headers.get(header::AUTHORIZATION), &state.token) {
+    let principal = state
+        .access
+        .authenticate(headers.get(header::AUTHORIZATION))
+        .await;
+    let Some(principal) = principal else {
         return unauthorized();
+    };
+    if let Err(forbidden) = principal.require(Module::Home) {
+        return module_forbidden(forbidden);
     }
     let snapshot = match state.source.get().await {
         Ok(snapshot) => snapshot,
@@ -242,15 +249,13 @@ pub fn unauthorized() -> Response {
     response
 }
 
-#[must_use]
-pub fn authorized(header: Option<&HeaderValue>, token: &Token) -> bool {
-    if token.expose().is_empty() {
-        return false;
-    }
-    header
-        .and_then(|value| value.to_str().ok())
-        .and_then(|value| value.strip_prefix("Bearer "))
-        .is_some_and(|candidate| token.ct_eq(candidate))
+fn module_forbidden(forbidden: Forbidden) -> Response {
+    (
+        StatusCode::FORBIDDEN,
+        [(header::CONTENT_TYPE, "application/json")],
+        forbidden.body(),
+    )
+        .into_response()
 }
 
 #[cfg(test)]
@@ -260,6 +265,7 @@ mod tests {
     use super::*;
     use crate::catalog::{LightInput, Raw, Rules, build};
     use crate::discovery::{DiscoveryError, Snapshot};
+    use home_app_auth::{AccessSnapshot, Modules, TokenRecord, sha256_hex};
 
     struct Source {
         snapshot: Result<Snapshot, DiscoveryError>,
@@ -322,26 +328,39 @@ mod tests {
     }
 
     #[test]
-    fn bearer_is_exact_and_an_empty_token_never_authorizes() {
-        let token = Token::new("secret");
-        assert!(authorized(
-            Some(&HeaderValue::from_static("Bearer secret")),
-            &token
-        ));
-        for value in [
-            "",
-            "secret",
-            "Bearer wrong",
-            "Basic secret",
-            "bearer secret",
-        ] {
-            let header = HeaderValue::from_str(value).expect("header");
-            assert!(!authorized(Some(&header), &token), "accepted {value}");
-        }
-        assert!(!authorized(
-            Some(&HeaderValue::from_static("Bearer ")),
-            &Token::new("")
-        ));
+    fn the_home_module_is_required_for_the_catalog() {
+        let snapshot = AccessSnapshot {
+            revision: 1,
+            tokens: vec![
+                TokenRecord {
+                    id: "owner".to_owned(),
+                    name: "owner".to_owned(),
+                    sha256: sha256_hex("owner"),
+                    owner: true,
+                    modules: Modules::owner()
+                        .ids()
+                        .into_iter()
+                        .map(str::to_owned)
+                        .collect(),
+                },
+                TokenRecord {
+                    id: "chat".to_owned(),
+                    name: "chat".to_owned(),
+                    sha256: sha256_hex("chat"),
+                    owner: false,
+                    modules: vec!["chat".to_owned()],
+                },
+            ],
+        };
+        let access = AccessClient::fixed(snapshot);
+        let owner = access.cache().authenticate_token("owner").expect("owner");
+        assert!(owner.require(Module::Home).is_ok());
+        let chat = access.cache().authenticate_token("chat").expect("chat");
+        assert_eq!(
+            chat.require(Module::Home),
+            Err(Forbidden::Module(Module::Home))
+        );
+        assert!(access.cache().authenticate_token("wrong").is_none());
     }
 
     #[test]

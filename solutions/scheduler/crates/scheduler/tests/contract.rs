@@ -9,6 +9,7 @@ use scheduler::store::{Config, Store};
 use scheduler::sync::NoSync;
 
 const TOKEN: &str = "contract-test-token";
+const MEMBER_TOKEN: &str = "contract-member-token";
 const BASE: i64 = 1_767_268_800;
 
 #[derive(Debug, Clone)]
@@ -47,7 +48,7 @@ async fn golden_contract_fixtures() {
     )
     .await
     .expect("contract fixtures");
-    assert_eq!(passed, 23);
+    assert_eq!(passed, 24);
 }
 
 fn new_router(scenario: &str) -> axum::Router {
@@ -77,10 +78,39 @@ fn new_router(scenario: &str) -> axum::Router {
         ..EngineStatus::default()
     });
     let service = Service::new(store, Arc::new(TestClock(clock)), "test", engine, allowed);
+    let snapshot = home_app_auth::AccessSnapshot {
+        revision: 1,
+        tokens: vec![
+            home_app_auth::TokenRecord {
+                id: "test".to_owned(),
+                name: "test".to_owned(),
+                sha256: home_app_auth::sha256_hex(TOKEN),
+                owner: true,
+                modules: home_app_auth::Modules::owner()
+                    .ids()
+                    .into_iter()
+                    .map(str::to_owned)
+                    .collect(),
+            },
+            home_app_auth::TokenRecord {
+                id: "member".to_owned(),
+                name: "member".to_owned(),
+                sha256: home_app_auth::sha256_hex(MEMBER_TOKEN),
+                owner: false,
+                modules: vec!["home".to_owned()],
+            },
+        ],
+    };
+    let cache = home_app_auth::AccessCache::new(snapshot);
+    let auth = Arc::new(api::AccessAuth::new(
+        cache.clone(),
+        home_secret::Token::new("contract-service-token"),
+    ));
     api::router(
         service.clone(),
         AlarmFacade::new(service),
-        TOKEN,
+        auth,
+        cache,
         api::VpnAccess::default(),
         Arc::new(NoSync),
     )

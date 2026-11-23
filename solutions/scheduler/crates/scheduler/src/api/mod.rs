@@ -1,3 +1,4 @@
+mod access;
 mod alarm;
 mod auth;
 mod convert;
@@ -20,16 +21,24 @@ use std::task::{Context, Poll};
 
 use axum::body::Body;
 use connectrpc::{ConnectRpcService, Limits, Router as ConnectRouter};
+use home_app_auth::AccessCache;
 use home_proto::v1::{AlarmServiceExt, ScenarioServiceExt, SchedulerServiceExt};
 use http::{Request, Response, StatusCode, header};
 
+pub use access::AccessState;
 pub use alarm::AlarmFacade;
+pub use auth::AccessAuth;
 pub use service::{EngineStatus, Service};
 
 use crate::sync::SyncSink;
 use auth::BearerAuth;
 
 pub const MAX_BODY_BYTES: usize = 1 << 20;
+
+#[must_use]
+pub fn now_unix() -> i64 {
+    jiff::Timestamp::now().as_second()
+}
 
 #[derive(Clone)]
 struct ConnectFallback {
@@ -76,7 +85,8 @@ pub struct VpnAccess {
 pub fn router(
     service: Service,
     alarms: AlarmFacade,
-    token: &str,
+    auth: Arc<AccessAuth>,
+    cache: AccessCache,
     vpn_access: VpnAccess,
     sync: Arc<dyn SyncSink>,
 ) -> axum::Router {
@@ -92,10 +102,10 @@ pub fn router(
                 .with_max_message_size(MAX_BODY_BYTES)
                 .with_max_request_body_size(MAX_BODY_BYTES),
         )
-        .with_interceptor_arc(Arc::new(BearerAuth::new(token)));
+        .with_interceptor_arc(auth.clone());
     let vpn = vpn::VpnState {
         store: Arc::clone(&store),
-        app_auth: Arc::new(BearerAuth::new(token)),
+        app_auth: Arc::clone(&auth),
         sync_auth: vpn_access
             .sync_token
             .as_deref()
@@ -107,11 +117,10 @@ pub fn router(
         .route("/v1/vpn/profile/remove", axum::routing::post(vpn::remove))
         .route("/v1/vpn/peers", axum::routing::get(vpn::peers))
         .with_state(vpn);
-    let auth = Arc::new(BearerAuth::new(token));
     let notifications = notifications::NotificationState {
         store: Arc::clone(&store),
         auth: Arc::clone(&auth),
-        sync,
+        sync: Arc::clone(&sync),
     };
     let history_routes = axum::Router::new()
         .route(
@@ -139,7 +148,30 @@ pub fn router(
             axum::routing::post(notifications::clear),
         )
         .with_state(notifications);
-    let push = push::PushState { store, auth };
+    let push = push::PushState {
+        store: Arc::clone(&store),
+        auth: Arc::clone(&auth),
+        cache: cache.clone(),
+    };
+    let access = AccessState {
+        store,
+        auth,
+        cache,
+        sync,
+    };
+    let access_routes = axum::Router::new()
+        .route("/v1/me", axum::routing::get(access::me))
+        .route("/v1/access/modules", axum::routing::get(access::modules))
+        .route(
+            "/v1/access/tokens",
+            axum::routing::get(access::list).post(access::create),
+        )
+        .route(
+            "/v1/access/tokens/{id}",
+            axum::routing::patch(access::update).delete(access::revoke),
+        )
+        .route("/v1/access/snapshot", axum::routing::get(access::snapshot))
+        .with_state(access);
     axum::Router::new()
         .route(
             "/v1/push/devices",
@@ -150,5 +182,6 @@ pub fn router(
         .with_state(push)
         .merge(vpn_routes)
         .merge(history_routes)
+        .merge(access_routes)
         .fallback_service(ConnectFallback { methods, service })
 }

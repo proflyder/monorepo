@@ -6,6 +6,7 @@ package(default_visibility = ["//visibility:public"])
 PACKAGE_VERSION = "0.1.0"
 
 LIB_DEPS = [
+    "//packages/rust/home-app-auth:home_app_auth",
     "//packages/rust/home-config:home_config",
     "//packages/rust/home-http:home_http",
     "//packages/rust/home-proto:home_proto",
@@ -61,6 +62,7 @@ rust_test(
     size = "small",
     crate = ":scheduler_lib",
     compile_data = [
+        "//packages/proto/home/v1:protos",
         "//solutions/scheduler:ids_vectors",
         "//solutions/scheduler:planner_vectors",
     ],

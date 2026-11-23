@@ -13,6 +13,7 @@ use axum::http::{HeaderMap, Method, Request, Response, StatusCode, header};
 use axum::middleware::{self, Next};
 use axum::response::IntoResponse;
 use axum::routing::{any, any_service, get};
+use home_app_auth::{AccessClient, Module};
 use http_body_util::BodyExt as _;
 use rmcp::transport::streamable_http_server::session::local::LocalSessionManager;
 use rmcp::transport::streamable_http_server::{StreamableHttpServerConfig, StreamableHttpService};
@@ -30,11 +31,17 @@ pub const ALERTS_REALM: &str = "home-alerts";
 
 const MAX_MCP_BODY: usize = 4 << 20;
 
+#[derive(Clone)]
+pub struct AccessBinding {
+    pub client: Arc<AccessClient>,
+}
+
 pub struct Options {
     pub auth_token: String,
     pub voice_token: Option<String>,
     pub voice: Option<Router<ObserveState>>,
-    pub system: Option<(String, Arc<crate::system::Dashboard>)>,
+    pub access: Option<AccessBinding>,
+    pub system: Option<Arc<crate::system::Dashboard>>,
     pub chat: Option<Arc<crate::chat::Chat>>,
     pub chat_alerts_token: Option<String>,
     pub groups: Vec<Arc<dyn ToolGroup>>,
@@ -107,18 +114,31 @@ pub fn router(options: Options) -> Router {
         app = app.merge(alerts);
     }
 
-    if let Some((token, dashboard)) = options.system {
-        let mut surface = crate::system::router(dashboard);
-        if let Some(chat) = options.chat {
-            surface = surface.merge(crate::chat::router(chat));
+    if let Some(access) = options.access {
+        let mut surface = Router::new();
+        if let Some(dashboard) = options.system {
+            let routes =
+                crate::system::router(dashboard).route_layer(middleware::from_fn_with_state(
+                    AppAccess {
+                        binding: access.clone(),
+                        module: Module::System,
+                        realm: APP_REALM,
+                    },
+                    require_app,
+                ));
+            surface = surface.merge(routes);
         }
-        let surface = surface.route_layer(middleware::from_fn_with_state(
-            Auth {
-                token,
-                realm: APP_REALM,
-            },
-            require_bearer,
-        ));
+        if let Some(chat) = options.chat {
+            let routes = crate::chat::router(chat).route_layer(middleware::from_fn_with_state(
+                AppAccess {
+                    binding: access,
+                    module: Module::Chat,
+                    realm: APP_REALM,
+                },
+                require_app,
+            ));
+            surface = surface.merge(routes);
+        }
         app = app.merge(surface);
     }
 
@@ -180,6 +200,66 @@ fn text_response(status: StatusCode, body: &'static str) -> Response<Body> {
         .status(status)
         .header(header::CONTENT_TYPE, "text/plain; charset=utf-8")
         .body(Body::from(body))
+        .expect("valid response")
+}
+
+#[derive(Clone)]
+struct AppAccess {
+    binding: AccessBinding,
+    module: Module,
+    realm: &'static str,
+}
+
+async fn require_app(
+    State(auth): State<AppAccess>,
+    mut request: Request<Body>,
+    next: Next,
+) -> Response<Body> {
+    let principal = auth
+        .binding
+        .client
+        .authenticate(request.headers().get(header::AUTHORIZATION))
+        .await;
+    let Some(principal) = principal else {
+        tracing::warn!(
+            path = %request.uri().path(),
+            realm = auth.realm,
+            "missing or invalid application bearer token"
+        );
+        return unauthorized(auth.realm);
+    };
+    if let Err(forbidden) = principal.require(auth.module) {
+        tracing::warn!(
+            path = %request.uri().path(),
+            token = principal.name.as_str(),
+            module = auth.module.id(),
+            "application module denied"
+        );
+        return Response::builder()
+            .status(StatusCode::FORBIDDEN)
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(forbidden.body()))
+            .expect("valid response");
+    }
+    tracing::debug!(
+        path = %request.uri().path(),
+        token = principal.name.as_str(),
+        modules = ?principal.module_ids(),
+        "application bearer accepted"
+    );
+    request.extensions_mut().insert(principal);
+    next.run(request).await
+}
+
+fn unauthorized(realm: &'static str) -> Response<Body> {
+    Response::builder()
+        .status(StatusCode::UNAUTHORIZED)
+        .header(
+            header::WWW_AUTHENTICATE,
+            format!("Bearer realm=\"{realm}\""),
+        )
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(r#"{"error":"unauthorized"}"#))
         .expect("valid response")
 }
 

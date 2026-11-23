@@ -315,6 +315,81 @@ hairpin NAT для UDP, поэтому публичный `endpoint` из дом
 отвечает. Клиентский сертификат ocserv сервер не выпускает: приватный ключ
 CA хранится только у владельца.
 
+## Доступ приложения (модули)
+
+Источник правды — SQLite scheduler (schema v10): `app_tokens` хранит только
+sha256, имя, набор модулей и флаг owner; `access_meta` — монотонную ревизию.
+Токен создаётся только через admin API (значение показывается один раз), а
+старый общий токен при миграции импортируется как «Мама» (id `mama`) со
+всеми модулями, кроме `admin`: решение владельца на время миграции, чтобы до
+UI выдачи именованных токенов у существующих телефонов, HA и APK не было
+регрессий. Owner-токен один (id `owner`), его нельзя отозвать и нельзя лишить
+`admin`. Имена уникальны без учёта регистра (включая кириллицу); имя
+отозванного токена освобождается. Активных токенов не больше 64 (`429`).
+
+| Модуль | Эндпоинты |
+|---|---|
+| `base` | `SchedulerService/GetStatus`, `GET /v1/me`, `POST /v1/push/devices` (регистрация устройства) |
+| `home` | `GET /v1/catalog` (ha-control); `EnqueueTask/CancelTask` только `queue=control`, `taskType=home.control` (остальное — owner/service) |
+| `scenarios` | `ScenarioService/*` |
+| `alarms_timers` | `AlarmService/*`, `SchedulerService/*` по расписаниям и таймерам |
+| `intercom_call` | `IntercomService/*` |
+| `notifications` | `GET /v1/push/devices`, `/v1/push/devices/{remove,rename}`, `/v1/push/history*` — только устройства своего токена; admin видит все |
+| `chat` | `mcp-gateway /v1/chat/*` (кроме сервисного `/v1/chat/alerts`) |
+| `vpn` | `POST /v1/vpn/profile`, `/v1/vpn/profile/remove` |
+| `system` | `mcp-gateway /v1/system/summary|hosts|k8s|devices` |
+| `infra_reports` | зарезервирован: app-эндпоинтов в PR1 нет |
+| `alerts` | фильтр alert-сообщений в `/v1/chat/messages` и `/v1/chat/events` и push alert-карточек; `/v1/chat/alerts` закрыт отдельным токеном Alertmanager (`chat-alerts`) |
+| `admin` | `GET /v1/access/modules`, `GET/POST /v1/access/tokens`, `PATCH/DELETE /v1/access/tokens/{id}` |
+
+Любой действующий токен получает `base` неявно. Набор legacy-токена «Мама» —
+все модули, кроме `admin` (см. выше). Owner — все модули. Запрос без модуля получает `403
+{"error":"module_forbidden","module":"<id>"}`; без/с неверным токеном — `401`.
+
+Admin API:
+
+- `GET /v1/access/modules` — каталог `{id,title}`;
+- `GET /v1/access/tokens` — активные токены (без хэшей);
+- `POST /v1/access/tokens` `{name,modules}` → `{token,access}` (токен один раз);
+- `PATCH /v1/access/tokens/{id}` `{name?,modules?}`;
+- `DELETE /v1/access/tokens/{id}` — отзыв (owner запрещён);
+- `GET /v1/me` — `{name,modules,owner}` для текущего токена.
+
+Неизвестный id модуля в admin API — `400`; занятое имя и попытка выдать
+`admin` — `409`; лимит токенов — `429`. `PATCH` применяет имя и модули в одной
+транзакции. Отзыв удаляет push-устройства, их историю и VPN-peer'ы токена.
+Модуль `scenarios` даёт создавать и запускать сценарии с любыми HA-действиями,
+то есть по силе равен управлению домом; выдавать его стоит тем же, кому `home`.
+
+Push-устройства привязаны к `token_id` регистрации (schema v9), VPN-peer'ы —
+тоже (v10): list/rename/remove/history фильтруются по токену, чужой
+`Home-Device-Id` → `404`, owner и service-token видят все. При старте
+scheduler строки без владельца (созданные до v9/v10) идемпотентно
+назначаются legacy-токену «Мама», поэтому текущие телефоны продолжают
+обновлять FCM-токен без `409`. Регистрация атомарна (одна транзакция).
+Устройство чужого токена можно перерегистрировать, только предъявив тот же
+FCM-токен (та же установка приложения, например переход с «Мамы» на
+именованный токен) или owner-токеном; иначе `409`. VPN-peer чужого токена
+перехватывает только owner: публичный ключ WireGuard не секрет и владения не
+доказывает. `GET /v1/push/devices?module=<id>` с неизвестным модулем —
+`400`.
+
+Внутренний `GET /v1/access/snapshot` (service-token) отдаёт
+`{revision,tokens:[{id,name,sha256,owner,modules}]}`; без заголовка — `401`,
+app-токеном — `403 service_only`. Потребители (`AccessClient` из
+`home-app-auth`) обновляют snapshot раз в 30 с и по требованию при
+неизвестном токене (не чаще раза в секунду, одновременные запросы ждут одно
+обновление). Если успешного обновления не было час, кэш считается протухшим и
+все app-запросы получают `401` (fail-closed): час переживает долгую раскатку
+или перенос scheduler без отказа звонков и управления, а отзыв при живом
+scheduler доходит за 30 с. Неизвестные модули в
+snapshot игнорируются с `warn`. Scheduler публикует sync `entity=access`, но
+Android пока его не обрабатывает (приходит во втором PR), поэтому телефон
+увидит изменения модулей при следующем чтении `/v1/me`. `service_token` живёт в том же секрете; scheduler
+не стартует, если service-токен (или `service_token_previous`) совпадает с
+legacy app-токеном. Ротация — `admin:app-token-bootstrap --rotate-service`
+(`docs/OPERATIONS.md`).
+
 ## Конфигурация
 
 `SCHEDULER_*` и legacy fallback `ALARM_*`:
@@ -322,7 +397,10 @@ CA хранится только у владельца.
 ```text
 SCHEDULER_DB_PATH=scheduler.db              (ALARM_DB_PATH)
 SCHEDULER_LISTEN=127.0.0.1:8098             (ALARM_LISTEN; loopback default)
-SCHEDULER_TOKEN=...                         (или SCHEDULER_TOKEN_FILE)
+SCHEDULER_TOKEN=...                         (или SCHEDULER_TOKEN_FILE; legacy app token «Мама»)
+SCHEDULER_APP_TOKENS_FILE=...               (optional seed owner-токена из OpenBao)
+SCHEDULER_SERVICE_TOKEN_FILE=...            (обязателен, без fallback на legacy)
+SCHEDULER_SERVICE_TOKEN_PREVIOUS_FILE=...   (optional, второй service-token на время ротации)
 SCHEDULER_MISSED_GRACE_SECONDS=600
 SCHEDULER_RING_WINDOW_SECONDS=900
 SCHEDULER_EVENT_RETENTION_SECONDS=2592000
@@ -342,7 +420,8 @@ Sync-пуши: если задан `SCHEDULER_PUSH_URL`, после каждой
 напоминания, таймера и сценария (RPC и тик движка) scheduler фоном шлёт
 `POST {url}/v1/push/sync` `{entity, op, id, originDeviceId}` с тем же
 bearer-токеном. `entity` — `alarms|reminders|timers|scenarios` (по `kind`
-расписания) и `notifications` (после изменения истории), `op` —
+расписания), `notifications` (после изменения истории) и `access` (после
+изменения токенов), `op` —
 `upsert|delete`. Необязательный `targetDeviceId` адресует пуш одному
 устройству (для истории); `originDeviceId` по-прежнему исключает инициатора. `originDeviceId` берётся из заголовка
 `Home-Device-Id` запроса; phone-push этому устройству пуш не шлёт. Ошибка

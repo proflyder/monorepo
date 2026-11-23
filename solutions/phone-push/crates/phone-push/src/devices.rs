@@ -52,10 +52,18 @@ impl Registry {
     }
 
     pub async fn list(&self) -> Result<Vec<Device>, String> {
-        let response = self
+        self.list_for(None).await
+    }
+
+    pub async fn list_for(&self, module: Option<&str>) -> Result<Vec<Device>, String> {
+        let mut request = self
             .http
             .get(format!("{}/v1/push/devices", self.base_url))
-            .bearer_auth(self.token.expose())
+            .bearer_auth(self.token.expose());
+        if let Some(module) = module {
+            request = request.query(&[("module", module)]);
+        }
+        let response = request
             .send()
             .await
             .map_err(|_| "registry request failed".to_owned())?;

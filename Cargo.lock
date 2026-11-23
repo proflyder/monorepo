@@ -1455,6 +1455,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "axum",
+ "home-app-auth",
  "home-config",
  "home-contracttest",
  "home-ha",
@@ -1590,6 +1591,24 @@ version = "0.1.0"
 dependencies = [
  "home-runtime",
  "tokio",
+]
+
+[[package]]
+name = "home-app-auth"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "http",
+ "reqwest",
+ "rustls",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "subtle",
+ "thiserror",
+ "tokio",
+ "tokio-util",
+ "tracing",
 ]
 
 [[package]]
@@ -2070,6 +2089,7 @@ dependencies = [
  "axum",
  "connectrpc",
  "futures-util",
+ "home-app-auth",
  "home-config",
  "home-http",
  "home-proto",
@@ -2344,6 +2364,7 @@ dependencies = [
  "base64 0.23.1",
  "forced-ssh",
  "futures",
+ "home-app-auth",
  "home-clients",
  "home-config",
  "home-contracttest",
@@ -3848,6 +3869,7 @@ dependencies = [
  "anyhow",
  "axum",
  "connectrpc",
+ "home-app-auth",
  "home-config",
  "home-contracttest",
  "home-http",

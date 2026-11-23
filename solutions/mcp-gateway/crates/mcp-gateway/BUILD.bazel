@@ -7,6 +7,7 @@ PACKAGE_VERSION = "0.1.0"
 
 DEPS = [
     "//packages/rust/forced-ssh:forced_ssh",
+    "//packages/rust/home-app-auth:home_app_auth",
     "//packages/rust/home-clients:home_clients",
     "//packages/rust/home-config:home_config",
     "//packages/rust/home-http:home_http",

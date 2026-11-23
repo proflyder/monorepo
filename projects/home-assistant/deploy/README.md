@@ -95,7 +95,7 @@ workloads:
           - {name: HERMES_SCHEDULER_URL,
              value: "http://scheduler.home-assistant.svc.cluster.local:8098"}
           - name: HERMES_SCHEDULER_TOKEN
-            valueFrom: {secretKeyRef: {name: scheduler-auth, key: token}}
+            valueFrom: {secretKeyRef: {name: scheduler-auth, key: service_token}}
           - {name: HERMES_VOICE_QUEUE, value: "1"}
           - {name: HERMES_VOICE_MEDIA_PLAYER,
              value: "media_player.iandeks_stantsiia_midi_media_player"}
@@ -103,8 +103,8 @@ workloads:
 ```
 
 `Secret/mcp-gateway-voice` уже создаётся ESO в namespace `home-assistant`;
-`Secret/scheduler-auth` (`key: token`) создаётся ESO для scheduler и уже
-используется его же healthcheck. `HERMES_HA_TOKEN` уже есть в
+`Secret/scheduler-auth` (`key: service_token`) создаётся ESO для scheduler и
+используется сервисными вызовами; app-токен «Мама» остаётся в `key: token`. `HERMES_HA_TOKEN` уже есть в
 `Secret/hermes-environment`. Pod Hermes работает с `hostNetwork`, поэтому
 NetworkPolicy на него не действует; scheduler тоже не имеет ingress-policy,
 a egress к `mcp-gateway:8080`, `scheduler:8098` и HA `:8123` разрешён. Новых

@@ -18,6 +18,7 @@ path = "src/main.rs"
 anyhow = { workspace = true }
 axum = { workspace = true }
 connectrpc = { workspace = true }
+home-app-auth = { path = "../../../../packages/rust/home-app-auth" }
 home-config = { path = "../../../../packages/rust/home-config" }
 home-http = { path = "../../../../packages/rust/home-http" }
 home-proto = { path = "../../../../packages/rust/home-proto" }

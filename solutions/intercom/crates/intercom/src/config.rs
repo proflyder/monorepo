@@ -54,7 +54,8 @@ pub struct Config {
     pub listen: String,
     pub phone: EndpointConfig,
     pub station: EndpointConfig,
-    pub phone_token: Secret,
+    pub access_url: String,
+    pub service_token: Secret,
     pub station_token: Secret,
     pub ring_timeout: Duration,
     pub connect_timeout: Duration,
@@ -81,12 +82,8 @@ impl std::fmt::Debug for Config {
 
 #[derive(Debug, Error)]
 pub enum ConfigError {
-    #[error("INTERCOM_TOKEN or INTERCOM_TOKEN_FILE is required")]
-    PhoneTokenRequired,
     #[error("INTERCOM_STATION_TOKEN or INTERCOM_STATION_TOKEN_FILE is required")]
     StationTokenRequired,
-    #[error("INTERCOM_TOKEN_FILE: cannot read token file")]
-    PhoneTokenFile,
     #[error("INTERCOM_STATION_TOKEN_FILE: cannot read token file")]
     StationTokenFile,
     #[error("{0}")]
@@ -104,14 +101,6 @@ impl Config {
     ) -> Result<Self, ConfigError> {
         let listen =
             first(getenv, &["INTERCOM_LISTEN"]).unwrap_or_else(|| DEFAULT_LISTEN.to_owned());
-        let phone_token = load_token(
-            getenv,
-            read_file,
-            &["INTERCOM_TOKEN"],
-            &["INTERCOM_TOKEN_FILE"],
-            ConfigError::PhoneTokenRequired,
-            ConfigError::PhoneTokenFile,
-        )?;
         let station_token = load_token(
             getenv,
             read_file,
@@ -120,11 +109,9 @@ impl Config {
             ConfigError::StationTokenRequired,
             ConfigError::StationTokenFile,
         )?;
-        if phone_token.ct_eq(station_token.expose()) {
-            return Err(ConfigError::Invalid(
-                "phone and station tokens must differ".into(),
-            ));
-        }
+        let access_url = first(getenv, &["INTERCOM_ACCESS_URL"])
+            .ok_or_else(|| ConfigError::Invalid("INTERCOM_ACCESS_URL is required".into()))?;
+        let service_token = load_service_token(getenv, read_file)?;
 
         let phone = EndpointConfig {
             id: endpoint_id(
@@ -176,7 +163,8 @@ impl Config {
             listen,
             phone,
             station,
-            phone_token,
+            access_url,
+            service_token,
             station_token,
             ring_timeout,
             connect_timeout,
@@ -289,6 +277,35 @@ fn endpoint_id(value: &str, key: &str) -> Result<String, ConfigError> {
     Ok(value.to_owned())
 }
 
+fn load_service_token(
+    getenv: &dyn Fn(&str) -> Option<String>,
+    read_file: &dyn Fn(&str) -> std::io::Result<Vec<u8>>,
+) -> Result<Secret, ConfigError> {
+    if let Some(token) = first(getenv, &["INTERCOM_SERVICE_TOKEN"]) {
+        return Ok(Secret::new(token));
+    }
+    let Some(path) = first(getenv, &["INTERCOM_SERVICE_TOKEN_FILE"]) else {
+        return Err(ConfigError::Invalid(
+            "INTERCOM_SERVICE_TOKEN_FILE is required".into(),
+        ));
+    };
+    match read_file(&path) {
+        Ok(data) => {
+            let token = String::from_utf8_lossy(&data);
+            let token = token.trim();
+            if token.is_empty() {
+                return Err(ConfigError::Invalid(
+                    "INTERCOM_SERVICE_TOKEN_FILE is empty".into(),
+                ));
+            }
+            Ok(Secret::new(token))
+        }
+        Err(_) => Err(ConfigError::Invalid(
+            "INTERCOM_SERVICE_TOKEN_FILE: cannot read file".into(),
+        )),
+    }
+}
+
 fn load_token(
     getenv: &dyn Fn(&str) -> Option<String>,
     read_file: &dyn Fn(&str) -> std::io::Result<Vec<u8>>,
@@ -357,6 +374,11 @@ mod tests {
                 .iter()
                 .find(|(name, _)| *name == key)
                 .map(|(_, value)| (*value).to_owned())
+                .or_else(|| (key == "INTERCOM_SERVICE_TOKEN").then(|| "service".to_owned()))
+                .or_else(|| {
+                    (key == "INTERCOM_ACCESS_URL")
+                        .then(|| "http://scheduler:8098/v1/access/snapshot".to_owned())
+                })
         }
     }
 
@@ -367,10 +389,7 @@ mod tests {
     #[test]
     fn defaults_and_tokens() {
         let config = Config::load_from(
-            &env(&[
-                ("INTERCOM_TOKEN", "phone-secret"),
-                ("INTERCOM_STATION_TOKEN", "station-secret"),
-            ]),
+            &env(&[("INTERCOM_STATION_TOKEN", "station-secret")]),
             &no_file,
         )
         .expect("load");
@@ -391,55 +410,63 @@ mod tests {
     }
 
     #[test]
-    fn both_tokens_are_required_and_must_differ() {
-        let error = Config::load_from(&env(&[]), &no_file).expect_err("phone token");
-        assert!(error.to_string().contains("INTERCOM_TOKEN"));
-        let error = Config::load_from(&env(&[("INTERCOM_TOKEN", "t")]), &no_file)
-            .expect_err("station token");
+    fn the_station_token_is_required() {
+        let error = Config::load_from(&env(&[]), &no_file).expect_err("station token");
         assert!(error.to_string().contains("INTERCOM_STATION_TOKEN"));
-        let error = Config::load_from(
-            &env(&[
-                ("INTERCOM_TOKEN", "same"),
-                ("INTERCOM_STATION_TOKEN", "same"),
-            ]),
-            &no_file,
-        )
-        .expect_err("same tokens");
-        assert!(error.to_string().contains("must differ"));
     }
 
     #[test]
     fn token_files_are_trimmed_and_direct_values_win() {
         let config = Config::load_from(
-            &env(&[
-                ("INTERCOM_TOKEN_FILE", "/run/phone"),
-                ("INTERCOM_STATION_TOKEN", "station"),
-            ]),
+            &|key| match key {
+                "INTERCOM_SERVICE_TOKEN_FILE" => Some("/run/service".to_owned()),
+                "INTERCOM_STATION_TOKEN" => Some("station".to_owned()),
+                "INTERCOM_ACCESS_URL" => {
+                    Some("http://scheduler:8098/v1/access/snapshot".to_owned())
+                }
+                _ => None,
+            },
             &|path| {
-                assert_eq!(path, "/run/phone");
-                Ok(b"  phone-from-file\n".to_vec())
+                assert_eq!(path, "/run/service");
+                Ok(b"  service-from-file\n".to_vec())
             },
         )
         .expect("load");
-        assert_eq!(config.phone_token.expose(), "phone-from-file");
+        assert_eq!(config.service_token.expose(), "service-from-file");
 
         let config = Config::load_from(
             &env(&[
-                ("INTERCOM_TOKEN", "direct"),
-                ("INTERCOM_TOKEN_FILE", "/run/phone"),
+                ("INTERCOM_SERVICE_TOKEN", "direct"),
+                ("INTERCOM_SERVICE_TOKEN_FILE", "/run/service"),
                 ("INTERCOM_STATION_TOKEN", "station"),
             ]),
             &|_| Ok(b"file".to_vec()),
         )
         .expect("load");
-        assert_eq!(config.phone_token.expose(), "direct");
+        assert_eq!(config.service_token.expose(), "direct");
+    }
+
+    #[test]
+    fn the_service_token_is_required_and_separate_from_the_phone_token() {
+        let error = Config::load_from(
+            &|key| {
+                (key == "INTERCOM_STATION_TOKEN")
+                    .then(|| "station".to_owned())
+                    .or_else(|| {
+                        (key == "INTERCOM_ACCESS_URL")
+                            .then(|| "http://scheduler:8098/v1/access/snapshot".to_owned())
+                    })
+            },
+            &no_file,
+        )
+        .expect_err("service token");
+        assert!(error.to_string().contains("INTERCOM_SERVICE_TOKEN"));
     }
 
     #[test]
     fn ice_configuration_is_optional_and_validated() {
         let config = Config::load_from(
             &env(&[
-                ("INTERCOM_TOKEN", "p"),
                 ("INTERCOM_STATION_TOKEN", "s"),
                 (
                     "INTERCOM_STUN_URLS",
@@ -454,7 +481,6 @@ mod tests {
 
         let error = Config::load_from(
             &env(&[
-                ("INTERCOM_TOKEN", "p"),
                 ("INTERCOM_STATION_TOKEN", "s"),
                 ("INTERCOM_TURN_URLS", "turn:turn.example.com:3478"),
             ]),
@@ -469,7 +495,6 @@ mod tests {
     fn endpoint_ids_are_validated() {
         let error = Config::load_from(
             &env(&[
-                ("INTERCOM_TOKEN", "p"),
                 ("INTERCOM_STATION_TOKEN", "s"),
                 ("INTERCOM_PHONE_ENDPOINT_ID", "bad id"),
             ]),

@@ -104,7 +104,12 @@ impl ScenarioConfig {
             .map_or(scheduler_url.clone(), str::to_owned);
 
         let ha_token = require_token(getenv, read_file, "HA_TOKEN")?;
-        let scheduler_token = require_token(getenv, read_file, "SCHEDULER_TOKEN")?;
+        let scheduler_token = crate::config::service_token(getenv, read_file)
+            .map_err(|error| scenario_error(&error))?
+            .filter(|token| !token.expose().is_empty())
+            .ok_or(ScenarioConfigError::TokenRequired {
+                name: "SCHEDULER_SERVICE_TOKEN",
+            })?;
 
         let ha_ca_file = non_empty(getenv("HA_CA_FILE")).map(PathBuf::from);
         let scheduler_ca_file = non_empty(getenv("SCHEDULER_CA_FILE")).map(PathBuf::from);
@@ -267,7 +272,7 @@ mod tests {
                 "SCHEDULER_ENDPOINT",
                 "http://192.0.2.27:8098/home.v1.SchedulerService",
             ),
-            ("SCHEDULER_TOKEN", "s"),
+            ("SCHEDULER_SERVICE_TOKEN", "s"),
             ("SCENARIO_CONSUMER_ID", "ha-scenario-home"),
         ]
     }
@@ -293,7 +298,7 @@ mod tests {
     fn rejected_environments_never_leak_a_token() {
         for mutate in [
             ("no ha token", "HA_TOKEN", None),
-            ("no scheduler token", "SCHEDULER_TOKEN", None),
+            ("no scheduler token", "SCHEDULER_SERVICE_TOKEN", None),
             ("home queue", "SCENARIO_QUEUE", Some("home")),
             ("tasks queue", "SCENARIO_QUEUE", Some("tasks")),
             ("bad consumer", "SCENARIO_CONSUMER_ID", Some("a b")),
@@ -332,8 +337,8 @@ mod tests {
     #[test]
     fn token_file_wins() {
         let mut values = base();
-        values.push(("SCHEDULER_TOKEN", "env-secret"));
-        values.push(("SCHEDULER_TOKEN_FILE", "/run/token"));
+        values.push(("SCHEDULER_SERVICE_TOKEN", "env-secret"));
+        values.push(("SCHEDULER_SERVICE_TOKEN_FILE", "/run/token"));
         let config = ScenarioConfig::load_from(&env(&values), &|path| {
             assert_eq!(path, "/run/token");
             Ok(b" file-secret \n".to_vec())

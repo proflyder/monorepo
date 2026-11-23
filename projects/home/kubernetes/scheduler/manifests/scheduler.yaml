@@ -58,6 +58,12 @@ spec:
               value: 0.0.0.0:8098
             - name: SCHEDULER_TOKEN_FILE
               value: /run/secrets/scheduler/token
+            - name: SCHEDULER_APP_TOKENS_FILE
+              value: /run/secrets/scheduler/app_tokens
+            - name: SCHEDULER_SERVICE_TOKEN_FILE
+              value: /run/secrets/scheduler/service_token
+            - name: SCHEDULER_SERVICE_TOKEN_PREVIOUS_FILE
+              value: /run/secrets/scheduler/service_token_previous
             - name: SCHEDULER_VPN_SETTINGS_FILE
               value: /run/secrets/scheduler/vpn.json
             - name: SCHEDULER_VPN_SYNC_TOKEN_FILE

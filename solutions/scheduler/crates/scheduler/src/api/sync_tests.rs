@@ -31,10 +31,30 @@ fn fixture() -> Fixture {
         Vec::new(),
     )
     .with_sync(Arc::clone(&sync) as Arc<dyn crate::sync::SyncSink>);
+    let snapshot = home_app_auth::AccessSnapshot {
+        revision: 1,
+        tokens: vec![home_app_auth::TokenRecord {
+            id: "test".to_owned(),
+            name: "test".to_owned(),
+            sha256: home_app_auth::sha256_hex(TOKEN),
+            owner: false,
+            modules: home_app_auth::Modules::member()
+                .ids()
+                .into_iter()
+                .map(str::to_owned)
+                .collect(),
+        }],
+    };
+    let cache = home_app_auth::AccessCache::new(snapshot);
+    let auth = Arc::new(super::AccessAuth::new(
+        cache.clone(),
+        home_secret::Token::new("service-test-token"),
+    ));
     let app = router(
         service.clone(),
         AlarmFacade::new(service),
-        TOKEN,
+        auth,
+        cache,
         VpnAccess::default(),
         Arc::clone(&sync) as Arc<dyn crate::sync::SyncSink>,
     );
@@ -129,4 +149,49 @@ async fn a_fired_timer_is_announced_by_the_engine_tick() {
             target: None,
         }]
     );
+}
+
+async fn call_status(app: &axum::Router, method: &str, body: Value) -> StatusCode {
+    let request = Request::builder()
+        .method("POST")
+        .uri(format!("/home.v1.SchedulerService/{method}"))
+        .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+        .header(header::CONTENT_TYPE, "application/json")
+        .header("connect-protocol-version", "1")
+        .body(Body::from(body.to_string()))
+        .expect("request");
+    app.clone()
+        .oneshot(request)
+        .await
+        .expect("response")
+        .status()
+}
+
+#[tokio::test]
+async fn a_member_can_only_enqueue_the_app_control_task() {
+    let fixture = fixture();
+    let allowed = call_status(
+        &fixture.app,
+        "EnqueueTask",
+        json!({
+            "taskType": "home.control",
+            "queue": "control",
+            "payloadJson": "{}",
+            "idempotencyKey": "app-control",
+        }),
+    )
+    .await;
+    assert_eq!(allowed, StatusCode::OK);
+    let denied = call_status(
+        &fixture.app,
+        "EnqueueTask",
+        json!({
+            "taskType": "home.control",
+            "queue": "tasks",
+            "payloadJson": "{}",
+            "idempotencyKey": "foreign-queue",
+        }),
+    )
+    .await;
+    assert_eq!(denied, StatusCode::FORBIDDEN);
 }

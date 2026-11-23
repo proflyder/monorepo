@@ -1,19 +1,27 @@
 use std::sync::Arc;
 
 use axum::Json;
-use axum::extract::State;
+use axum::extract::{Query, State};
 use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{IntoResponse, Response};
+use home_app_auth::AccessCache;
 use serde::{Deserialize, Serialize};
 
-use crate::store::{PushDevice, PushDeviceInput, Store, StoreError};
+use crate::store::{DeviceScope, PushDevice, PushDeviceInput, Store, StoreError};
 
-use super::auth::BearerAuth;
+use super::auth::{AccessAuth, Caller, error_response};
 
 #[derive(Clone, Debug)]
 pub struct PushState {
     pub store: Arc<Store>,
-    pub auth: Arc<BearerAuth>,
+    pub auth: Arc<AccessAuth>,
+    pub cache: AccessCache,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ListQuery {
+    #[serde(default)]
+    pub module: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -93,14 +101,45 @@ struct ErrorResponse {
     error: &'static str,
 }
 
+fn forbidden_response(forbidden: home_app_auth::Forbidden) -> Response {
+    let (status, headers, body) = error_response(forbidden);
+    (status, headers, body).into_response()
+}
+
+fn app_principal(
+    auth: &AccessAuth,
+    headers: &HeaderMap,
+) -> Result<home_app_auth::Principal, Box<Response>> {
+    auth.any_app(headers.get(header::AUTHORIZATION))
+        .map_err(|forbidden| Box::new(forbidden_response(forbidden)))
+}
+
+fn caller(
+    auth: &AccessAuth,
+    headers: &HeaderMap,
+    module: home_app_auth::Module,
+) -> Result<Caller, Box<Response>> {
+    auth.require(headers.get(header::AUTHORIZATION), module)
+        .map_err(|forbidden| Box::new(forbidden_response(forbidden)))
+}
+
+fn scope(caller: &Caller) -> DeviceScope {
+    match caller {
+        Caller::Service => DeviceScope::All,
+        Caller::App(principal) if principal.owner => DeviceScope::All,
+        Caller::App(principal) => DeviceScope::Token(principal.id.clone()),
+    }
+}
+
 pub async fn register(
     State(state): State<PushState>,
     headers: HeaderMap,
     Json(body): Json<RegisterBody>,
 ) -> Response {
-    if !state.auth.authorized(headers.get(header::AUTHORIZATION)) {
-        return error(StatusCode::UNAUTHORIZED, "unauthenticated");
-    }
+    let principal = match app_principal(&state.auth, &headers) {
+        Ok(principal) => principal,
+        Err(response) => return *response,
+    };
     let input = PushDeviceInput {
         device_id: body.device_id,
         token: body.token,
@@ -108,9 +147,9 @@ pub async fn register(
         app_version: body.app_version,
         device_name: body.device_name,
     };
-    let now = now_unix();
+    let now = super::now_unix();
     let result = blocking(Arc::clone(&state.store), move |store| {
-        store.register_push_device(&input, now)
+        store.register_push_device_for(&input, &principal.id, principal.owner, now)
     })
     .await;
     match result {
@@ -127,12 +166,14 @@ pub async fn rename(
     headers: HeaderMap,
     Json(body): Json<RenameBody>,
 ) -> Response {
-    if !state.auth.authorized(headers.get(header::AUTHORIZATION)) {
-        return error(StatusCode::UNAUTHORIZED, "unauthenticated");
-    }
-    let now = now_unix();
+    let caller = match caller(&state.auth, &headers, home_app_auth::Module::Notifications) {
+        Ok(caller) => caller,
+        Err(response) => return *response,
+    };
+    let now = super::now_unix();
+    let scope = scope(&caller);
     let result = blocking(Arc::clone(&state.store), move |store| {
-        store.rename_push_device(&body.device_id, &body.device_name, now)
+        store.rename_push_device_for(&body.device_id, &body.device_name, scope, now)
     })
     .await;
     match result {
@@ -144,13 +185,39 @@ pub async fn rename(
     }
 }
 
-pub async fn list(State(state): State<PushState>, headers: HeaderMap) -> Response {
-    if !state.auth.authorized(headers.get(header::AUTHORIZATION)) {
-        return error(StatusCode::UNAUTHORIZED, "unauthenticated");
-    }
-    match blocking(Arc::clone(&state.store), Store::list_push_devices).await {
+pub async fn list(
+    State(state): State<PushState>,
+    headers: HeaderMap,
+    Query(query): Query<ListQuery>,
+) -> Response {
+    let caller = match caller(&state.auth, &headers, home_app_auth::Module::Notifications) {
+        Ok(caller) => caller,
+        Err(response) => return *response,
+    };
+    let scope = scope(&caller);
+    let module = match query.module.as_deref().map(str::trim) {
+        None | Some("") => None,
+        Some(id) => match home_app_auth::Module::from_id(id) {
+            Some(module) => Some(module),
+            None => return error(StatusCode::BAD_REQUEST, "unknown module"),
+        },
+    };
+    let allowed = module.map(|module| state.cache.token_ids_with(module));
+    match blocking(Arc::clone(&state.store), move |store| {
+        store.list_push_devices_for(scope)
+    })
+    .await
+    {
         Ok(devices) => Json(DevicesResponse {
-            devices: devices.iter().map(DeviceView::from).collect(),
+            devices: devices
+                .iter()
+                .filter(|device| {
+                    allowed
+                        .as_ref()
+                        .is_none_or(|ids| ids.iter().any(|id| id == &device.token_id))
+                })
+                .map(DeviceView::from)
+                .collect(),
         })
         .into_response(),
         Err(response) => *response,
@@ -162,12 +229,14 @@ pub async fn remove(
     headers: HeaderMap,
     Json(body): Json<RemoveBody>,
 ) -> Response {
-    if !state.auth.authorized(headers.get(header::AUTHORIZATION)) {
-        return error(StatusCode::UNAUTHORIZED, "unauthenticated");
-    }
+    let caller = match caller(&state.auth, &headers, home_app_auth::Module::Notifications) {
+        Ok(caller) => caller,
+        Err(response) => return *response,
+    };
     let token = body.token;
+    let scope = scope(&caller);
     match blocking(Arc::clone(&state.store), move |store| {
-        store.remove_push_device(&token)
+        store.remove_push_device_for(&token, scope)
     })
     .await
     {
@@ -191,14 +260,6 @@ where
     }
 }
 
-fn now_unix() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |elapsed| {
-            i64::try_from(elapsed.as_secs()).unwrap_or(i64::MAX)
-        })
-}
-
 fn store_error(failure: &StoreError) -> Response {
     match failure.kind() {
         Some(crate::domain::ErrorKind::InvalidArgument) => {
@@ -208,6 +269,7 @@ fn store_error(failure: &StoreError) -> Response {
             error(StatusCode::TOO_MANY_REQUESTS, "limit exceeded")
         }
         Some(crate::domain::ErrorKind::NotFound) => error(StatusCode::NOT_FOUND, "not found"),
+        Some(crate::domain::ErrorKind::Precondition) => error(StatusCode::CONFLICT, "conflict"),
         _ => error(StatusCode::INTERNAL_SERVER_ERROR, "internal error"),
     }
 }
@@ -235,7 +297,8 @@ mod tests {
         let store = Arc::new(Store::open_in_memory(Config::default()).expect("store"));
         let state = PushState {
             store: Arc::clone(&store),
-            auth: Arc::new(BearerAuth::new(TOKEN)),
+            auth: Arc::new(AccessAuth::for_tests(TOKEN)),
+            cache: AccessCache::default(),
         };
         let router = Router::new()
             .route("/v1/push/devices", get(list).post(register))
@@ -262,6 +325,112 @@ mod tests {
             .header(header::CONTENT_TYPE, "application/json")
             .body(Body::from(body.to_owned()))
             .expect("request")
+    }
+
+    fn scoped_app() -> (Router, Arc<Store>) {
+        let record = |id: &str, owner: bool, modules: &[&str]| home_app_auth::TokenRecord {
+            id: id.to_owned(),
+            name: id.to_owned(),
+            sha256: home_app_auth::sha256_hex(&format!("{id}-token")),
+            owner,
+            modules: modules.iter().map(|module| (*module).to_owned()).collect(),
+        };
+        let cache = AccessCache::new(home_app_auth::AccessSnapshot {
+            revision: 1,
+            tokens: vec![
+                record("owner", true, &["admin"]),
+                record("member", false, &["notifications"]),
+            ],
+        });
+        let store = Arc::new(Store::open_in_memory(Config::default()).expect("store"));
+        let state = PushState {
+            store: Arc::clone(&store),
+            auth: Arc::new(AccessAuth::new(
+                cache.clone(),
+                home_secret::Token::new("service-token"),
+            )),
+            cache,
+        };
+        let router = Router::new()
+            .route("/v1/push/devices", get(list).post(register))
+            .route("/v1/push/devices/remove", post(remove))
+            .route("/v1/push/devices/rename", post(rename))
+            .with_state(state);
+        (router, store)
+    }
+
+    fn as_token(method: &str, uri: &str, token: &str, body: &str) -> Request<Body> {
+        Request::builder()
+            .method(method)
+            .uri(uri)
+            .header(header::AUTHORIZATION, format!("Bearer {token}"))
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(body.to_owned()))
+            .expect("request")
+    }
+
+    #[tokio::test]
+    async fn a_member_token_only_sees_and_changes_its_own_devices() {
+        let (router, store) = scoped_app();
+        let owner_device = r#"{"deviceId":"device-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "token":"token-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","platform":"android"}"#;
+        let member_device = r#"{"deviceId":"device-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "token":"token-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","platform":"android"}"#;
+        let (status, _) = call(
+            router.clone(),
+            as_token("POST", "/v1/push/devices", "owner-token", owner_device),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let (status, _) = call(
+            router.clone(),
+            as_token("POST", "/v1/push/devices", "member-token", member_device),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+
+        let (status, listed) = call(
+            router.clone(),
+            as_token("GET", "/v1/push/devices", "member-token", ""),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(listed.contains("device-bbbb"), "{listed}");
+        assert!(!listed.contains("device-aaaa"), "{listed}");
+
+        let rename = r#"{"deviceId":"device-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","deviceName":"x"}"#;
+        let (status, _) = call(
+            router.clone(),
+            as_token("POST", "/v1/push/devices/rename", "member-token", rename),
+        )
+        .await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+        let remove = r#"{"token":"token-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}"#;
+        let (status, body) = call(
+            router.clone(),
+            as_token("POST", "/v1/push/devices/remove", "member-token", remove),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(body.contains("false"), "{body}");
+        assert_eq!(store.list_push_devices().expect("list").len(), 2);
+
+        let (status, alerts) = call(
+            router.clone(),
+            as_token("GET", "/v1/push/devices?module=alerts", "service-token", ""),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(
+            alerts.contains("device-aaaa") && !alerts.contains("device-bbbb"),
+            "{alerts}"
+        );
+        let (status, _) = call(
+            router,
+            as_token("GET", "/v1/push/devices?module=alarms", "service-token", ""),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
     }
 
     #[tokio::test]

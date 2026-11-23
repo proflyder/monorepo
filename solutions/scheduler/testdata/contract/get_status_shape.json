@@ -1,13 +1,13 @@
 {
   "name": "get_status_shape",
-  "description": "GetStatus is an honest snapshot: version, schemaVersion, nowUnix, pending/leased counters, enabled schedules, running timers, consumers with alive, and the built-in home/tasks/scenario queues. scenarioExecutionSupported and other false/zero fields are omitted by protojson until they become true/non-zero; scenarioStoreSupported is true because v2 stores scenario definitions; schemaVersion is 7 because v7 adds the per-device notification history.",
+  "description": "GetStatus is an honest snapshot: version, schemaVersion, nowUnix, pending/leased counters, enabled schedules, running timers, consumers with alive, and the built-in home/tasks/scenario queues. scenarioExecutionSupported and other false/zero fields are omitted by protojson until they become true/non-zero; scenarioStoreSupported is true because v2 stores scenario definitions; schemaVersion is 9 because v9 adds push-device ownership.",
   "steps": [
     {
       "request": {
         "method": "POST",
         "path": "/home.v1.SchedulerService/CreateSchedule",
         "headers": {
-          "Authorization": "Bearer contract-test-token",
+          "Authorization": "Bearer contract-service-token",
           "Content-Type": "application/json"
         },
         "body": {
@@ -51,7 +51,7 @@
         "method": "POST",
         "path": "/home.v1.SchedulerService/StartTimer",
         "headers": {
-          "Authorization": "Bearer contract-test-token",
+          "Authorization": "Bearer contract-service-token",
           "Content-Type": "application/json"
         },
         "body": {
@@ -83,7 +83,7 @@
         "method": "POST",
         "path": "/home.v1.SchedulerService/EnqueueTask",
         "headers": {
-          "Authorization": "Bearer contract-test-token",
+          "Authorization": "Bearer contract-service-token",
           "Content-Type": "application/json"
         },
         "body": {
@@ -117,7 +117,7 @@
         "method": "POST",
         "path": "/home.v1.SchedulerService/ListDueEvents",
         "headers": {
-          "Authorization": "Bearer contract-test-token",
+          "Authorization": "Bearer contract-service-token",
           "Content-Type": "application/json"
         },
         "body": {
@@ -155,7 +155,7 @@
         "method": "POST",
         "path": "/home.v1.SchedulerService/GetStatus",
         "headers": {
-          "Authorization": "Bearer contract-test-token",
+          "Authorization": "Bearer contract-service-token",
           "Content-Type": "application/json"
         },
         "body": {}
@@ -191,7 +191,7 @@
           "ready": true,
           "runningTimers": 1,
           "scenarioStoreSupported": true,
-          "schemaVersion": 7,
+          "schemaVersion": 10,
           "version": "test"
         }
       }

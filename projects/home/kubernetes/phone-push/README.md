@@ -29,7 +29,7 @@ scheduler (тихие sync-пуши об изменении сущностей, 
    ```
 
    Значения не печатать и не класть в Git: ESO материализует Secret
-   `phone-push` (`token` берётся из `scheduler-auth`, `service_account_json`
+   `phone-push` (service-token из `scheduler-auth`, `service_account_json`
    — из этого пути). Запись — GET → merge → POST с `options.cas`
    (`docs/SECRETS.md`).
 
@@ -52,7 +52,7 @@ mise run kubectl -- -n home-assistant port-forward svc/phone-push 8095:8095
 Звонок проверяется голосом: «<wake word>, где телефон?» — колонка отвечает
 «Звоню на телефон», телефон звонит как будильник и останавливается кнопкой
 «Нашёл» или через минуту. Отдельная проверка без телефона (в кластере,
-токен — `scheduler-auth#token`):
+service-токен — `scheduler-auth#service_token` (без fallback на legacy `#token`):
 
 ```bash
 curl -fsS -X POST "$PHONE_PUSH_URL/v1/push/find" \
@@ -77,15 +77,15 @@ data-only FCM без уведомления: `{type:"sync", entity, op, id}`. `e
 пуш не отправляется. Устройство из
 `originDeviceId` (заголовок `Home-Device-Id` исходного запроса к scheduler)
 пуш не получает. Scheduler вызывает endpoint после своих мутаций и тиков
-движка, если задан `SCHEDULER_PUSH_URL`, с тем же токеном `scheduler-auth`.
+движка, если задан `SCHEDULER_PUSH_URL`, с тем же service-токеном `scheduler-auth`.
 История уведомлений пишется в scheduler после каждой доставки (egress
 `phone-push → scheduler:8098` уже разрешён политикой), поэтому отдельного
 хранилища у сервиса нет.
 
 ## Секреты и сеть
 
-- `secret/k8s/home-assistant/scheduler-auth#token` → `phone-push#token`
-  (общий токен приложения: его же предъявляет mcp-gateway и scheduler API).
+- `secret/k8s/home-assistant/scheduler-auth` (property `service_token`) → `phone-push`
+  (service-токен: его же предъявляют mcp-gateway и scheduler).
 - `secret/k8s/home-assistant/phone-push#service_account_json` →
   `phone-push#service_account_json` (FCM).
 - NetworkPolicy: ingress только от `mcp-gateway`, scheduler и kubelet; egress —

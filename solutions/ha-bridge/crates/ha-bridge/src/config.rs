@@ -102,8 +102,8 @@ impl Config {
         let ha_url = base_url("HA_URL", getenv("HA_URL").as_deref(), true)?;
 
         let scheduler_token =
-            token(getenv, read_file, "SCHEDULER_TOKEN")?.ok_or(ConfigError::TokenRequired {
-                name: "SCHEDULER_TOKEN",
+            service_token(getenv, read_file)?.ok_or(ConfigError::TokenRequired {
+                name: "SCHEDULER_SERVICE_TOKEN",
             })?;
         let ha_token =
             token(getenv, read_file, "HA_TOKEN")?.unwrap_or_else(|| Token::new(String::new()));
@@ -231,6 +231,13 @@ fn required_lease_seconds(
     let per_event = ha_timeout + scheduler_timeout + LEDGER_BUDGET;
     let total = per_event * batch_size + LEASE_CUSHION;
     u32::try_from(total.as_secs() + u64::from(total.subsec_nanos() > 0)).unwrap_or(u32::MAX)
+}
+
+pub(crate) fn service_token(
+    getenv: &dyn Fn(&str) -> Option<String>,
+    read_file: &dyn Fn(&str) -> std::io::Result<Vec<u8>>,
+) -> Result<Option<Token>, ConfigError> {
+    token(getenv, read_file, "SCHEDULER_SERVICE_TOKEN")
 }
 
 pub(crate) fn token(
@@ -399,7 +406,7 @@ mod tests {
         vec![
             ("HA_URL", "http://ha.example:8123"),
             ("SCHEDULER_ENDPOINT", "http://scheduler.example:8098"),
-            ("SCHEDULER_TOKEN", "scheduler-secret"),
+            ("SCHEDULER_SERVICE_TOKEN", "scheduler-secret"),
             ("BRIDGE_CONSUMER_ID", "ha-bridge-home"),
         ]
     }

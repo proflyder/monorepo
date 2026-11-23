@@ -3,6 +3,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Context as _;
+use home_app_auth::AccessClient;
 use home_runtime::{Supervisor, shutdown_signal};
 use home_telemetry::TelemetryBuilder;
 use tokio::net::TcpListener;
@@ -15,6 +16,7 @@ use crate::domain::clock::SystemClock;
 use crate::domain::state::{AgentMode, KeyedStore, PendingStore};
 use crate::metrics::Metrics;
 use crate::server;
+use crate::server::AccessBinding;
 use crate::ssh::{Options as SshOptions, SshRunner};
 use crate::tools::bb::{BbActGroup, BbReadGroup};
 use crate::tools::infra_fix::FixGroup;
@@ -215,15 +217,22 @@ pub async fn run() -> anyhow::Result<()> {
         .map_err(anyhow::Error::msg)
         .context("select tool groups")?;
 
-    let system = (!config.app_token.is_empty()).then(|| {
-        (
-            config.app_token.clone(),
-            Arc::new(crate::system::Dashboard::new(crate::system::Sources {
-                prom: deps.prom.clone(),
-                alerts: deps.alerts.clone(),
-                push: deps.push.clone(),
-            })),
+    let access = if config.app_api {
+        let client = AccessClient::new(
+            home_app_auth::snapshot_url(&config.scheduler_url),
+            config.scheduler_token.clone(),
         )
+        .map_err(anyhow::Error::msg)?;
+        Some(AccessBinding { client })
+    } else {
+        None
+    };
+    let system = config.app_api.then(|| {
+        Arc::new(crate::system::Dashboard::new(crate::system::Sources {
+            prom: deps.prom.clone(),
+            alerts: deps.alerts.clone(),
+            push: deps.push.clone(),
+        }))
     });
 
     let chat = if config.chat_hermes_url.is_empty() {
@@ -270,6 +279,7 @@ pub async fn run() -> anyhow::Result<()> {
         auth_token: config.auth_token.clone(),
         voice_token: (!config.voice_token.is_empty()).then(|| config.voice_token.clone()),
         voice,
+        access: access.clone(),
         system,
         chat_alerts_token: (!config.chat_alerts_token.is_empty())
             .then(|| config.chat_alerts_token.clone()),
@@ -295,6 +305,13 @@ pub async fn run() -> anyhow::Result<()> {
 
     let supervisor = Supervisor::new();
     let cancel = supervisor.token();
+    if let Some(binding) = access {
+        let client = binding.client;
+        let refresh_cancel = cancel.clone();
+        supervisor.spawn("access-refresh", async move {
+            client.run(refresh_cancel).await;
+        });
+    }
     let server = home_http::serve(listener, router, cancel.clone());
     tokio::pin!(server);
     let serve_result = tokio::select! {

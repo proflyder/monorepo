@@ -19,6 +19,7 @@ anyhow = { workspace = true }
 axum = { workspace = true }
 base64 = { workspace = true }
 futures = { workspace = true }
+home-app-auth = { path = "../../../../packages/rust/home-app-auth" }
 home-clients = { path = "../../../../packages/rust/home-clients" }
 home-config = { path = "../../../../packages/rust/home-config" }
 forced-ssh = { path = "../../../../packages/rust/forced-ssh" }

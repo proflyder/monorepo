@@ -4,11 +4,12 @@ use axum::Json;
 use axum::extract::State;
 use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{IntoResponse, Response};
+use home_app_auth::Module;
 use serde::{Deserialize, Serialize};
 
 use crate::store::{Store, StoreError, VpnPeer, VpnPeerInput, VpnPool, vpn_key_is_valid};
 
-use super::auth::BearerAuth;
+use super::auth::{AccessAuth, BearerAuth, error_response};
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -82,7 +83,7 @@ impl VpnSettings {
 #[derive(Clone, Debug)]
 pub struct VpnState {
     pub store: Arc<Store>,
-    pub app_auth: Arc<BearerAuth>,
+    pub app_auth: Arc<AccessAuth>,
     pub sync_auth: Option<Arc<BearerAuth>>,
     pub settings: Option<Arc<VpnSettings>>,
 }
@@ -216,12 +217,10 @@ pub async fn register(
     headers: HeaderMap,
     Json(body): Json<ProfileBody>,
 ) -> Response {
-    if !state
-        .app_auth
-        .authorized(headers.get(header::AUTHORIZATION))
-    {
-        return error(StatusCode::UNAUTHORIZED, "unauthenticated");
-    }
+    let principal = match require_vpn(&state, &headers) {
+        Ok(principal) => principal,
+        Err(response) => return *response,
+    };
     let Some(settings) = state.settings.clone() else {
         return error(StatusCode::SERVICE_UNAVAILABLE, "vpn is not configured");
     };
@@ -231,9 +230,9 @@ pub async fn register(
         device_name: body.device_name,
     };
     let pool = settings.pool;
-    let now = now_unix();
+    let now = super::now_unix();
     let result = blocking(Arc::clone(&state.store), move |store| {
-        store.register_vpn_peer(pool, &input, now)
+        store.register_vpn_peer_for(pool, &input, &principal.id, principal.owner, now)
     })
     .await;
     match result {
@@ -250,21 +249,33 @@ pub async fn remove(
     headers: HeaderMap,
     Json(body): Json<RemoveBody>,
 ) -> Response {
-    if !state
-        .app_auth
-        .authorized(headers.get(header::AUTHORIZATION))
-    {
-        return error(StatusCode::UNAUTHORIZED, "unauthenticated");
-    }
+    let principal = match require_vpn(&state, &headers) {
+        Ok(principal) => principal,
+        Err(response) => return *response,
+    };
     let device_id = body.device_id;
+    let scope = (!principal.owner).then(|| principal.id.clone());
     match blocking(Arc::clone(&state.store), move |store| {
-        store.remove_vpn_peer(&device_id)
+        store.remove_vpn_peer_for(&device_id, scope.as_deref())
     })
     .await
     {
         Ok(removed) => Json(RemovedResponse { removed }).into_response(),
         Err(response) => *response,
     }
+}
+
+fn require_vpn(
+    state: &VpnState,
+    headers: &HeaderMap,
+) -> Result<home_app_auth::Principal, Box<Response>> {
+    state
+        .app_auth
+        .app(headers.get(header::AUTHORIZATION), Module::Vpn)
+        .map_err(|forbidden| {
+            let (status, headers, body) = error_response(forbidden);
+            Box::new((status, headers, body).into_response())
+        })
 }
 
 pub async fn peers(State(state): State<VpnState>, headers: HeaderMap) -> Response {
@@ -313,14 +324,6 @@ where
     }
 }
 
-fn now_unix() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |elapsed| {
-            i64::try_from(elapsed.as_secs()).unwrap_or(i64::MAX)
-        })
-}
-
 fn store_error(failure: &StoreError) -> Response {
     match failure.kind() {
         Some(crate::domain::ErrorKind::InvalidArgument) => {
@@ -353,6 +356,7 @@ mod tests {
     use crate::store::Config;
 
     const APP_TOKEN: &str = "app-test-token";
+    const MEMBER_TOKEN: &str = "member-test-token";
     const SYNC_TOKEN: &str = "sync-test-token";
     const SERVER_KEY: &str = "c2VydmVyLXNlcnZlci1zZXJ2ZXItc2VydmVyLXNlcnY=";
     const PHONE_KEY: &str = "aGVsbG8td29ybGQtaGVsbG8td29ybGQtaGVsbG8tdzA=";
@@ -370,9 +374,40 @@ mod tests {
         let store = Arc::new(Store::open_in_memory(Config::default()).expect("store"));
         let settings = configured
             .then(|| Arc::new(VpnSettings::parse(settings_json().as_bytes()).expect("settings")));
+        let snapshot = home_app_auth::AccessSnapshot {
+            revision: 1,
+            tokens: vec![
+                home_app_auth::TokenRecord {
+                    id: "owner".to_owned(),
+                    name: "owner".to_owned(),
+                    sha256: home_app_auth::sha256_hex(APP_TOKEN),
+                    owner: true,
+                    modules: home_app_auth::Modules::owner()
+                        .ids()
+                        .into_iter()
+                        .map(str::to_owned)
+                        .collect(),
+                },
+                home_app_auth::TokenRecord {
+                    id: "member".to_owned(),
+                    name: "member".to_owned(),
+                    sha256: home_app_auth::sha256_hex(MEMBER_TOKEN),
+                    owner: false,
+                    modules: home_app_auth::Modules::member()
+                        .ids()
+                        .into_iter()
+                        .map(str::to_owned)
+                        .collect(),
+                },
+            ],
+        };
+        let auth = AccessAuth::new(
+            home_app_auth::AccessCache::new(snapshot),
+            home_secret::Token::new(SYNC_TOKEN),
+        );
         let state = VpnState {
             store,
-            app_auth: Arc::new(BearerAuth::new(APP_TOKEN)),
+            app_auth: Arc::new(auth),
             sync_auth: Some(Arc::new(BearerAuth::new(SYNC_TOKEN))),
             settings,
         };
@@ -477,6 +512,27 @@ mod tests {
         )
         .await;
         assert_eq!(again["removed"], false);
+    }
+
+    #[tokio::test]
+    async fn members_cannot_manage_vpn_profiles() {
+        let router = app(true);
+        let (status, _) = call(
+            router.clone(),
+            post_json("/v1/vpn/profile", MEMBER_TOKEN, &profile_body()),
+        )
+        .await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
+        let (status, _) = call(
+            router,
+            post_json(
+                "/v1/vpn/profile/remove",
+                MEMBER_TOKEN,
+                r#"{"deviceId":"device-aaaaaaaa"}"#,
+            ),
+        )
+        .await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
     }
 
     #[tokio::test]

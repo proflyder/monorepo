@@ -83,6 +83,7 @@ pub struct VpnPeer {
     pub public_key: String,
     pub host: u32,
     pub device_name: String,
+    pub token_id: String,
     pub created_unix: i64,
     pub updated_unix: i64,
 }
@@ -94,7 +95,7 @@ pub struct VpnPeerInput {
     pub device_name: String,
 }
 
-const COLS: &str = "device_id, public_key, host, device_name, created_unix, updated_unix";
+const COLS: &str = "device_id, public_key, host, device_name, token_id, created_unix, updated_unix";
 
 fn scan_peer(row: &Row<'_>) -> rusqlite::Result<VpnPeer> {
     Ok(VpnPeer {
@@ -102,8 +103,9 @@ fn scan_peer(row: &Row<'_>) -> rusqlite::Result<VpnPeer> {
         public_key: row.get(1)?,
         host: row.get(2)?,
         device_name: row.get(3)?,
-        created_unix: row.get(4)?,
-        updated_unix: row.get(5)?,
+        token_id: row.get(4)?,
+        created_unix: row.get(5)?,
+        updated_unix: row.get(6)?,
     })
 }
 
@@ -151,13 +153,26 @@ fn clean_input(input: &VpnPeerInput) -> Result<VpnPeerInput, StoreError> {
 }
 
 impl Store {
+    #[cfg(test)]
     pub fn register_vpn_peer(
         &self,
         pool: VpnPool,
         input: &VpnPeerInput,
         now_unix: i64,
     ) -> Result<VpnPeer, StoreError> {
+        self.register_vpn_peer_for(pool, input, "", true, now_unix)
+    }
+
+    pub fn register_vpn_peer_for(
+        &self,
+        pool: VpnPool,
+        input: &VpnPeerInput,
+        token_id: &str,
+        allow_claim: bool,
+        now_unix: i64,
+    ) -> Result<VpnPeer, StoreError> {
         let peer = clean_input(input)?;
+        let token_id = token_id.to_owned();
         self.with_tx(move |transaction| {
             let owner: Option<String> = transaction
                 .query_row(
@@ -178,24 +193,37 @@ impl Store {
                     scan_peer,
                 )
                 .optional()?;
+            if let Some(current) = existing.as_ref()
+                && !current.token_id.is_empty()
+                && !token_id.is_empty()
+                && current.token_id != token_id
+                && !allow_claim
+            {
+                return Err(StoreError::precondition(
+                    "vpn peer belongs to another application token",
+                ));
+            }
             let host = match existing.as_ref() {
                 Some(current) if pool.contains_host(current.host) => current.host,
                 _ => free_host(transaction, pool, existing.is_some())?,
             };
             transaction.execute(
-                "INSERT INTO vpn_peers (device_id, public_key, host, device_name, created_unix, updated_unix)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?5)
+                "INSERT INTO vpn_peers (device_id, public_key, host, device_name, token_id, created_unix, updated_unix)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)
                  ON CONFLICT(device_id) DO UPDATE SET
                     public_key = excluded.public_key,
                     host = excluded.host,
                     device_name = CASE WHEN excluded.device_name = ''
                         THEN vpn_peers.device_name ELSE excluded.device_name END,
+                    token_id = CASE WHEN excluded.token_id = ''
+                        THEN vpn_peers.token_id ELSE excluded.token_id END,
                     updated_unix = excluded.updated_unix",
                 params![
                     peer.device_id,
                     peer.public_key,
                     host,
                     peer.device_name,
+                    token_id,
                     now_unix
                 ],
             )?;
@@ -206,6 +234,39 @@ impl Store {
                     scan_peer,
                 )
                 .map_err(StoreError::from)
+        })
+    }
+
+    pub fn backfill_vpn_peer_owners(&self, legacy_id: &str) -> Result<usize, StoreError> {
+        let legacy_id = legacy_id.to_owned();
+        self.call(move |connection| {
+            let changed = connection.execute(
+                "UPDATE vpn_peers SET token_id = ?1 WHERE token_id = ''",
+                params![legacy_id],
+            )?;
+            Ok(changed)
+        })
+    }
+
+    pub fn remove_vpn_peer_for(
+        &self,
+        device_id: &str,
+        token_id: Option<&str>,
+    ) -> Result<bool, StoreError> {
+        let device_id = device_id.trim().to_owned();
+        let token_id = token_id.map(str::to_owned);
+        self.call(move |connection| {
+            let changed = match token_id.as_deref() {
+                Some(token) => connection.execute(
+                    "DELETE FROM vpn_peers WHERE device_id = ?1 AND token_id = ?2",
+                    params![device_id, token],
+                )?,
+                None => connection.execute(
+                    "DELETE FROM vpn_peers WHERE device_id = ?1",
+                    params![device_id],
+                )?,
+            };
+            Ok(changed > 0)
         })
     }
 
@@ -231,6 +292,7 @@ impl Store {
         })
     }
 
+    #[cfg(test)]
     pub fn remove_vpn_peer(&self, device_id: &str) -> Result<bool, StoreError> {
         let device_id = clean_device_id(device_id)?;
         self.call(move |connection| {
@@ -402,5 +464,42 @@ mod tests {
                 .is_err()
         );
         assert!(store.remove_vpn_peer("bad id with spaces").is_err());
+    }
+    #[test]
+    fn vpn_peers_are_scoped_to_the_registering_token() {
+        let store = store();
+        store
+            .register_vpn_peer_for(pool(), &input("device-aaaaaaaa", KEY_A), "owner", true, 100)
+            .expect("owner");
+        store
+            .register_vpn_peer_for(pool(), &input("device-bbbbbbbb", KEY_B), "mama", false, 101)
+            .expect("mama");
+        let error = store
+            .register_vpn_peer_for(pool(), &input("device-aaaaaaaa", KEY_B), "mama", false, 102)
+            .expect_err("a foreign key cannot take the peer");
+        assert_eq!(error.kind(), Some(crate::domain::ErrorKind::Precondition));
+        let error = store
+            .register_vpn_peer_for(pool(), &input("device-aaaaaaaa", KEY_A), "mama", false, 103)
+            .expect_err("the public key is not a secret and proves nothing");
+        assert_eq!(error.kind(), Some(crate::domain::ErrorKind::Precondition));
+        assert_eq!(
+            store
+                .vpn_peer("device-aaaaaaaa")
+                .expect("peer")
+                .expect("still there")
+                .token_id,
+            "owner"
+        );
+        assert_eq!(error.kind(), Some(crate::domain::ErrorKind::Precondition));
+        assert!(
+            !store
+                .remove_vpn_peer_for("device-aaaaaaaa", Some("mama"))
+                .expect("scoped remove")
+        );
+        assert!(
+            store
+                .remove_vpn_peer_for("device-bbbbbbbb", Some("mama"))
+                .expect("own remove")
+        );
     }
 }

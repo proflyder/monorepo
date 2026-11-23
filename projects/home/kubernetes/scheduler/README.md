@@ -29,9 +29,16 @@ digests from `deploy/home-apps` (`SCHEDULER_IMAGE`, `HA_BRIDGE_IMAGE`,
 pinned in `manifests/kustomization.yaml`; a mode change is a Git change. PVCs
 carry `prune: disabled`.
 
+The legacy `ConfigMap/scheduler-preflight` is kept Flux-managed with empty
+`data`; preflight tokens come only from Secrets.
+
 Secrets: ESO from `secret/k8s/home-assistant/scheduler-auth` and
 `ha-bridge-ha` (`docs/SECRETS.md`), read at runtime from files
-(`SCHEDULER_TOKEN_FILE`, `HA_TOKEN_FILE`), never from arguments.
+(scheduler: `SCHEDULER_TOKEN_FILE` legacy app token, `SCHEDULER_SERVICE_TOKEN_FILE`,
+`SCHEDULER_SERVICE_TOKEN_PREVIOUS_FILE`, `SCHEDULER_APP_TOKENS_FILE`; ha-bridge,
+ha-control, ha-scenario: `SCHEDULER_SERVICE_TOKEN_FILE`, `HA_TOKEN_FILE`), never
+from arguments. Every key is an explicit ESO property and must exist in OpenBao
+before deploy (`mise run admin:service-token-init`).
 
 ## Rollback
 

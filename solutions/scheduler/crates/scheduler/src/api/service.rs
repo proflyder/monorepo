@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use connectrpc::{ConnectError, RequestContext, Response, ServiceRequest, ServiceResult};
+use home_app_auth::{Forbidden, Module, Principal};
 use home_proto::v1 as proto;
 use home_sqlite::SqliteError;
 use proto::ScenarioService;
@@ -9,6 +10,31 @@ use proto::SchedulerService;
 use crate::domain::{Clock, SyncChange, SyncEntity, SyncOp};
 use crate::store::{Store, StoreError};
 use crate::sync::{self, Announcement, NoSync, SyncSink};
+
+const APP_TASK_QUEUE: &str = "control";
+const APP_TASK_TYPE: &str = "home.control";
+
+fn app_task_allowed(
+    ctx: &RequestContext,
+    queue: &str,
+    task_type: &str,
+) -> Result<(), ConnectError> {
+    let Some(principal) = ctx.extensions().get::<Principal>() else {
+        return Ok(());
+    };
+    if principal.owner || (queue == APP_TASK_QUEUE && task_type == APP_TASK_TYPE) {
+        return Ok(());
+    }
+    tracing::warn!(
+        token = principal.name.as_str(),
+        queue,
+        task_type,
+        "application token is not allowed to enqueue this task"
+    );
+    Err(ConnectError::permission_denied(
+        Forbidden::Module(Module::Home).body(),
+    ))
+}
 
 use super::convert::{
     ack_outcome, create_view_to_scenario, create_view_to_schedule, event_to_proto,
@@ -516,13 +542,14 @@ impl SchedulerService for Service {
 
     async fn enqueue_task<'a>(
         &'a self,
-        _ctx: RequestContext,
+        ctx: RequestContext,
         request: ServiceRequest<'_, proto::EnqueueTaskRequest>,
     ) -> ServiceResult<impl connectrpc::Encodable<proto::EnqueueTaskResponse> + Send + use<'a>>
     {
         let task_type = request.task_type.to_owned();
         let payload = request.payload_json.to_owned();
         let queue = request.queue.to_owned();
+        app_task_allowed(&ctx, &queue, &task_type)?;
         let run_at_unix = request.run_at_unix;
         let key = request.idempotency_key.to_owned();
         let now = self.now_unix();
@@ -539,10 +566,17 @@ impl SchedulerService for Service {
 
     async fn cancel_task<'a>(
         &'a self,
-        _ctx: RequestContext,
+        ctx: RequestContext,
         request: ServiceRequest<'_, proto::CancelTaskRequest>,
     ) -> ServiceResult<impl connectrpc::Encodable<proto::CancelTaskResponse> + Send + use<'a>> {
         let event_id = request.event_id.to_owned();
+        let scope_id = event_id.clone();
+        if let Some((queue, task_type)) = self
+            .store_call(move |store| store.task_scope(&scope_id))
+            .await?
+        {
+            app_task_allowed(&ctx, &queue, &task_type)?;
+        }
         let now = self.now_unix();
         let event = self
             .store_call(move |store| store.cancel_task(&event_id, now))

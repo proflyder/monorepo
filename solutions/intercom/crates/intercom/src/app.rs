@@ -2,6 +2,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Context as _;
+use home_app_auth::AccessClient;
 use home_runtime::{Supervisor, shutdown_signal};
 use home_telemetry::TelemetryBuilder;
 use tokio::net::TcpListener;
@@ -37,8 +38,10 @@ pub async fn run() -> anyhow::Result<()> {
         Arc::new(SystemClock),
     ));
     let api = Api::new(Arc::clone(&intercom), VERSION);
+    let access = AccessClient::new(config.access_url.clone(), config.service_token.expose())
+        .map_err(anyhow::Error::msg)?;
     let auth = TokenAuth::new(
-        home_secret::Token::new(config.phone_token.expose()),
+        access.clone(),
         &config.phone.id,
         home_secret::Token::new(config.station_token.expose()),
         &config.station.id,
@@ -63,6 +66,13 @@ pub async fn run() -> anyhow::Result<()> {
 
     let supervisor = Supervisor::new();
     let cancel = supervisor.token();
+    {
+        let client = access.clone();
+        let refresh_cancel = cancel.clone();
+        supervisor.spawn("access-refresh", async move {
+            client.run(refresh_cancel).await;
+        });
+    }
     let ticker = Arc::clone(&intercom);
     let ticker_cancel = cancel.clone();
     supervisor.spawn("expiry", async move {

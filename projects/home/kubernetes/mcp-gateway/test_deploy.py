@@ -430,13 +430,15 @@ class ManifestTests(unittest.TestCase):
             env["MCP_SCHEDULER_URL"], "http://scheduler.home-assistant.svc.cluster.local:8098"
         )
         self.assertEqual(
-            env["MCP_SCHEDULER_TOKEN_FILE"], "/run/secrets/mcp-gateway-scheduler/token"
+            env["MCP_SCHEDULER_SERVICE_TOKEN_FILE"],
+            "/run/secrets/mcp-gateway-scheduler/service_token",
         )
         self.assertEqual(
             env["MCP_PUSH_URL"], "http://phone-push.home-assistant.svc.cluster.local:8095"
         )
         self.assertEqual(
-            env["MCP_PUSH_TOKEN_FILE"], "/run/secrets/mcp-gateway-scheduler/token"
+            env["MCP_PUSH_SERVICE_TOKEN_FILE"],
+            "/run/secrets/mcp-gateway-scheduler/service_token",
         )
         self.assertNotIn("TELEGRAM_BOT_TOKEN", env)
         self.assertNotIn("MCP_AUTH_TOKEN", env)
@@ -461,8 +463,7 @@ class ManifestTests(unittest.TestCase):
         self.assertEqual(volumes["bb-ssh"]["secret"]["defaultMode"], 0o400)
         voice_items = volumes["voice"]["secret"]["items"]
         self.assertEqual(voice_items, [{"key": "token", "path": "token"}])
-        scheduler_items = volumes["scheduler"]["secret"]["items"]
-        self.assertEqual(scheduler_items, [{"key": "token", "path": "token"}])
+        self.assertNotIn("items", volumes["scheduler"]["secret"])
         self.assertEqual(volumes["scheduler"]["secret"]["secretName"], "mcp-gateway-scheduler")
 
     def test_app_chat_uses_the_relay_and_a_retained_volume(self):
@@ -604,16 +605,20 @@ class ManifestTests(unittest.TestCase):
                 }
             ],
         )
-        scheduler = by_name["mcp-gateway-scheduler"]["spec"]["data"]
+        scheduler = by_name["mcp-gateway-scheduler"]["spec"]
         self.assertEqual(
-            scheduler,
-            [
-                {
-                    "secretKey": "token",
-                    "remoteRef": {"key": "k8s/home-assistant/scheduler-auth", "property": "token"},
-                }
-            ],
+            {entry["secretKey"] for entry in scheduler["data"]},
+            {"service_token"},
         )
+        self.assertNotIn(
+            "token",
+            {entry["remoteRef"]["property"] for entry in scheduler["data"]},
+            "the legacy app token must not reach mcp-gateway",
+        )
+        for entry in scheduler["data"]:
+            self.assertEqual(
+                entry["remoteRef"]["key"], "k8s/home-assistant/scheduler-auth"
+            )
         for doc in docs:
             self.assertEqual(doc["spec"]["target"]["creationPolicy"], "Owner")
             self.assertEqual(doc["spec"]["target"]["deletionPolicy"], "Retain")

@@ -150,6 +150,7 @@ impl Store {
         &self,
         before: Option<i64>,
         limit: usize,
+        include_alerts: bool,
     ) -> Result<(Vec<Message>, bool), StoreError> {
         let bound = before.unwrap_or(i64::MAX);
         let fetch_limit = i64::try_from(limit + 1).unwrap_or(i64::MAX);
@@ -157,10 +158,11 @@ impl Store {
             query(
                 connection,
                 &format!(
-                    "SELECT {COLUMNS} FROM {FROM} WHERE m.seq < ?1 ORDER BY m.seq DESC LIMIT ?2"
+                    "SELECT {COLUMNS} FROM {FROM} WHERE m.seq < ?1 AND (?3 = 1 OR m.kind <> 'alert') ORDER BY m.seq DESC LIMIT ?2"
                 ),
                 bound,
                 fetch_limit,
+                i64::from(include_alerts),
             )
         })?;
         let has_more = rows.len() > limit;
@@ -169,16 +171,22 @@ impl Store {
         Ok((rows, has_more))
     }
 
-    pub fn changed_after(&self, version: i64, limit: usize) -> Result<Vec<Message>, StoreError> {
+    pub fn changed_after(
+        &self,
+        version: i64,
+        limit: usize,
+        include_alerts: bool,
+    ) -> Result<Vec<Message>, StoreError> {
         let limit = i64::try_from(limit).unwrap_or(i64::MAX);
         self.with(|connection| {
             query(
                 connection,
                 &format!(
-                    "SELECT {COLUMNS} FROM {FROM} WHERE m.version > ?1 ORDER BY m.version ASC LIMIT ?2"
+                    "SELECT {COLUMNS} FROM {FROM} WHERE m.version > ?1 AND (?3 = 1 OR m.kind <> 'alert') ORDER BY m.version ASC LIMIT ?2"
                 ),
                 version,
                 limit,
+                i64::from(include_alerts),
             )
         })
     }
@@ -277,10 +285,11 @@ fn query(
     sql: &str,
     bound: i64,
     limit: i64,
+    include_alerts: i64,
 ) -> Result<Vec<Message>, StoreError> {
     let mut statement = connection.prepare(sql)?;
     let rows = statement
-        .query_map(params![bound, limit], read_message)?
+        .query_map(params![bound, limit, include_alerts], read_message)?
         .collect::<Result<_, _>>()?;
     Ok(rows)
 }

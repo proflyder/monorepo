@@ -107,7 +107,7 @@ fn config() -> Config {
         &|key| match key {
             "HA_URL" => Some("http://ha.example:8123".to_owned()),
             "SCHEDULER_ENDPOINT" => Some("http://scheduler.example:8098".to_owned()),
-            "SCHEDULER_TOKEN" => Some("scheduler-secret".to_owned()),
+            "SCHEDULER_SERVICE_TOKEN" => Some("scheduler-secret".to_owned()),
             "HA_TOKEN" => Some("ha-secret".to_owned()),
             "BRIDGE_CONSUMER_ID" => Some("ha-bridge-home".to_owned()),
             "BRIDGE_EXECUTE" => Some("true".to_owned()),
@@ -569,7 +569,23 @@ fn catalog_vectors_match_the_go_server() {
         profile_label: fixture.rules.profile_label.clone(),
         exclude: fixture.rules.exclude.clone(),
     };
-    let token = || home_secret::Token::new("control-secret");
+    let token = || {
+        let snapshot = home_app_auth::AccessSnapshot {
+            revision: 1,
+            tokens: vec![home_app_auth::TokenRecord {
+                id: "control".to_owned(),
+                name: "control".to_owned(),
+                sha256: home_app_auth::sha256_hex("control-secret"),
+                owner: false,
+                modules: home_app_auth::Modules::member()
+                    .ids()
+                    .into_iter()
+                    .map(str::to_owned)
+                    .collect(),
+            }],
+        };
+        home_app_auth::AccessClient::fixed(snapshot)
+    };
 
     let ha = make();
     let provider = Arc::new(Provider::new(

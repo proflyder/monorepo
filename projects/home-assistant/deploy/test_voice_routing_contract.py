@@ -28,7 +28,7 @@ REQUIRED_ENV = (
 EXPECTED_SECRETS = {
     "HERMES_HA_TOKEN": ("hermes-environment", "HERMES_HA_TOKEN"),
     "HERMES_VOICE_GATEWAY_TOKEN": ("mcp-gateway-voice", "token"),
-    "HERMES_SCHEDULER_TOKEN": ("scheduler-auth", "token"),
+    "HERMES_SCHEDULER_TOKEN": ("scheduler-auth", "service_token"),
 }
 
 

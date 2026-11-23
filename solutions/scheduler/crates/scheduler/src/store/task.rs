@@ -1,4 +1,4 @@
-use rusqlite::params;
+use rusqlite::{OptionalExtension, params};
 
 use crate::domain::{
     AckOutcome, ErrorKind, Event, EventAction, EventState, MAX_TASK_DELAY_SECONDS, SourceKind,
@@ -11,6 +11,19 @@ use super::event::{EVENT_COLS, EventInsert, insert_event, scan_event};
 use super::{QUEUE_TASKS, Store, StoreError};
 
 impl Store {
+    pub fn task_scope(&self, event_id: &str) -> Result<Option<(String, String)>, StoreError> {
+        let event_id = event_id.to_owned();
+        self.read(move |connection| {
+            Ok(connection
+                .query_row(
+                    "SELECT queue, task_type FROM events WHERE id = ?1 AND source_kind = ?2",
+                    params![event_id, i64::from(SourceKind::Task.code())],
+                    |row| Ok((row.get(0)?, row.get(1)?)),
+                )
+                .optional()?)
+        })
+    }
+
     pub fn enqueue_task(
         &self,
         task_type: &str,

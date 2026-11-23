@@ -349,3 +349,31 @@
     SwipeRefresh и догрузку, а `SwipeActions` объявляет действия без ручного
     `ItemTouchHelper`. Причина: прежние `Pager`/`PagingDelegate` были тонкими
     обёртками, интенты и undo дублировались в каждом экране.
+69. **Доступ приложения — модули, а не роли.** Источник правды — SQLite
+    scheduler (schema v10): `app_tokens` (имя, sha256, модули, owner) и
+    `access_meta.revision`; plaintext не хранится. Каждый app-эндпоинт
+    принадлежит ровно одному модулю: `base` (`GetStatus`, `/v1/me`,
+    регистрация push-устройства), `home` (`/v1/catalog`, `EnqueueTask`,
+    `CancelTask`), `scenarios`, `alarms_timers`, `intercom_call`,
+    `notifications`, `chat`, `vpn`, `system`, `infra_reports` (резерв),
+    `alerts` (фильтр alert-сообщений и alert-push), `admin` (`/v1/access/*`).
+    Любой действующий токен получает `base`; legacy «Мама» временно —
+    все модули, кроме `admin`, чтобы до UI-PR с именованными токенами не
+    было регрессий у телефонов/HA/APK; сужение — отдельным решением после
+    раздачи именованных токенов; owner —
+    все модули, его нельзя отозвать или лишить `admin`. Проверка — общий
+    крейт `home-app-auth` в каждом сервисе; ответ без модуля —
+    `403 {"error":"module_forbidden","module":"…"}`. Остальные сервисы
+    получают snapshot (`GET /v1/access/snapshot`, service-token): refresh 30 с,
+    singleflight, fail-closed после 1 ч без успешного обновления;
+    sync `entity=access` публикуется, обработка в Android — отдельным PR.
+    Причина: один список модулей и одна проверка вместо ролей,
+    копипасты и расхождений между сервисами; сервис-к-сервису остаётся на
+    отдельном `service_token`, а не на app-токенах. Service-token обязателен
+    везде, fallback на legacy нет; scheduler падает, если он совпадает с
+    app-токеном. ESO отдаёт только явные ключи, и все они создаются в OpenBao
+    до деплоя (`admin:service-token-init`); финализация ротации пишет `""`.
+    Push-устройства и VPN-peer'ы привязаны к `token_id` (v9/v10), legacy-строки
+    при старте назначаются «Маме», перехват push — тем же FCM-токеном или
+    owner'ом, VPN — только owner'ом;
+    `EnqueueTask/CancelTask` для `home` ограничены `control`/`home.control`.

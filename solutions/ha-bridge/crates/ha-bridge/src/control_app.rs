@@ -2,6 +2,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Context as _;
+use home_app_auth::AccessClient;
 use home_runtime::{Supervisor, shutdown_signal};
 use home_telemetry::TelemetryBuilder;
 use home_worker::{LeaseRequest, SchedulerQueue, Worker, WorkerConfig};
@@ -38,8 +39,13 @@ pub async fn run() -> anyhow::Result<()> {
         config.cache_ttl,
     ));
     let source: Arc<dyn CatalogSource> = provider;
+    let access = AccessClient::new(
+        home_app_auth::snapshot_url(&config.scheduler_url),
+        config.scheduler_token.expose(),
+    )
+    .map_err(anyhow::Error::msg)?;
     let router = home_http::with_timeout(
-        catalog_api::router(Arc::clone(&source), config.control_token.clone()),
+        catalog_api::router(Arc::clone(&source), access.clone()),
         REQUEST_TIMEOUT,
     );
 
@@ -59,6 +65,13 @@ pub async fn run() -> anyhow::Result<()> {
 
     let supervisor = Supervisor::new();
     let cancel = supervisor.token();
+    {
+        let client = access.clone();
+        let refresh_cancel = cancel.clone();
+        supervisor.spawn("access-refresh", async move {
+            client.run(refresh_cancel).await;
+        });
+    }
 
     if config.execute {
         let scheduler = scheduler_client(&config).context("scheduler client")?;

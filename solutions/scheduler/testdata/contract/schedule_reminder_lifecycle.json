@@ -7,7 +7,7 @@
         "method": "POST",
         "path": "/home.v1.SchedulerService/CreateSchedule",
         "headers": {
-          "Authorization": "Bearer contract-test-token",
+          "Authorization": "Bearer contract-service-token",
           "Content-Type": "application/json"
         },
         "body": {
@@ -55,7 +55,7 @@
         "method": "POST",
         "path": "/home.v1.SchedulerService/GetSchedule",
         "headers": {
-          "Authorization": "Bearer contract-test-token",
+          "Authorization": "Bearer contract-service-token",
           "Content-Type": "application/json"
         },
         "body": {
@@ -92,7 +92,7 @@
         "method": "POST",
         "path": "/home.v1.SchedulerService/ListSchedules",
         "headers": {
-          "Authorization": "Bearer contract-test-token",
+          "Authorization": "Bearer contract-service-token",
           "Content-Type": "application/json"
         },
         "body": {
@@ -131,7 +131,7 @@
         "method": "POST",
         "path": "/home.v1.SchedulerService/UpdateSchedule",
         "headers": {
-          "Authorization": "Bearer contract-test-token",
+          "Authorization": "Bearer contract-service-token",
           "Content-Type": "application/json"
         },
         "body": {
@@ -181,7 +181,7 @@
         "method": "POST",
         "path": "/home.v1.SchedulerService/DeleteSchedule",
         "headers": {
-          "Authorization": "Bearer contract-test-token",
+          "Authorization": "Bearer contract-service-token",
           "Content-Type": "application/json"
         },
         "body": {
@@ -203,7 +203,7 @@
         "method": "POST",
         "path": "/home.v1.SchedulerService/DeleteSchedule",
         "headers": {
-          "Authorization": "Bearer contract-test-token",
+          "Authorization": "Bearer contract-service-token",
           "Content-Type": "application/json"
         },
         "body": {

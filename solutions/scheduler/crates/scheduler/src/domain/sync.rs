@@ -7,6 +7,7 @@ pub enum SyncEntity {
     Timers,
     Scenarios,
     Notifications,
+    Access,
 }
 
 impl SyncEntity {
@@ -18,6 +19,7 @@ impl SyncEntity {
             Self::Timers => "timers",
             Self::Scenarios => "scenarios",
             Self::Notifications => "notifications",
+            Self::Access => "access",
         }
     }
 

@@ -313,7 +313,7 @@ mod tests {
             &|key| match key {
                 "HA_URL" => Some("http://ha.example:8123".to_owned()),
                 "SCHEDULER_ENDPOINT" => Some("http://scheduler.example:8098".to_owned()),
-                "SCHEDULER_TOKEN" => Some("scheduler-secret".to_owned()),
+                "SCHEDULER_SERVICE_TOKEN" => Some("scheduler-secret".to_owned()),
                 "HA_TOKEN" => Some("ha-secret".to_owned()),
                 "BRIDGE_CONSUMER_ID" => Some("ha-bridge-home".to_owned()),
                 "BRIDGE_EXECUTE" => Some("true".to_owned()),

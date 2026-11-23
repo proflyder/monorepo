@@ -65,15 +65,14 @@ pub struct Config {
     pub voice_token_file: String,
     pub voice_token: String,
 
-    pub app_token_file: String,
-    pub app_token: String,
+    pub app_api: bool,
 
     pub scheduler_url: String,
-    pub scheduler_token_file: String,
+    pub scheduler_service_token_file: String,
     pub scheduler_token: String,
 
     pub push_url: String,
-    pub push_token_file: String,
+    pub push_service_token_file: String,
     pub push_token: String,
 
     pub chat_db: String,
@@ -136,13 +135,12 @@ impl Config {
             bb_dispatcher_thread_id: trimmed(getenv, "MCP_BB_DISPATCHER_THREAD_ID"),
             voice_token_file: trimmed(getenv, "MCP_VOICE_TOKEN_FILE"),
             voice_token: String::new(),
-            app_token_file: trimmed(getenv, "MCP_APP_TOKEN_FILE"),
-            app_token: String::new(),
+            app_api: false,
             scheduler_url: trimmed(getenv, "MCP_SCHEDULER_URL"),
-            scheduler_token_file: trimmed(getenv, "MCP_SCHEDULER_TOKEN_FILE"),
+            scheduler_service_token_file: trimmed(getenv, "MCP_SCHEDULER_SERVICE_TOKEN_FILE"),
             scheduler_token: String::new(),
             push_url: trimmed(getenv, "MCP_PUSH_URL"),
-            push_token_file: trimmed(getenv, "MCP_PUSH_TOKEN_FILE"),
+            push_service_token_file: trimmed(getenv, "MCP_PUSH_SERVICE_TOKEN_FILE"),
             push_token: String::new(),
             chat_db: value_or(getenv, "MCP_CHAT_DB", DEFAULT_CHAT_DB),
             chat_hermes_url: trimmed(getenv, "MCP_CHAT_HERMES_URL"),
@@ -230,13 +228,13 @@ impl Config {
             Duration::from_secs(60),
         )?;
 
+        cfg.app_api = app_api_flag(getenv)?;
         validate_groups(&cfg)?;
         load_telegram_files(&mut cfg, getenv, read_file)?;
         load_ha_files(&mut cfg, read_file)?;
         load_scheduler_files(&mut cfg, read_file)?;
         load_push_files(&mut cfg, read_file)?;
         load_bb_files(&mut cfg, read_file)?;
-        load_app_files(&mut cfg, read_file)?;
         load_chat_files(&mut cfg, read_file)?;
         Ok(cfg)
     }
@@ -312,24 +310,20 @@ fn load_bb_files(cfg: &mut Config, read_file: &ReadFile<'_>) -> Result<(), Strin
     Ok(())
 }
 
-fn load_app_files(cfg: &mut Config, read_file: &ReadFile<'_>) -> Result<(), String> {
-    if cfg.app_token_file.is_empty() {
-        return Ok(());
+fn app_api_flag(getenv: &Getenv<'_>) -> Result<bool, String> {
+    match trimmed(getenv, "MCP_APP_API").as_str() {
+        "" | "false" => Ok(false),
+        "true" => Ok(true),
+        other => Err(format!("MCP_APP_API must be true or false, got {other:?}")),
     }
-    let token = read_secret(read_file, &cfg.app_token_file, "MCP_APP_TOKEN_FILE")?;
-    if token == cfg.auth_token || token == cfg.voice_token {
-        return Err("MCP_APP_TOKEN_FILE must differ from the MCP and voice tokens".to_owned());
-    }
-    cfg.app_token = token;
-    Ok(())
 }
 
 fn load_chat_files(cfg: &mut Config, read_file: &ReadFile<'_>) -> Result<(), String> {
     if cfg.chat_hermes_url.is_empty() {
         return Ok(());
     }
-    if cfg.app_token.is_empty() {
-        return Err("MCP_CHAT_HERMES_URL requires MCP_APP_TOKEN_FILE".to_owned());
+    if !cfg.app_api {
+        return Err("MCP_CHAT_HERMES_URL requires MCP_APP_API=true".to_owned());
     }
     if cfg.chat_hermes_token_file.is_empty() || cfg.chat_prompt_file.is_empty() {
         return Err(
@@ -350,7 +344,7 @@ fn load_chat_files(cfg: &mut Config, read_file: &ReadFile<'_>) -> Result<(), Str
             &cfg.chat_alerts_token_file,
             "MCP_CHAT_ALERTS_TOKEN_FILE",
         )?;
-        if token == cfg.app_token || token == cfg.auth_token || token == cfg.voice_token {
+        if token == cfg.scheduler_token || token == cfg.auth_token || token == cfg.voice_token {
             return Err("MCP_CHAT_ALERTS_TOKEN_FILE must differ from the other tokens".to_owned());
         }
         cfg.chat_alerts_token = token;
@@ -368,26 +362,30 @@ fn load_push_files(cfg: &mut Config, read_file: &ReadFile<'_>) -> Result<(), Str
     if !cfg.groups.iter().any(|name| name == "phone") {
         return Ok(());
     }
-    if cfg.push_url.is_empty() || cfg.push_token_file.is_empty() {
-        return Err("group phone requires MCP_PUSH_URL and MCP_PUSH_TOKEN_FILE".to_owned());
+    if cfg.push_url.is_empty() || cfg.push_service_token_file.is_empty() {
+        return Err("group phone requires MCP_PUSH_URL and MCP_PUSH_SERVICE_TOKEN_FILE".to_owned());
     }
-    cfg.push_token = read_secret(read_file, &cfg.push_token_file, "MCP_PUSH_TOKEN_FILE")?;
+    cfg.push_token = read_secret(
+        read_file,
+        &cfg.push_service_token_file,
+        "MCP_PUSH_SERVICE_TOKEN_FILE",
+    )?;
     Ok(())
 }
 
 fn load_scheduler_files(cfg: &mut Config, read_file: &ReadFile<'_>) -> Result<(), String> {
-    if !cfg.groups.iter().any(|name| name == "time") {
+    if !cfg.groups.iter().any(|name| name == "time") && !cfg.app_api {
         return Ok(());
     }
-    if cfg.scheduler_url.is_empty() || cfg.scheduler_token_file.is_empty() {
+    if cfg.scheduler_url.is_empty() || cfg.scheduler_service_token_file.is_empty() {
         return Err(
-            "group time requires MCP_SCHEDULER_URL and MCP_SCHEDULER_TOKEN_FILE".to_owned(),
+            "group time requires MCP_SCHEDULER_URL and MCP_SCHEDULER_SERVICE_TOKEN_FILE".to_owned(),
         );
     }
     cfg.scheduler_token = read_secret(
         read_file,
-        &cfg.scheduler_token_file,
-        "MCP_SCHEDULER_TOKEN_FILE",
+        &cfg.scheduler_service_token_file,
+        "MCP_SCHEDULER_SERVICE_TOKEN_FILE",
     )?;
     Ok(())
 }
@@ -571,7 +569,7 @@ mod tests {
             ("MCP_AUTH_TOKEN_FILE", "/token"),
             ("MCP_GROUPS", "time"),
             ("MCP_SCHEDULER_URL", "http://scheduler:8098"),
-            ("MCP_SCHEDULER_TOKEN_FILE", "/scheduler-token"),
+            ("MCP_SCHEDULER_SERVICE_TOKEN_FILE", "/scheduler-token"),
         ];
         let config = Config::load_from(&env(&pairs), &read).expect("config");
         assert_eq!(config.scheduler_token, "secret");
@@ -589,7 +587,7 @@ mod tests {
             ("MCP_AUTH_TOKEN_FILE", "/token"),
             ("MCP_GROUPS", "phone"),
             ("MCP_PUSH_URL", "http://phone-push:8095"),
-            ("MCP_PUSH_TOKEN_FILE", "/push-token"),
+            ("MCP_PUSH_SERVICE_TOKEN_FILE", "/push-token"),
         ];
         let config = Config::load_from(&env(&pairs), &read).expect("config");
         assert_eq!(config.push_token, "secret");
@@ -597,24 +595,32 @@ mod tests {
     }
 
     #[test]
-    fn app_token_enables_the_dashboard_and_must_be_distinct() {
+    fn the_app_api_is_a_flag_and_needs_the_scheduler_service_token() {
         let pairs = [
             ("MCP_AUTH_TOKEN_FILE", "/token"),
             ("MCP_INFRA_CATALOG_FILE", "/c"),
-            ("MCP_APP_TOKEN_FILE", "/app"),
+            ("MCP_APP_API", "true"),
+            ("MCP_SCHEDULER_URL", "http://scheduler:8098"),
+            ("MCP_SCHEDULER_SERVICE_TOKEN_FILE", "/scheduler"),
         ];
         let read = |path: &str| {
-            Ok(if path == "/app" {
-                b"app\n".to_vec()
+            Ok(if path == "/scheduler" {
+                b"service\n".to_vec()
             } else {
                 b"mcp".to_vec()
             })
         };
         let config = Config::load_from(&env(&pairs), &read).expect("config");
-        assert_eq!(config.app_token, "app");
-        let same = |_: &str| Ok(b"mcp".to_vec());
-        let error = Config::load_from(&env(&pairs), &same).expect_err("same token");
-        assert!(error.contains("MCP_APP_TOKEN_FILE"), "{error}");
+        assert!(config.app_api);
+        assert_eq!(config.scheduler_token, "service");
+        let error = Config::load_from(&env(&pairs[..3]), &read).expect_err("no scheduler");
+        assert!(
+            error.contains("MCP_SCHEDULER_SERVICE_TOKEN_FILE"),
+            "{error}"
+        );
+        let bad = [pairs[0], pairs[1], ("MCP_APP_API", "yes")];
+        let error = Config::load_from(&env(&bad), &read).expect_err("bad flag");
+        assert!(error.contains("MCP_APP_API"), "{error}");
     }
 
     #[test]
@@ -630,7 +636,9 @@ mod tests {
         let full = [
             ("MCP_AUTH_TOKEN_FILE", "/token"),
             ("MCP_INFRA_CATALOG_FILE", "/c"),
-            ("MCP_APP_TOKEN_FILE", "/app"),
+            ("MCP_APP_API", "true"),
+            ("MCP_SCHEDULER_URL", "http://scheduler:8098"),
+            ("MCP_SCHEDULER_SERVICE_TOKEN_FILE", "/scheduler"),
             ("MCP_CHAT_HERMES_URL", "http://relay:8644"),
             ("MCP_CHAT_HERMES_TOKEN_FILE", "/relay"),
             ("MCP_CHAT_PROMPT_FILE", "/prompt"),
@@ -640,10 +648,12 @@ mod tests {
         assert_eq!(config.chat_prompt, "prompt");
         assert_eq!(config.chat_session, DEFAULT_CHAT_SESSION);
         assert_eq!(config.chat_db, DEFAULT_CHAT_DB);
-        let without_app = [full[0], full[1], full[3], full[4], full[5]];
+        let without_app = [full[0], full[1], full[5], full[6], full[7]];
         let error = Config::load_from(&env(&without_app), &read).expect_err("no app token");
-        assert!(error.contains("MCP_APP_TOKEN_FILE"), "{error}");
-        let without_prompt = [full[0], full[1], full[2], full[3], full[4]];
+        assert!(error.contains("MCP_APP_API"), "{error}");
+        let without_prompt = [
+            full[0], full[1], full[2], full[3], full[4], full[5], full[6],
+        ];
         let error = Config::load_from(&env(&without_prompt), &read).expect_err("no prompt");
         assert!(error.contains("MCP_CHAT_PROMPT_FILE"), "{error}");
     }

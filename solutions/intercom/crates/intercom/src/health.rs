@@ -42,7 +42,7 @@ pub async fn run_status() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    match status_body(&format!("http://{address}"), config.phone_token.expose()).await {
+    match status_body(&format!("http://{address}"), config.station_token.expose()).await {
         Ok(body) => {
             print!("{body}");
             ExitCode::SUCCESS

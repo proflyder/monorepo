@@ -2,6 +2,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Context as _;
+use home_app_auth::{AccessCache, AccessSnapshot};
+
+use crate::store::LEGACY_TOKEN_ID;
 use home_runtime::{Supervisor, shutdown_signal};
 use home_telemetry::TelemetryBuilder;
 use tokio::net::TcpListener;
@@ -43,10 +46,24 @@ pub async fn run() -> anyhow::Result<()> {
     .with_scenario_execution(config.scenario_execution)
     .with_sync(Arc::clone(&sync));
     let vpn_access = vpn_access(&config);
+    let cache = access_cache(&config, &store)?;
+    let auth = Arc::new(
+        api::AccessAuth::new(
+            cache.clone(),
+            home_secret::Token::new(config.service_token.expose()),
+        )
+        .with_previous(
+            config
+                .service_token_previous
+                .as_ref()
+                .map(|token| home_secret::Token::new(token.expose())),
+        ),
+    );
     let router = api::router(
         service.clone(),
         AlarmFacade::new(service),
-        config.token.expose(),
+        auth,
+        cache.clone(),
         vpn_access,
         sync,
     );
@@ -70,6 +87,25 @@ pub async fn run() -> anyhow::Result<()> {
 
     let supervisor = Supervisor::new();
     let cancel = supervisor.token();
+    {
+        let access_cache = cache.clone();
+        let access_store = Arc::clone(&store);
+        let access_cancel = cancel.clone();
+        supervisor.spawn("access-reload", async move {
+            let mut tick = tokio::time::interval(Duration::from_secs(30));
+            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+            loop {
+                tokio::select! {
+                    () = access_cancel.cancelled() => break,
+                    _ = tick.tick() => {
+                        if let Ok(snapshot) = access_store.access_snapshot() {
+                            access_cache.replace(snapshot);
+                        }
+                    }
+                }
+            }
+        });
+    }
     let engine_store = Arc::clone(&store);
     let engine_cancel = cancel.clone();
     let engine_task = engine.clone();
@@ -111,7 +147,7 @@ fn sync_sink(config: &Config) -> Arc<dyn SyncSink> {
         tracing::info!(sync_push = false, "sync pushes disabled");
         return Arc::new(NoSync);
     };
-    match PushSync::new(url, config.token.clone()) {
+    match PushSync::new(url, config.service_token.clone()) {
         Ok(push) => {
             tracing::info!(sync_push = true, "sync pushes enabled");
             Arc::new(Arc::new(push))
@@ -121,6 +157,65 @@ fn sync_sink(config: &Config) -> Arc<dyn SyncSink> {
             Arc::new(NoSync)
         }
     }
+}
+
+fn access_cache(config: &Config, store: &Store) -> anyhow::Result<AccessCache> {
+    let now = jiff::Timestamp::now().as_second();
+    let digest = home_app_auth::sha256_hex(config.token.expose());
+    store
+        .access_import_legacy(&digest, now)
+        .context("import legacy app token")?;
+    if let Some(path) = config.access_seed_file.as_deref() {
+        match std::fs::read(path) {
+            Ok(data) => match AccessSnapshot::parse(&data) {
+                Ok(snapshot) => match store.access_import_seed(&snapshot, now) {
+                    Ok(true) => tracing::info!("application access seed imported"),
+                    Ok(false) => {}
+                    Err(error) => {
+                        tracing::warn!(%error, "application access seed was not applied");
+                    }
+                },
+                Err(error) => tracing::warn!(%error, "application access seed is invalid"),
+            },
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => tracing::warn!(%error, "application access seed is unreadable"),
+        }
+    }
+    let snapshot = store
+        .access_snapshot()
+        .context("application access snapshot")?;
+    backfill_owners(store, &snapshot)?;
+    tracing::info!(
+        tokens = snapshot.tokens.len(),
+        revision = snapshot.revision,
+        "application access loaded"
+    );
+    Ok(AccessCache::new(snapshot))
+}
+
+fn backfill_owners(store: &Store, snapshot: &AccessSnapshot) -> anyhow::Result<()> {
+    if !snapshot
+        .tokens
+        .iter()
+        .any(|token| token.id == LEGACY_TOKEN_ID)
+    {
+        tracing::warn!("legacy token is revoked; devices without an owner stay unassigned");
+        return Ok(());
+    }
+    let devices = store
+        .backfill_push_device_owners(LEGACY_TOKEN_ID)
+        .context("assign push device owners")?;
+    let peers = store
+        .backfill_vpn_peer_owners(LEGACY_TOKEN_ID)
+        .context("assign vpn peer owners")?;
+    if devices + peers > 0 {
+        tracing::info!(
+            devices,
+            peers,
+            "legacy devices assigned to the legacy token"
+        );
+    }
+    Ok(())
 }
 
 fn vpn_access(config: &Config) -> VpnAccess {
@@ -189,10 +284,35 @@ fn seconds(duration: Duration) -> i64 {
 mod tests {
     use super::*;
 
+    #[test]
+    fn legacy_rows_are_assigned_only_while_the_legacy_token_is_active() {
+        let store = Store::open_in_memory(crate::store::Config::default()).expect("store");
+        let device = crate::store::PushDeviceInput {
+            device_id: "device-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_owned(),
+            token: "token-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_owned(),
+            platform: "android".to_owned(),
+            app_version: String::new(),
+            device_name: String::new(),
+        };
+        store.register_push_device(&device, 1).expect("legacy row");
+        backfill_owners(&store, &AccessSnapshot::default()).expect("no legacy token");
+        assert_eq!(store.list_push_devices().expect("list")[0].token_id, "");
+        store
+            .access_import_legacy(&home_app_auth::sha256_hex("legacy"), 2)
+            .expect("legacy token");
+        let snapshot = store.access_snapshot().expect("snapshot");
+        backfill_owners(&store, &snapshot).expect("backfill");
+        assert_eq!(
+            store.list_push_devices().expect("list")[0].token_id,
+            LEGACY_TOKEN_ID
+        );
+    }
+
     fn config_with_vpn() -> Config {
         Config::load_from(
             &|key| match key {
                 "SCHEDULER_TOKEN" => Some("t".to_owned()),
+                "SCHEDULER_SERVICE_TOKEN" => Some("service".to_owned()),
                 "SCHEDULER_VPN_SETTINGS_FILE" => Some("/run/vpn.json".to_owned()),
                 "SCHEDULER_VPN_SYNC_TOKEN_FILE" => Some("/run/vpn_sync_token".to_owned()),
                 _ => None,
@@ -233,6 +353,7 @@ mod tests {
         let config = Config::load_from(
             &|key| match key {
                 "SCHEDULER_TOKEN" => Some("t".to_owned()),
+                "SCHEDULER_SERVICE_TOKEN" => Some("service".to_owned()),
                 _ => None,
             },
             &|_path| Ok(Vec::new()),

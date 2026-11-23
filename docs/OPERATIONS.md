@@ -25,7 +25,9 @@ mise run rollback scheduler --dry-run     # план из units.mjs
 mise run rollback scheduler --yes         # выполнить документированную команду
 ```
 
-`--live` и `rollback --yes` берут admin kubeconfig из OpenBao через fnox
+`with-kube-tunnel.sh` отказывается работать без явного `KUBECONFIG` и
+проверяет, что его сервер — `https://127.0.0.1:16443`; поэтому голый
+`kubectl` и `~/.kube/config` не используются. `--live` и `rollback --yes` берут admin kubeconfig из OpenBao через fnox
 (профиль `kube`) и сами поднимают туннель к API. `rollback` для `forward-only`
 завершается ненулевым кодом, для `pulsar` только печатает команду для
 станции.
@@ -42,6 +44,74 @@ mise run backup:verify [<id>] --dry-run|--yes
 `backup:now` выполняет только документированную команду цели; цель только
 через UI (HA backup) печатает `manual`. Restore не автоматизирован: вывод
 содержит `restore_doc`.
+
+App-токены (модули доступа) и service-token. Порядок раскатки:
+
+```bash
+# 0. до merge: консистентная копия БД scheduler (схема 7 -> 10 необратима)
+mise run admin:scheduler-backup
+
+# 1. до merge: init создаёт три новых ключа (service_token,
+#    service_token_previous="", app_tokens пустым snapshot) и проверяет, что
+#    остальные свойства scheduler-auth из ExternalSecret (token, vpn_sync_token,
+#    vpn.json) уже есть; иначе падает, ничего не записав. Идемпотентно, ничего
+#    не печатает, существующие значения не трогает
+mise run admin:service-token-init
+
+# 2. merge -> deploy-home: scheduler и сервисы стартуют на service_token,
+#    телефоны/HA продолжают работать на legacy «Мама»
+# 3. сразу после деплоя: в runtime-values (voice-proxy) HERMES_SCHEDULER_TOKEN
+#    из scheduler-auth#service_token и рестарт hermes (см. ниже)
+
+# 4. отдельный шаг: owner-токен (файл 0600, путь печатается, сам токен нет)
+mise run admin:app-token-bootstrap
+# ротация service-token (тот же шаг, но с окном previous и финализацией)
+mise run admin:app-token-bootstrap -- --rotate-service
+```
+
+Откат этого релиза: одного `mise run rollback scheduler` (предыдущий digest)
+мало: старый бинарь отказывается открывать схему v10 (`NewerSchema`), а
+манифесты требуют новых env и ключей. Порядок: `flux suspend` для
+`app-ha-executors`, revert коммита merge (манифесты, ExternalSecret и pins
+вместе), restore БД scheduler из копии шага 0 (`docs/REBUILD.md`, раздел
+scheduler), resume. Записи, сделанные после merge (новые токены, привязки
+устройств, расписания), при этом теряются.
+
+Bootstrap повторяем. Owner-токен выпускается один раз; повторный запуск
+сверяет файл с seed и ничего не меняет, потерянный файл — только явный
+`--rotate-owner`. Новый токен пишется во временный 0600-файл, который
+переименовывается в целевой только после успешной CAS-записи в OpenBao.
+Дальше: force-sync ExternalSecret с ожиданием **нового** `refreshTime` и
+фактических значений в Secret, рестарт scheduler, проверка Secret и
+`-service-token-sha256` в поде scheduler, owner-хэша в `app_tokens`. Без
+`--rotate-service` сервисы не перезапускаются: service-token не меняется.
+С `--rotate-service` старый токен уходит в `service_token_previous`,
+синхронизируются `scheduler-auth`, `phone-push`, `mcp-gateway-scheduler`,
+`intercom`, перезапускаются существующие deployment `phone-push`,
+`mcp-gateway`, `intercom`, `ha-control`, `ha-bridge`, `ha-scenario`, `hermes`
+(voice-proxy — контейнер в `hermes`; отсутствующие пропускаются с сообщением),
+затем `service_token_previous` становится `""`, синк и рестарт scheduler.
+Прерванная ротация (previous не пуст) при следующем запуске доводится до
+конца без второй ротации.
+
+Preflight (до любых изменений) требует, чтобы `voice-proxy` в
+`deployment/hermes` брал `HERMES_SCHEDULER_TOKEN` из
+`scheduler-auth#service_token`, и ищет legacy-значение в Secrets/ConfigMaps
+`home-assistant` кроме производных ESO-секретов. Обход — `--skip-preflight`.
+
+Окно voice-queue: старый scheduler принимает только legacy-токен, новый —
+только service-token, а env Hermes читается при старте, поэтому между
+деплоем scheduler и рестартом `hermes` с новыми `runtime-values` voice-proxy
+получает `401/403` на `ListDueEvents/AckEvent`. События остаются в очереди и
+доставляются после рестарта; объявления старше TTL voice-proxy пропускает.
+Разрешать legacy-токен как service-токен ради этого окна запрещено
+(решение 69).
+
+Потребители legacy app-токена «Мама», которые не меняются: HA
+`secrets.yaml` → `scheduler_bearer` (`rest_command.scheduler_rpc`, только
+app-RPC), старые APK, `secrets/home/scheduler.token` и `fnox`-профиль
+`ingress`, seed сценариев и ручные e2e. `ha-control -healthcheck` ходит в
+`/v1/catalog` legacy-токеном (`CONTROL_TOKEN`).
 
 Скрипты с секретами — только `mise run admin:*` (`mise tasks | grep admin:`),
 kubectl/helm — `mise run kubectl|helm -- …`. Разовая команда с kubeconfig:

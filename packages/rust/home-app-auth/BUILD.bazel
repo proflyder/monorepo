@@ -1,0 +1,42 @@
+load("@rules_rust//cargo:defs.bzl", "extract_cargo_lints")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPS = [
+    "@crates//:hex",
+    "@crates//:http",
+    "@crates//:serde",
+    "@crates//:serde_json",
+    "@crates//:rustls",
+    "@crates//:sha2",
+    "@crates//:subtle",
+    "@crates//:thiserror",
+    "@crates//:reqwest",
+    "@crates//:tokio",
+    "@crates//:tracing",
+    "@crates//:tokio-util",
+]
+
+rust_library(
+    name = "home_app_auth",
+    srcs = ["src/lib.rs"],
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    deps = DEPS,
+)
+
+rust_test(
+    name = "unit_tests",
+    size = "small",
+    crate = ":home_app_auth",
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    deps = DEPS,
+)
+
+extract_cargo_lints(
+    name = "workspace_lints",
+    manifest = "Cargo.toml",
+    workspace = "//:Cargo.toml",
+)

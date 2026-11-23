@@ -41,8 +41,22 @@ async fn spawn() -> Server {
         Vec::new(),
         Arc::new(SystemClock),
     ));
+    let access = home_app_auth::AccessClient::fixed(home_app_auth::AccessSnapshot {
+        revision: 1,
+        tokens: vec![home_app_auth::TokenRecord {
+            id: "phone".to_owned(),
+            name: "phone".to_owned(),
+            sha256: home_app_auth::sha256_hex(PHONE),
+            owner: false,
+            modules: home_app_auth::Modules::member()
+                .ids()
+                .into_iter()
+                .map(str::to_owned)
+                .collect(),
+        }],
+    });
     let auth = TokenAuth::new(
-        home_secret::Token::new(PHONE),
+        access,
         &phone.id,
         home_secret::Token::new(STATION),
         &station.id,

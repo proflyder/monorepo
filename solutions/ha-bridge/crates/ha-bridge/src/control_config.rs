@@ -102,7 +102,12 @@ impl ControlConfig {
             .map_or(scheduler_url.clone(), str::to_owned);
 
         let ha_token = require_token(getenv, read_file, "HA_TOKEN")?;
-        let scheduler_token = require_token(getenv, read_file, "SCHEDULER_TOKEN")?;
+        let scheduler_token = crate::config::service_token(getenv, read_file)
+            .map_err(|error| control_error(&error))?
+            .filter(|token| !token.expose().is_empty())
+            .ok_or(ControlConfigError::TokenRequired {
+                name: "SCHEDULER_SERVICE_TOKEN",
+            })?;
         let control_token = require_token(getenv, read_file, "CONTROL_TOKEN")?;
 
         let ha_ca_file = non_empty(getenv("HA_CA_FILE")).map(PathBuf::from);
@@ -354,7 +359,7 @@ mod tests {
                 "SCHEDULER_ENDPOINT",
                 "http://192.0.2.27:8098/home.v1.SchedulerService",
             ),
-            ("SCHEDULER_TOKEN", "s"),
+            ("SCHEDULER_SERVICE_TOKEN", "s"),
             ("CONTROL_TOKEN", "c"),
             ("CONTROL_CONSUMER_ID", "ha-control-home"),
         ]

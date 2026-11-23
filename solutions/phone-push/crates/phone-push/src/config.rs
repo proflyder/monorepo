@@ -56,10 +56,10 @@ impl Config {
         read_file: &dyn Fn(&str) -> std::io::Result<Vec<u8>>,
     ) -> Result<Self, ConfigError> {
         let listen = value(getenv, "PUSH_LISTEN").unwrap_or_else(|| DEFAULT_LISTEN.to_owned());
-        let token = secret(read_file, getenv, "PUSH_TOKEN_FILE", true)?;
+        let token = secret(read_file, getenv, "PUSH_SERVICE_TOKEN_FILE", true)?;
         let scheduler_url = value(getenv, "PUSH_SCHEDULER_URL")
             .ok_or(ConfigError::Required("PUSH_SCHEDULER_URL"))?;
-        let scheduler_token = secret(read_file, getenv, "PUSH_SCHEDULER_TOKEN_FILE", true)?;
+        let scheduler_token = secret(read_file, getenv, "PUSH_SCHEDULER_SERVICE_TOKEN_FILE", true)?;
         let service_account = secret(read_file, getenv, "PUSH_FCM_SERVICE_ACCOUNT_FILE", false)?
             .expose()
             .to_owned();
@@ -148,9 +148,9 @@ mod tests {
     #[test]
     fn a_complete_environment_loads() {
         let pairs = [
-            ("PUSH_TOKEN_FILE", "/token"),
+            ("PUSH_SERVICE_TOKEN_FILE", "/token"),
             ("PUSH_SCHEDULER_URL", "http://scheduler:8098/"),
-            ("PUSH_SCHEDULER_TOKEN_FILE", "/scheduler"),
+            ("PUSH_SCHEDULER_SERVICE_TOKEN_FILE", "/scheduler"),
             ("PUSH_FCM_SERVICE_ACCOUNT_FILE", "/sa"),
         ];
         let config = Config::load_from(&env(&pairs), &read).expect("config");
@@ -163,20 +163,23 @@ mod tests {
 
     #[test]
     fn a_missing_endpoint_is_named_but_never_printed() {
-        let pairs = [("PUSH_TOKEN_FILE", "/token")];
+        let pairs = [("PUSH_SERVICE_TOKEN_FILE", "/token")];
         let error = Config::load_from(&env(&pairs), &read).expect_err("missing scheduler");
         assert!(error.to_string().contains("PUSH_SCHEDULER_URL"), "{error}");
         let pairs = [("PUSH_SCHEDULER_URL", "http://scheduler:8098")];
         let error = Config::load_from(&env(&pairs), &read).expect_err("missing token");
-        assert!(error.to_string().contains("PUSH_TOKEN_FILE"), "{error}");
+        assert!(
+            error.to_string().contains("PUSH_SERVICE_TOKEN_FILE"),
+            "{error}"
+        );
     }
 
     #[test]
     fn an_out_of_range_timeout_is_rejected() {
         let pairs = [
-            ("PUSH_TOKEN_FILE", "/token"),
+            ("PUSH_SERVICE_TOKEN_FILE", "/token"),
             ("PUSH_SCHEDULER_URL", "http://scheduler:8098"),
-            ("PUSH_SCHEDULER_TOKEN_FILE", "/scheduler"),
+            ("PUSH_SCHEDULER_SERVICE_TOKEN_FILE", "/scheduler"),
             ("PUSH_FCM_SERVICE_ACCOUNT_FILE", "/sa"),
             ("PUSH_TIMEOUT", "1h"),
         ];

@@ -109,14 +109,14 @@ spec:
               value: /run/secrets/mcp-gateway-voice/token
             - name: MCP_SCHEDULER_URL
               value: http://scheduler.home-assistant.svc.cluster.local:8098
-            - name: MCP_SCHEDULER_TOKEN_FILE
-              value: /run/secrets/mcp-gateway-scheduler/token
+            - name: MCP_SCHEDULER_SERVICE_TOKEN_FILE
+              value: /run/secrets/mcp-gateway-scheduler/service_token
             - name: MCP_PUSH_URL
               value: http://phone-push.home-assistant.svc.cluster.local:8095
-            - name: MCP_PUSH_TOKEN_FILE
-              value: /run/secrets/mcp-gateway-scheduler/token
-            - name: MCP_APP_TOKEN_FILE
-              value: /run/secrets/mcp-gateway-scheduler/token
+            - name: MCP_PUSH_SERVICE_TOKEN_FILE
+              value: /run/secrets/mcp-gateway-scheduler/service_token
+            - name: MCP_APP_API
+              value: "true"
             - name: MCP_CHAT_HERMES_URL
               value: "http://${NODE_LAN_IP}:8644"
             - name: MCP_CHAT_HERMES_TOKEN_FILE
@@ -131,8 +131,6 @@ spec:
               value: /run/secrets/mcp-gateway-chat-alerts/token
             - name: MCP_CHAT_STT_ADDRS
               value: "${NODE_LAN_IP}:10305,${NODE_LAN_IP}:10300"
-            - name: LOG_LEVEL
-              value: info
           ports:
             - name: http
               containerPort: 8080
@@ -251,9 +249,6 @@ spec:
           secret:
             secretName: mcp-gateway-scheduler
             defaultMode: 0440
-            items:
-              - key: token
-                path: token
         - name: chat
           secret:
             secretName: mcp-gateway-chat

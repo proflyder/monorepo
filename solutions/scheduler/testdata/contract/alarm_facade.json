@@ -7,7 +7,7 @@
         "method": "POST",
         "path": "/home.v1.AlarmService/CreateAlarm",
         "headers": {
-          "Authorization": "Bearer contract-test-token",
+          "Authorization": "Bearer contract-service-token",
           "Content-Type": "application/json"
         },
         "body": {
@@ -45,7 +45,7 @@
         "method": "POST",
         "path": "/home.v1.AlarmService/GetAlarm",
         "headers": {
-          "Authorization": "Bearer contract-test-token",
+          "Authorization": "Bearer contract-service-token",
           "Content-Type": "application/json"
         },
         "body": {
