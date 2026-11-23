@@ -146,7 +146,8 @@ RINGING --Answer(callee)--> CONNECTING --offer+answer--> ACTIVE
   `intercom_watch_opens_total`, `intercom_active_calls`,
   `intercom_endpoints_online`;
 - `intercom -healthcheck` — loopback `/healthz` для distroless-образа;
-- `intercom -status` — `GetStatus` phone-токеном.
+- `intercom -status` — `GetStatus` station-токеном (`INTERCOM_STATION_TOKEN[_FILE]`):
+  статус глобальный, а service-токен intercom не принимает.
 
 ## Тесты
 

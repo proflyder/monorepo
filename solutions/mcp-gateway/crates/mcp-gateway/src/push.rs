@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use home_app_auth::Module;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
@@ -52,14 +53,15 @@ pub trait PushApi: Send + Sync {
         device_id: Option<&'a str>,
     ) -> BoxFuture<'a, Result<Delivery, String>>;
 
-    fn notify_alerts<'a>(
+    fn notify_module<'a>(
         &'a self,
+        module: Module,
         title: &'a str,
         body: &'a str,
         deep_link: Option<&'a str>,
-        device_id: Option<&'a str>,
     ) -> BoxFuture<'a, Result<Delivery, String>> {
-        self.notify(title, body, deep_link, device_id)
+        let _ = module;
+        self.notify(title, body, deep_link, None)
     }
 }
 
@@ -158,20 +160,17 @@ impl PushApi for Client {
         })
     }
 
-    fn notify_alerts<'a>(
+    fn notify_module<'a>(
         &'a self,
+        module: Module,
         title: &'a str,
         body: &'a str,
         deep_link: Option<&'a str>,
-        device_id: Option<&'a str>,
     ) -> BoxFuture<'a, Result<Delivery, String>> {
         Box::pin(async move {
-            let mut payload = json!({"title": title, "body": body, "module": "alerts"});
+            let mut payload = json!({"title": title, "body": body, "module": module.id()});
             if let Some(link) = deep_link {
                 payload["deepLink"] = json!(link);
-            }
-            if let Some(id) = device_id {
-                payload["deviceId"] = json!(id);
             }
             self.post("/v1/push/notify", payload).await
         })

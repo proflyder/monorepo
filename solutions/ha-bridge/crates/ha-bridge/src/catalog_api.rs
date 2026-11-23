@@ -352,8 +352,7 @@ mod tests {
                 },
             ],
         };
-        let access = AccessClient::new("http://test", "test").expect("client");
-        access.cache().replace(snapshot);
+        let access = AccessClient::fixed(snapshot);
         let owner = access.cache().authenticate_token("owner").expect("owner");
         assert!(owner.require(Module::Home).is_ok());
         let chat = access.cache().authenticate_token("chat").expect("chat");

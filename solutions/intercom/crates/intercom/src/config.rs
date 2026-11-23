@@ -82,12 +82,8 @@ impl std::fmt::Debug for Config {
 
 #[derive(Debug, Error)]
 pub enum ConfigError {
-    #[error("INTERCOM_TOKEN or INTERCOM_TOKEN_FILE is required")]
-    PhoneTokenRequired,
     #[error("INTERCOM_STATION_TOKEN or INTERCOM_STATION_TOKEN_FILE is required")]
     StationTokenRequired,
-    #[error("INTERCOM_TOKEN_FILE: cannot read token file")]
-    PhoneTokenFile,
     #[error("INTERCOM_STATION_TOKEN_FILE: cannot read token file")]
     StationTokenFile,
     #[error("{0}")]

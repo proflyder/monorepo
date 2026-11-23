@@ -16,8 +16,8 @@
 Flux (`Kustomization/app-intercom`) применяет `manifests/` из `develop`,
 образ `INTERCOM_IMAGE` — из `deploy/home-apps`. Секреты (`docs/SECRETS.md`):
 
-- app-токены и service-token для snapshot берутся из `scheduler-auth` (`app_tokens`, `service_token`); legacy `token` интеркому не нужен (общий
-  токен приложения);
+- service-token для snapshot app-токенов — `scheduler-auth#service_token`;
+  ни legacy `token`, ни `app_tokens` интеркому не нужны;
 - `secret/k8s/home-assistant/intercom#station_token` (≥32 случайных байта, не
   равен токену приложения);
 - `secret/k8s/flux-system/app-settings#INTERCOM_NODE_PORT`.

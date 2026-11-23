@@ -45,45 +45,60 @@ mise run backup:verify [<id>] --dry-run|--yes
 через UI (HA backup) печатает `manual`. Restore не автоматизирован: вывод
 содержит `restore_doc`.
 
-App-токены (модули доступа) и service-token:
+App-токены (модули доступа) и service-token. Порядок раскатки:
 
 ```bash
-# 1. до деплоя: создать service_token, если его ещё нет (идемпотентно, молча)
+# 1. до merge: создать в OpenBao все ключи, которые объявлены в ExternalSecret
+#    (service_token, service_token_previous="", app_tokens пустым snapshot);
+#    идемпотентно, ничего не печатает, существующие значения не трогает
 mise run admin:service-token-init
-# до этого шага secrets:check/secrets:file остаются зелёными: каталог и fnox
-# читают legacy app-токен, а service_token появляется только здесь
 
-# 2. после деплоя: bootstrap owner; токен owner пишется в файл 0600
+# 2. merge -> deploy-home: scheduler и сервисы стартуют на service_token,
+#    телефоны/HA продолжают работать на legacy «Мама»
+# 3. сразу после деплоя: в runtime-values (voice-proxy) HERMES_SCHEDULER_TOKEN
+#    из scheduler-auth#service_token и рестарт hermes (см. ниже)
+
+# 4. отдельный шаг: owner-токен (файл 0600, путь печатается, сам токен нет)
 mise run admin:app-token-bootstrap
-# путь (по умолчанию secrets/local/app-tokens/owner.token) печатается; stdout сам токен не содержит
+# ротация service-token (тот же шаг, но с окном previous и финализацией)
+mise run admin:app-token-bootstrap -- --rotate-service
 ```
 
-Bootstrap генерирует новый `service_token`, сохраняет старый как
-`service_token_previous`, делает force-sync и wait **всех** ESO-потребителей
-(`scheduler-auth`, `phone-push`, `mcp-gateway-scheduler`, `intercom`),
-перезапускает scheduler и сервисы, проверяет фактический `service_token` в Kubernetes Secrets и в поде
-scheduler (`-service-token-sha256`), затем удаляет `service_token_previous` и снова
-перезапускает scheduler. Если ожидаемый deployment не найден или Secret
-содержит старый токен, задача падает до финализации. Legacy `token` никогда
-не становится service-token и после bootstrap остаётся только app-токеном
-«Мама» (все модули, кроме `admin`).
+Bootstrap повторяем. Owner-токен выпускается один раз; повторный запуск
+сверяет файл с seed и ничего не меняет, потерянный файл — только явный
+`--rotate-owner`. Новый токен пишется во временный 0600-файл, который
+переименовывается в целевой только после успешной CAS-записи в OpenBao.
+Дальше: force-sync ExternalSecret с ожиданием **нового** `refreshTime` и
+фактических значений в Secret, рестарт scheduler, проверка Secret и
+`-service-token-sha256` в поде scheduler, owner-хэша в `app_tokens`. Без
+`--rotate-service` сервисы не перезапускаются: service-token не меняется.
+С `--rotate-service` старый токен уходит в `service_token_previous`,
+синхронизируются `scheduler-auth`, `phone-push`, `mcp-gateway-scheduler`,
+`intercom`, перезапускаются существующие deployment `phone-push`,
+`mcp-gateway`, `intercom`, `ha-control`, `ha-bridge`, `ha-scenario`, `hermes`
+(voice-proxy — контейнер в `hermes`; отсутствующие пропускаются с сообщением),
+затем `service_token_previous` становится `""`, синк и рестарт scheduler.
+Прерванная ротация (previous не пуст) при следующем запуске доводится до
+конца без второй ротации.
 
-Preflight до ротации читает k8s Secrets/ConfigMaps в `home-assistant`, кроме
-производных ESO-секретов (`scheduler-auth`, `phone-push`,
-`mcp-gateway-scheduler`, `intercom`), и останавливается, если находит
-legacy-значение. Аварийный обход — `--skip-preflight`.
+Preflight (до любых изменений) требует, чтобы `voice-proxy` в
+`deployment/hermes` брал `HERMES_SCHEDULER_TOKEN` из
+`scheduler-auth#service_token`, и ищет legacy-значение в Secrets/ConfigMaps
+`home-assistant` кроме производных ESO-секретов. Обход — `--skip-preflight`.
 
-Внешние потребители, которые bootstrap не обновляет:
+Окно voice-queue: старый scheduler принимает только legacy-токен, новый —
+только service-token, а env Hermes читается при старте, поэтому между
+деплоем scheduler и рестартом `hermes` с новыми `runtime-values` voice-proxy
+получает `401/403` на `ListDueEvents/AckEvent`. События остаются в очереди и
+доставляются после рестарта; объявления старше TTL voice-proxy пропускает.
+Разрешать legacy-токен как service-токен ради этого окна запрещено
+(решение 69).
 
-- HA `secrets.yaml` → `scheduler_bearer` (`rest_command.scheduler_rpc`);
-- Hermes/voice-proxy private values → `HERMES_SCHEDULER_TOKEN[_FILE]` из
-  `scheduler-auth#service_token` (`runtime-values`/private Helm values);
-- локальные admin-файлы: `secrets/home/scheduler.token` и
-  `fnox`-профиль `ingress` (в них legacy app-токен «Мама»; `secrets:check`
-  остаётся зелёным до `admin:service-token-init`);
-- seed сценариев, `scheduler/deploy.sh` и разовые `SCHEDULER_TOKEN_FILE`
-  на рабочей машине;
-- ручные e2e/отладочные окружения.
+Потребители legacy app-токена «Мама», которые не меняются: HA
+`secrets.yaml` → `scheduler_bearer` (`rest_command.scheduler_rpc`, только
+app-RPC), старые APK, `secrets/home/scheduler.token` и `fnox`-профиль
+`ingress`, seed сценариев и ручные e2e. `ha-control -healthcheck` ходит в
+`/v1/catalog` legacy-токеном (`CONTROL_TOKEN`).
 
 Скрипты с секретами — только `mise run admin:*` (`mise tasks | grep admin:`),
 kubectl/helm — `mise run kubectl|helm -- …`. Разовая команда с kubeconfig:

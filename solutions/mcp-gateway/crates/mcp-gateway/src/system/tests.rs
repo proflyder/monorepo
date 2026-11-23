@@ -442,9 +442,7 @@ async fn server_requires_the_app_bearer() {
         voice_token: None,
         voice: None,
         access: Some({
-            let client =
-                home_app_auth::AccessClient::new("http://test", "test").expect("access client");
-            client.cache().replace(snapshot);
+            let client = home_app_auth::AccessClient::fixed(snapshot);
             crate::server::AccessBinding { client }
         }),
         system: Some(dashboard(prom, Duration::from_secs(60))),

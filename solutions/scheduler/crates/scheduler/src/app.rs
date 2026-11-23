@@ -3,6 +3,8 @@ use std::time::Duration;
 
 use anyhow::Context as _;
 use home_app_auth::{AccessCache, AccessSnapshot};
+
+use crate::store::LEGACY_TOKEN_ID;
 use home_runtime::{Supervisor, shutdown_signal};
 use home_telemetry::TelemetryBuilder;
 use tokio::net::TcpListener;
@@ -166,14 +168,13 @@ fn access_cache(config: &Config, store: &Store) -> anyhow::Result<AccessCache> {
     if let Some(path) = config.access_seed_file.as_deref() {
         match std::fs::read(path) {
             Ok(data) => match AccessSnapshot::parse(&data) {
-                Ok(snapshot) => {
-                    if store
-                        .access_import_seed(&snapshot, now)
-                        .context("import app token seed")?
-                    {
-                        tracing::info!("application access seed imported");
+                Ok(snapshot) => match store.access_import_seed(&snapshot, now) {
+                    Ok(true) => tracing::info!("application access seed imported"),
+                    Ok(false) => {}
+                    Err(error) => {
+                        tracing::warn!(%error, "application access seed was not applied");
                     }
-                }
+                },
                 Err(error) => tracing::warn!(%error, "application access seed is invalid"),
             },
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
@@ -183,6 +184,19 @@ fn access_cache(config: &Config, store: &Store) -> anyhow::Result<AccessCache> {
     let snapshot = store
         .access_snapshot()
         .context("application access snapshot")?;
+    let devices = store
+        .backfill_push_device_owners(LEGACY_TOKEN_ID)
+        .context("assign push device owners")?;
+    let peers = store
+        .backfill_vpn_peer_owners(LEGACY_TOKEN_ID)
+        .context("assign vpn peer owners")?;
+    if devices + peers > 0 {
+        tracing::info!(
+            devices,
+            peers,
+            "legacy devices assigned to the legacy token"
+        );
+    }
     tracing::info!(
         tokens = snapshot.tokens.len(),
         revision = snapshot.revision,

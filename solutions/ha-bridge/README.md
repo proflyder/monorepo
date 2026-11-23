@@ -574,7 +574,7 @@ retention 30 дней / 20 000 записей, без параметров ша�
 | Переменная | Обяз. | По умолчанию | Смысл |
 | --- | --- | --- | --- |
 | `HA_URL`, `HA_TOKEN[_FILE]`, `HA_CA_FILE` | да | — | Как у ha-bridge/ha-control |
-| `SCHEDULER_ENDPOINT`, `SCHEDULER_TOKEN[_FILE]`, `SCHEDULER_CA_FILE` | да | — | Как у ha-control |
+| `SCHEDULER_ENDPOINT`, `SCHEDULER_SERVICE_TOKEN[_FILE]`, `SCHEDULER_CA_FILE` | да | — | Как у ha-control |
 | `SCENARIO_CONSUMER_ID` | да | — | Стабильный id потребителя |
 | `SCENARIO_QUEUE` | нет | `scenario` | `home`/`tasks` запрещены |
 | `SCENARIO_EXECUTE` | нет | `false` | `true` включает lease/execute/ack |

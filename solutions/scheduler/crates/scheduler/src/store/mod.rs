@@ -24,7 +24,7 @@ pub use crate::domain::{
     ScenarioStep, ScenarioTimeTrigger, ScenarioTrigger, Schedule, ScheduleKind, SourceKind, Timer,
     TimerState,
 };
-pub use access::AccessToken;
+pub use access::{AccessToken, LEGACY_TOKEN_ID, MAX_APP_TOKENS, OWNER_TOKEN_ID};
 pub use notifications::{
     DEFAULT_HISTORY_LIMIT, MAX_HISTORY_LIMIT, Notification, NotificationInput, NotificationKind,
     NotificationPage,
@@ -36,7 +36,7 @@ pub use vpn::{VpnPeer, VpnPeerInput, VpnPool, is_wireguard_key as vpn_key_is_val
 
 use crate::domain::ScheduleKind as DomainScheduleKind;
 
-pub const SCHEMA_VERSION: i64 = 9;
+pub const SCHEMA_VERSION: i64 = 10;
 
 pub const QUEUE_HOME: &str = "home";
 pub const QUEUE_TASKS: &str = "tasks";
@@ -188,6 +188,11 @@ const V7: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS notifications_device ON notifications(device_id, created_unix DESC)",
 ];
 
+const V10: &[&str] = &[
+    "ALTER TABLE vpn_peers ADD COLUMN token_id TEXT NOT NULL DEFAULT ''",
+    "CREATE INDEX IF NOT EXISTS vpn_peers_owner ON vpn_peers(token_id)",
+];
+
 const V9: &[&str] = &[
     "ALTER TABLE push_devices ADD COLUMN token_id TEXT NOT NULL DEFAULT ''",
     "CREATE INDEX IF NOT EXISTS push_devices_owner ON push_devices(token_id, updated_unix)",
@@ -255,9 +260,14 @@ pub const MIGRATIONS: &[Migration] = &[
         statements: V8,
     },
     Migration {
-        version: SCHEMA_VERSION,
+        version: 9,
         description: "scheduler v9 push device ownership",
         statements: V9,
+    },
+    Migration {
+        version: SCHEMA_VERSION,
+        description: "scheduler v10 vpn peer ownership",
+        statements: V10,
     },
 ];
 

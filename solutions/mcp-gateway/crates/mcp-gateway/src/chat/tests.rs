@@ -671,9 +671,11 @@ async fn the_wyoming_client_streams_audio_and_reads_the_transcript() {
     );
 }
 
+type SentPush = (String, String, String, Option<String>);
+
 #[derive(Default)]
 struct RecordingPush {
-    sent: Mutex<Vec<(String, String, Option<String>)>>,
+    sent: Mutex<Vec<SentPush>>,
 }
 
 impl crate::push::PushApi for RecordingPush {
@@ -691,12 +693,23 @@ impl crate::push::PushApi for RecordingPush {
 
     fn notify<'a>(
         &'a self,
+        _title: &'a str,
+        _body: &'a str,
+        _deep_link: Option<&'a str>,
+        _device: Option<&'a str>,
+    ) -> BoxFuture<'a, Result<crate::push::Delivery, String>> {
+        Box::pin(async { Err("chat pushes must name a module".to_owned()) })
+    }
+
+    fn notify_module<'a>(
+        &'a self,
+        module: home_app_auth::Module,
         title: &'a str,
         body: &'a str,
         deep_link: Option<&'a str>,
-        _device: Option<&'a str>,
     ) -> BoxFuture<'a, Result<crate::push::Delivery, String>> {
         self.sent.lock().expect("sent").push((
+            module.id().to_owned(),
             title.to_owned(),
             body.to_owned(),
             deep_link.map(str::to_owned),
@@ -804,11 +817,13 @@ async fn alerts_become_cards_that_resolve_in_place_and_push_once() {
         pushes,
         vec![
             (
+                "alerts".to_owned(),
                 "🔴 KubePodCrashLooping".to_owned(),
                 "scheduler перезапускается".to_owned(),
                 Some("home://chat/message/m_0001".to_owned())
             ),
             (
+                "chat".to_owned(),
                 "Рикардо".to_owned(),
                 "Разбираюсь: OOMKilled.".to_owned(),
                 Some(format!(

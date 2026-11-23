@@ -199,8 +199,11 @@ Read-only агрегатор для вкладки «Система» Android-п
   принимает общий `home-app-auth` по snapshot scheduler (`/v1/access/snapshot`,
   кэш 30 с). `/v1/system/*` требует модуль `system` (по умолчанию только
   owner), `/v1/chat/*` — `chat`. MCP- и voice-токены здесь отклоняются
-  (`401`, realm `home-app`). `MCP_APP_TOKEN_FILE` остаётся только флагом
-  включения app-маршрутов и legacy-токеном «Мама».
+  (`401`, realm `home-app`). Маршруты включает `MCP_APP_API=true`; snapshot
+  читается service-токеном `MCP_SCHEDULER_SERVICE_TOKEN_FILE`.
+- Push из чата: alert-карточки уходят с `module=alerts`, ответы ассистента —
+  с `module=chat`; scheduler доставляет их только устройствам токенов с этим
+  модулем (и owner).
 - Внешний маршрут (только `/v1/system/` и `/v1/chat/`, без `/mcp`) — в
   [README деплоя](../../projects/home/kubernetes/mcp-gateway/README.md).
 - Кэш секции 15 с (`CACHE_TTL`); параллельные запросы делят одно обновление.
@@ -382,8 +385,8 @@ Android ──/v1/chat/*──► mcp-gateway ──► chat relay (voice-proxy)
 | `MCP_SCHEDULER_SERVICE_TOKEN_FILE` | для `time`/app | — | обязательный service-token планировщика (`scheduler-auth#service_token`). |
 | `MCP_PUSH_URL` | для `phone` | — | База `solutions/phone-push`, например `http://phone-push.home-assistant.svc.cluster.local:8095`. |
 | `MCP_PUSH_SERVICE_TOKEN_FILE` | для `phone` | — | обязательный service-token phone-push. |
-| `MCP_APP_TOKEN_FILE` | нет | — | Включает `/v1/system/*` и `/v1/chat/*`; значение — legacy app-токен «Мама» из `scheduler-auth#token`. |
-| `MCP_CHAT_HERMES_URL` | нет | — | Включает `/v1/chat/*`: база chat relay. Требует `MCP_APP_TOKEN_FILE`. |
+| `MCP_APP_API` | нет | `false` | `true` включает `/v1/system/*` и `/v1/chat/*`; требует `MCP_SCHEDULER_URL` и `MCP_SCHEDULER_SERVICE_TOKEN_FILE`. |
+| `MCP_CHAT_HERMES_URL` | нет | — | Включает `/v1/chat/*`: база chat relay. Требует `MCP_APP_API=true`. |
 | `MCP_CHAT_HERMES_TOKEN_FILE` | для чата | — | Bearer chat relay (`secret/k8s/home-assistant/hermes-chat-relay`, ключ `token`). |
 | `MCP_CHAT_PROMPT_FILE` | для чата | — | Системный промпт беседы приложения (`chat-prompt.txt` из ConfigMap). |
 | `MCP_CHAT_SESSION` | нет | `home-app` | Id сессии Hermes; должен совпадать с `HERMES_CHAT_RELAY_SESSION`. |

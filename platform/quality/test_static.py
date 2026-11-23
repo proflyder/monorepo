@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import re
 import shutil
 import subprocess
 import unittest
@@ -322,6 +323,93 @@ class KubernetesConfigMapSecretTests(unittest.TestCase):
                     if isinstance(value, str) and key_pattern.search(value):
                         problems.append(f"{path}: data.{key} value")
         self.assertEqual(problems, [])
+
+
+
+ENV_CONTRACT = {
+    "projects/home/kubernetes/scheduler/manifests/scheduler.yaml": (
+        "solutions/scheduler/crates/scheduler/src",
+        {
+            "SCHEDULER_TOKEN_FILE",
+            "SCHEDULER_SERVICE_TOKEN_FILE",
+            "SCHEDULER_SERVICE_TOKEN_PREVIOUS_FILE",
+            "SCHEDULER_APP_TOKENS_FILE",
+        },
+    ),
+    "projects/home/kubernetes/scheduler/manifests/bridge.yaml": (
+        "solutions/ha-bridge/crates/ha-bridge/src",
+        {"SCHEDULER_SERVICE_TOKEN_FILE"},
+    ),
+    "projects/home/kubernetes/scheduler/manifests/control.yaml": (
+        "solutions/ha-bridge/crates/ha-bridge/src",
+        {"SCHEDULER_SERVICE_TOKEN_FILE"},
+    ),
+    "projects/home/kubernetes/scheduler/manifests/scenario.yaml": (
+        "solutions/ha-bridge/crates/ha-bridge/src",
+        {"SCHEDULER_SERVICE_TOKEN_FILE"},
+    ),
+    "projects/home/kubernetes/intercom/manifests/intercom.yaml": (
+        "solutions/intercom/crates/intercom/src",
+        {"INTERCOM_SERVICE_TOKEN_FILE", "INTERCOM_ACCESS_URL"},
+    ),
+    "projects/home/kubernetes/mcp-gateway/manifests/deployment.yaml": (
+        "solutions/mcp-gateway/crates/mcp-gateway/src",
+        {"MCP_SCHEDULER_SERVICE_TOKEN_FILE", "MCP_APP_API"},
+    ),
+    "projects/home/kubernetes/phone-push/manifests/phone-push.yaml": (
+        "solutions/phone-push/crates/phone-push/src",
+        {"PUSH_SCHEDULER_SERVICE_TOKEN_FILE"},
+    ),
+}
+SHARED_ENV_SOURCES = ("packages/rust",)
+LEGACY_TOKEN_ENV = {
+    "SCHEDULER_TOKEN_FILE": {"scheduler.yaml"},
+    "MCP_APP_TOKEN_FILE": set(),
+    "MCP_SCHEDULER_TOKEN_FILE": set(),
+    "INTERCOM_TOKEN_FILE": set(),
+    "PUSH_SCHEDULER_TOKEN_FILE": set(),
+}
+
+
+def env_names_read_by(directory: str) -> set[str]:
+    names = set()
+    for base in (directory, *SHARED_ENV_SOURCES):
+        for path in (ROOT / base).rglob("*.rs"):
+            text = path.read_text(encoding="utf-8")
+            text = text.split("#[cfg(test)]", 1)[0]
+            names.update(re.findall(r'"([A-Z][A-Z0-9_]{2,})"', text))
+    return names | {f"{name}_FILE" for name in names}
+
+
+def manifest_env(path: str) -> set[str]:
+    names = set()
+    for document in yaml.safe_load_all((ROOT / path).read_text(encoding="utf-8")):
+        if not isinstance(document, dict) or document.get("kind") != "Deployment":
+            continue
+        for container in document["spec"]["template"]["spec"].get("containers", []):
+            names.update(item["name"] for item in container.get("env") or [])
+    return names
+
+
+class ServiceEnvContractTests(unittest.TestCase):
+    def test_every_manifest_variable_is_read_by_the_service(self):
+        for manifest, (source, _) in ENV_CONTRACT.items():
+            unknown = manifest_env(manifest) - env_names_read_by(source)
+            self.assertEqual(unknown, set(), f"{manifest} sets variables nobody reads")
+
+    def test_token_variables_the_service_requires_are_set(self):
+        for manifest, (source, required) in ENV_CONTRACT.items():
+            self.assertLessEqual(required, env_names_read_by(source), source)
+            missing = required - manifest_env(manifest)
+            self.assertEqual(missing, set(), f"{manifest} misses {sorted(missing)}")
+
+    def test_no_manifest_passes_a_removed_legacy_token_variable(self):
+        for manifest in ENV_CONTRACT:
+            env = manifest_env(manifest)
+            for name, allowed in LEGACY_TOKEN_ENV.items():
+                if Path(manifest).name in allowed:
+                    continue
+                self.assertNotIn(name, env, manifest)
 
 
 if __name__ == "__main__":

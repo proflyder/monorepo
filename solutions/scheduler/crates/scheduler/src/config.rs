@@ -25,7 +25,6 @@ pub struct Config {
     pub service_token: Secret,
     pub service_token_previous: Option<Secret>,
     pub access_seed_file: Option<PathBuf>,
-    pub owner_device_name: String,
     pub missed_grace: Duration,
     pub ring_window: Duration,
     pub event_retention: Duration,
@@ -70,7 +69,9 @@ pub enum ConfigError {
     TokenRequired,
     #[error("SCHEDULER_TOKEN_FILE: cannot read token file")]
     TokenFile,
-    #[error("SCHEDULER_SERVICE_TOKEN or SCHEDULER_SERVICE_TOKEN_FILE is invalid")]
+    #[error(
+        "SCHEDULER_SERVICE_TOKEN[_FILE] is missing, unreadable or equal to the application token"
+    )]
     ServiceToken,
     #[error("{0}")]
     Invalid(String),
@@ -93,12 +94,14 @@ impl Config {
         let token = load_token(getenv, read_file)?;
         let service_token = load_service_token(getenv, read_file)?;
         let service_token_previous = load_previous_service_token(getenv, read_file)?;
-        if token.ct_eq(service_token.expose()) {
+        if token.ct_eq(service_token.expose())
+            || service_token_previous
+                .as_ref()
+                .is_some_and(|previous| token.ct_eq(previous.expose()))
+        {
             return Err(ConfigError::ServiceToken);
         }
         let access_seed_file = first(getenv, &["SCHEDULER_APP_TOKENS_FILE"]).map(PathBuf::from);
-        let owner_device_name =
-            first(getenv, &["SCHEDULER_OWNER_DEVICE_NAME"]).unwrap_or_else(|| "Стас".to_owned());
 
         let missed_grace = duration_seconds(
             getenv,
@@ -159,7 +162,6 @@ impl Config {
             service_token,
             service_token_previous,
             access_seed_file,
-            owner_device_name,
             missed_grace,
             ring_window,
             event_retention,
@@ -442,6 +444,20 @@ mod tests {
             Some(PathBuf::from("/run/app_tokens"))
         );
         assert_eq!(config.service_token_previous, None);
+    }
+
+    #[test]
+    fn the_previous_service_token_must_not_be_the_app_token() {
+        let error = Config::load_from(
+            &env(&[
+                ("SCHEDULER_TOKEN", "legacy"),
+                ("SCHEDULER_SERVICE_TOKEN", "service"),
+                ("SCHEDULER_SERVICE_TOKEN_PREVIOUS", "legacy"),
+            ]),
+            &no_file,
+        )
+        .expect_err("legacy token as previous service token");
+        assert!(error.to_string().contains("SCHEDULER_SERVICE_TOKEN"));
     }
 
     #[test]

@@ -40,16 +40,10 @@ pub async fn run() -> anyhow::Result<()> {
     ));
     let source: Arc<dyn CatalogSource> = provider;
     let access = AccessClient::new(
-        format!(
-            "{}/v1/access/snapshot",
-            config.scheduler_url.trim_end_matches('/')
-        ),
+        home_app_auth::snapshot_url(&config.scheduler_url),
         config.scheduler_token.expose(),
     )
     .map_err(anyhow::Error::msg)?;
-    if let Err(error) = access.refresh().await {
-        tracing::warn!(%error, "catalog access snapshot is unavailable");
-    }
     let router = home_http::with_timeout(
         catalog_api::router(Arc::clone(&source), access.clone()),
         REQUEST_TIMEOUT,
@@ -75,7 +69,7 @@ pub async fn run() -> anyhow::Result<()> {
         let client = access.clone();
         let refresh_cancel = cancel.clone();
         supervisor.spawn("access-refresh", async move {
-            client.run(refresh_cancel, ACCESS_REFRESH).await;
+            client.run(refresh_cancel).await;
         });
     }
 
@@ -191,8 +185,6 @@ fn presence(token: &home_secret::Token) -> &'static str {
         "set"
     }
 }
-
-const ACCESS_REFRESH: Duration = Duration::from_secs(30);
 
 #[cfg(test)]
 mod tests {

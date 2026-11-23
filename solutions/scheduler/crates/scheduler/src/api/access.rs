@@ -107,14 +107,19 @@ fn store_error(error: StoreError) -> Response {
             Json(json!({"error": "conflict", "detail": domain.to_string()})),
         )
             .into_response(),
+        StoreError::Domain(domain) if domain.kind() == crate::domain::ErrorKind::LimitExceeded => (
+            StatusCode::TOO_MANY_REQUESTS,
+            Json(json!({"error": "limit", "detail": domain.to_string()})),
+        )
+            .into_response(),
         StoreError::Domain(domain) => (
             StatusCode::BAD_REQUEST,
             Json(json!({"error": "invalid", "detail": domain.to_string()})),
         )
             .into_response(),
-        other => (
+        _ => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": "internal", "detail": other.to_string()})),
+            Json(json!({"error": "internal"})),
         )
             .into_response(),
     }
@@ -266,24 +271,19 @@ pub async fn update(
     {
         return forbidden(error);
     }
-    if let Some(name) = body.name.as_deref()
-        && let Err(error) = state.store.access_rename(&id, name, super::now_unix())
-    {
-        return store_error(error);
-    }
-    if let Some(values) = body.modules {
-        let modules = match parse_modules(&values) {
-            Ok(modules) => modules,
+    let modules = match body.modules.as_ref() {
+        Some(values) => match parse_modules(values) {
+            Ok(modules) => Some(modules),
             Err(response) => return *response,
-        };
-        if let Err(error) = state
-            .store
-            .access_set_modules(&id, &modules, super::now_unix())
-        {
-            return store_error(error);
-        }
-    }
-    let updated = match state.store.access_token(&id) {
+        },
+        None => None,
+    };
+    let updated = match state.store.access_update(
+        &id,
+        body.name.as_deref(),
+        modules.as_ref(),
+        super::now_unix(),
+    ) {
         Ok(token) => token,
         Err(error) => return store_error(error),
     };
@@ -326,11 +326,14 @@ pub async fn revoke(
 }
 
 pub async fn snapshot(State(state): State<AccessState>, headers: HeaderMap) -> Response {
-    if !state
-        .auth
-        .service_authorized(headers.get(header::AUTHORIZATION))
-    {
-        return forbidden(Forbidden::ServiceOnly);
+    let authorization = headers.get(header::AUTHORIZATION);
+    if !state.auth.service_authorized(authorization) {
+        let known_app = state.auth.authenticate(authorization).is_ok();
+        return forbidden(if known_app {
+            Forbidden::ServiceOnly
+        } else {
+            Forbidden::Unauthenticated
+        });
     }
     match state.store.access_snapshot() {
         Ok(snapshot) => Json(snapshot).into_response(),
@@ -364,7 +367,7 @@ mod tests {
                         .collect(),
                 },
                 TokenRecord {
-                    id: "mama".to_owned(),
+                    id: "member".to_owned(),
                     name: "Мама".to_owned(),
                     sha256: sha256_hex("mama-token"),
                     owner: false,
@@ -469,7 +472,13 @@ mod tests {
             read_body(list(State(state.clone()), headers("owner-token")).await).await;
         assert_eq!(status, StatusCode::OK);
         assert!(!listed.to_string().contains(&token));
-        assert!(listed["tokens"][1].get("sha256").is_none());
+        let listed_tokens = listed["tokens"].as_array().expect("tokens");
+        assert!(
+            listed_tokens
+                .iter()
+                .all(|item| item.get("sha256").is_none())
+        );
+        assert!(listed_tokens.iter().any(|item| item["name"] == "Гость"));
         assert!(
             !snapshot
                 .authenticate_token(&token)
@@ -484,10 +493,57 @@ mod tests {
         let (status, _) =
             read_body(snapshot(State(state.clone()), headers("owner-token")).await).await;
         assert_eq!(status, StatusCode::FORBIDDEN);
+        let (status, _) = read_body(snapshot(State(state.clone()), HeaderMap::new()).await).await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
         let (status, body) =
             read_body(snapshot(State(state), headers("service-token")).await).await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["revision"], 1);
+    }
+
+    #[tokio::test]
+    async fn unknown_modules_are_a_bad_request_and_limits_are_429() {
+        let state = state();
+        let (status, body) = read_body(
+            create(
+                State(state.clone()),
+                headers("owner-token"),
+                Json(CreateBody {
+                    name: "Гость".to_owned(),
+                    modules: vec!["alarm_timers".to_owned()],
+                }),
+            )
+            .await,
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+        for index in state.store.access_list().expect("list").len()
+            ..usize::try_from(crate::store::MAX_APP_TOKENS).expect("limit")
+        {
+            state
+                .store
+                .access_create(
+                    &format!("t{index}"),
+                    &format!("T{index}"),
+                    &sha256_hex(&format!("t{index}")),
+                    &Modules::member(),
+                    10,
+                )
+                .expect("fill");
+        }
+        let (status, _) = read_body(
+            create(
+                State(state),
+                headers("owner-token"),
+                Json(CreateBody {
+                    name: "Лишний".to_owned(),
+                    modules: vec!["home".to_owned()],
+                }),
+            )
+            .await,
+        )
+        .await;
+        assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
     }
 
     #[test]

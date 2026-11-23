@@ -40,9 +40,6 @@ pub async fn run() -> anyhow::Result<()> {
     let api = Api::new(Arc::clone(&intercom), VERSION);
     let access = AccessClient::new(config.access_url.clone(), config.service_token.expose())
         .map_err(anyhow::Error::msg)?;
-    if let Err(error) = access.refresh().await {
-        tracing::warn!(%error, "intercom access snapshot is unavailable");
-    }
     let auth = TokenAuth::new(
         access.clone(),
         &config.phone.id,
@@ -73,7 +70,7 @@ pub async fn run() -> anyhow::Result<()> {
         let client = access.clone();
         let refresh_cancel = cancel.clone();
         supervisor.spawn("access-refresh", async move {
-            client.run(refresh_cancel, REFRESH).await;
+            client.run(refresh_cancel).await;
         });
     }
     let ticker = Arc::clone(&intercom);
@@ -110,5 +107,3 @@ pub async fn run() -> anyhow::Result<()> {
     serve_result.context("serve")?;
     Ok(())
 }
-
-const REFRESH: Duration = Duration::from_secs(30);

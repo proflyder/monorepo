@@ -296,9 +296,13 @@ fn method_module(path: &str) -> Option<Option<Module>> {
 fn connect_forbidden(forbidden: Forbidden) -> ConnectError {
     match forbidden {
         Forbidden::Unauthenticated => ConnectError::unauthenticated("unauthenticated"),
-        Forbidden::ServiceOnly | Forbidden::Module(_) => {
-            ConnectError::permission_denied(forbidden.body())
-        }
+        Forbidden::ServiceOnly => ConnectError::permission_denied("service_only"),
+        Forbidden::Module(module) => ConnectError::permission_denied("module_forbidden")
+            .with_detail(connectrpc::error::ErrorDetail {
+                type_url: "home.v1.ModuleForbidden".to_owned(),
+                value: None,
+                debug: Some(serde_json::json!({"module": module.id()})),
+            }),
     }
 }
 
@@ -427,8 +431,39 @@ mod tests {
 
     #[test]
     fn the_table_covers_every_registered_rpc() {
-        let expected: Vec<&str> = RPC_MODULES.iter().map(|(name, _)| *name).collect();
-        assert_eq!(expected.len(), 35);
+        let protos = [
+            (
+                "home.v1.SchedulerService",
+                include_str!("../../../../../../packages/proto/home/v1/scheduler.proto"),
+            ),
+            (
+                "home.v1.AlarmService",
+                include_str!("../../../../../../packages/proto/home/v1/alarms.proto"),
+            ),
+            (
+                "home.v1.ScenarioService",
+                include_str!("../../../../../../packages/proto/home/v1/scenario.proto"),
+            ),
+        ];
+        let mut expected = Vec::new();
+        for (service, text) in protos {
+            for line in text.lines() {
+                let line = line.trim();
+                if let Some(rest) = line.strip_prefix("rpc ")
+                    && let Some(name) = rest.split('(').next()
+                {
+                    expected.push(format!("{service}/{}", name.trim()));
+                }
+            }
+        }
+        let mapped: Vec<String> = RPC_MODULES
+            .iter()
+            .map(|(name, _)| (*name).to_owned())
+            .collect();
+        expected.sort();
+        let mut mapped = mapped;
+        mapped.sort();
+        assert_eq!(mapped, expected);
     }
 
     #[test]

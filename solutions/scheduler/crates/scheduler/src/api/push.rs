@@ -195,10 +195,13 @@ pub async fn list(
         Err(response) => return *response,
     };
     let scope = scope(&caller);
-    let module = query
-        .module
-        .as_deref()
-        .and_then(home_app_auth::Module::from_id);
+    let module = match query.module.as_deref().map(str::trim) {
+        None | Some("") => None,
+        Some(id) => match home_app_auth::Module::from_id(id) {
+            Some(module) => Some(module),
+            None => return error(StatusCode::BAD_REQUEST, "unknown module"),
+        },
+    };
     let allowed = module.map(|module| state.cache.token_ids_with(module));
     match blocking(Arc::clone(&state.store), move |store| {
         store.list_push_devices_for(scope)
@@ -322,6 +325,112 @@ mod tests {
             .header(header::CONTENT_TYPE, "application/json")
             .body(Body::from(body.to_owned()))
             .expect("request")
+    }
+
+    fn scoped_app() -> (Router, Arc<Store>) {
+        let record = |id: &str, owner: bool, modules: &[&str]| home_app_auth::TokenRecord {
+            id: id.to_owned(),
+            name: id.to_owned(),
+            sha256: home_app_auth::sha256_hex(&format!("{id}-token")),
+            owner,
+            modules: modules.iter().map(|module| (*module).to_owned()).collect(),
+        };
+        let cache = AccessCache::new(home_app_auth::AccessSnapshot {
+            revision: 1,
+            tokens: vec![
+                record("owner", true, &["admin"]),
+                record("member", false, &["notifications"]),
+            ],
+        });
+        let store = Arc::new(Store::open_in_memory(Config::default()).expect("store"));
+        let state = PushState {
+            store: Arc::clone(&store),
+            auth: Arc::new(AccessAuth::new(
+                cache.clone(),
+                home_secret::Token::new("service-token"),
+            )),
+            cache,
+        };
+        let router = Router::new()
+            .route("/v1/push/devices", get(list).post(register))
+            .route("/v1/push/devices/remove", post(remove))
+            .route("/v1/push/devices/rename", post(rename))
+            .with_state(state);
+        (router, store)
+    }
+
+    fn as_token(method: &str, uri: &str, token: &str, body: &str) -> Request<Body> {
+        Request::builder()
+            .method(method)
+            .uri(uri)
+            .header(header::AUTHORIZATION, format!("Bearer {token}"))
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(body.to_owned()))
+            .expect("request")
+    }
+
+    #[tokio::test]
+    async fn a_member_token_only_sees_and_changes_its_own_devices() {
+        let (router, store) = scoped_app();
+        let owner_device = r#"{"deviceId":"device-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "token":"token-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","platform":"android"}"#;
+        let member_device = r#"{"deviceId":"device-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "token":"token-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","platform":"android"}"#;
+        let (status, _) = call(
+            router.clone(),
+            as_token("POST", "/v1/push/devices", "owner-token", owner_device),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let (status, _) = call(
+            router.clone(),
+            as_token("POST", "/v1/push/devices", "member-token", member_device),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+
+        let (status, listed) = call(
+            router.clone(),
+            as_token("GET", "/v1/push/devices", "member-token", ""),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(listed.contains("device-bbbb"), "{listed}");
+        assert!(!listed.contains("device-aaaa"), "{listed}");
+
+        let rename = r#"{"deviceId":"device-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","deviceName":"x"}"#;
+        let (status, _) = call(
+            router.clone(),
+            as_token("POST", "/v1/push/devices/rename", "member-token", rename),
+        )
+        .await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+        let remove = r#"{"token":"token-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}"#;
+        let (status, body) = call(
+            router.clone(),
+            as_token("POST", "/v1/push/devices/remove", "member-token", remove),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(body.contains("false"), "{body}");
+        assert_eq!(store.list_push_devices().expect("list").len(), 2);
+
+        let (status, alerts) = call(
+            router.clone(),
+            as_token("GET", "/v1/push/devices?module=alerts", "service-token", ""),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(
+            alerts.contains("device-aaaa") && !alerts.contains("device-bbbb"),
+            "{alerts}"
+        );
+        let (status, _) = call(
+            router,
+            as_token("GET", "/v1/push/devices?module=alarms", "service-token", ""),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
     }
 
     #[tokio::test]

@@ -41,8 +41,7 @@ async fn spawn() -> Server {
         Vec::new(),
         Arc::new(SystemClock),
     ));
-    let access = home_app_auth::AccessClient::new("http://test", "test").expect("client");
-    access.cache().replace(home_app_auth::AccessSnapshot {
+    let access = home_app_auth::AccessClient::fixed(home_app_auth::AccessSnapshot {
         revision: 1,
         tokens: vec![home_app_auth::TokenRecord {
             id: "phone".to_owned(),

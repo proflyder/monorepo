@@ -191,8 +191,8 @@ unclear. `StationTimeRoute*` in HA is only a forwarder to this agent, never an
 alarm parser.
 
 `MCP_GROUPS` on the gateway must include `time`, and the gateway needs
-`MCP_SCHEDULER_URL` + `MCP_SCHEDULER_TOKEN_FILE`
-(`k8s/home-assistant/scheduler-auth`, key `token`). Both are part of the
+`MCP_SCHEDULER_URL` + `MCP_SCHEDULER_SERVICE_TOKEN_FILE`
+(`k8s/home-assistant/scheduler-auth`, key `service_token`). Both are part of the
 Flux-rendered mcp-gateway manifest set, not the Hermes PVC.
 
 ## Phone tools (mcp-gateway `phone`)
@@ -218,7 +218,7 @@ short question. The reply names the phone that rang. The voice prompt,
 the phone group.
 
 `MCP_GROUPS` must include `phone`; the gateway needs `MCP_PUSH_URL` and
-`MCP_PUSH_TOKEN_FILE` (the shared app bearer, `scheduler-auth`). The FCM
+`MCP_PUSH_SERVICE_TOKEN_FILE` (the service token, `scheduler-auth#service_token`). The FCM
 service account lives only in the `phone-push` pod. The phone registers its
 token with the scheduler on the endpoint it already has, so no Remote Config
 change is needed for push.

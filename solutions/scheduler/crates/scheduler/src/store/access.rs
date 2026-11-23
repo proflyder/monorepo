@@ -26,15 +26,7 @@ fn scan_token(row: &Row<'_>) -> rusqlite::Result<AccessToken> {
                 Box::new(error),
             )
         })
-        .and_then(|values| {
-            Modules::parse(&values).map_err(|error| {
-                rusqlite::Error::FromSqlConversionFailure(
-                    3,
-                    rusqlite::types::Type::Text,
-                    Box::new(error),
-                )
-            })
-        })?;
+        .map(|values| Modules::parse_lenient(&values).0)?;
     Ok(AccessToken {
         id: row.get(0)?,
         name: row.get(1)?,
@@ -121,20 +113,141 @@ pub fn snapshot(connection: &Connection) -> Result<AccessSnapshot, StoreError> {
     })
 }
 
+fn name_taken(
+    connection: &Connection,
+    name: &str,
+    except_id: Option<&str>,
+) -> Result<bool, StoreError> {
+    let wanted = name.trim().to_lowercase();
+    let mut statement =
+        connection.prepare("SELECT id, name FROM app_tokens WHERE revoked_unix = 0")?;
+    let rows = statement.query_map([], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+    })?;
+    for row in rows {
+        let (id, existing) = row?;
+        if Some(id.as_str()) != except_id && existing.trim().to_lowercase() == wanted {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+fn owner_id(connection: &Connection) -> Result<Option<String>, StoreError> {
+    Ok(connection
+        .query_row(
+            "SELECT id FROM app_tokens WHERE is_owner = 1 AND revoked_unix = 0",
+            [],
+            |row| row.get(0),
+        )
+        .optional()?)
+}
+
+fn import_seed_record(
+    transaction: &Connection,
+    record: &TokenRecord,
+    now_unix: i64,
+) -> Result<bool, StoreError> {
+    let (mut modules, unknown) = Modules::parse_lenient(&record.modules);
+    if !unknown.is_empty() {
+        tracing::warn!(
+            id = record.id.as_str(),
+            ?unknown,
+            "seed token grants unknown modules; ignored"
+        );
+    }
+    if !record.owner {
+        modules.remove(Module::Admin);
+    }
+    if record.owner && record.id != OWNER_TOKEN_ID {
+        tracing::warn!(
+            id = record.id.as_str(),
+            "seed owner token must use the owner id; skipped"
+        );
+        return Ok(false);
+    }
+    if !record.owner && (record.id == OWNER_TOKEN_ID || record.id == LEGACY_TOKEN_ID) {
+        tracing::warn!(
+            id = record.id.as_str(),
+            "seed token uses a reserved id; skipped"
+        );
+        return Ok(false);
+    }
+    let name = match clean_name(&record.name) {
+        Ok(name) => name,
+        Err(error) => {
+            tracing::warn!(id = record.id.as_str(), %error, "seed token name is invalid; skipped");
+            return Ok(false);
+        }
+    };
+    let modules_json = serde_json::to_string(&clean_modules(&modules, record.owner)?)
+        .map_err(|error| StoreError::invalid(error.to_string()))?;
+    let stored: Option<(String, String, i64)> = transaction
+        .query_row(
+            "SELECT sha256, name, revoked_unix FROM app_tokens WHERE id = ?1",
+            params![record.id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .optional()?;
+    let name_free = !name_taken(transaction, &name, Some(&record.id))?;
+    if !name_free {
+        tracing::warn!(
+            id = record.id.as_str(),
+            name = name.as_str(),
+            "seed token name is already used by another token; keeping the stored name"
+        );
+    }
+    match stored {
+        Some((_, _, revoked)) if revoked != 0 => {
+            tracing::warn!(id = record.id.as_str(), "seed token was revoked; skipped");
+            Ok(false)
+        }
+        Some((digest, stored_name, _)) => {
+            if !record.owner {
+                return Ok(false);
+            }
+            let target_name = if name_free { name } else { stored_name.clone() };
+            if digest == record.sha256 && target_name == stored_name {
+                return Ok(false);
+            }
+            transaction.execute(
+                "UPDATE app_tokens SET sha256 = ?1, modules_json = ?2, name = ?3, is_owner = 1, updated_unix = ?4 WHERE id = ?5",
+                params![record.sha256, modules_json, target_name, now_unix, record.id],
+            )?;
+            Ok(true)
+        }
+        None => {
+            if record.owner && owner_id(transaction)?.is_some() {
+                tracing::warn!("another owner token already exists; seed owner skipped");
+                return Ok(false);
+            }
+            if !name_free {
+                return Ok(false);
+            }
+            transaction.execute(
+                "INSERT INTO app_tokens (id, name, sha256, modules_json, is_owner, created_unix, updated_unix, revoked_unix)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6, 0)",
+                params![
+                    record.id,
+                    name,
+                    record.sha256,
+                    modules_json,
+                    i64::from(record.owner),
+                    now_unix
+                ],
+            )?;
+            Ok(true)
+        }
+    }
+}
+
+pub const MAX_APP_TOKENS: i64 = 64;
+pub const LEGACY_TOKEN_ID: &str = "mama";
+pub const OWNER_TOKEN_ID: &str = "owner";
+
 impl Store {
     pub fn access_snapshot(&self) -> Result<AccessSnapshot, StoreError> {
         self.read(snapshot)
-    }
-
-    pub fn access_legacy_imported(&self) -> Result<bool, StoreError> {
-        self.read(|connection| {
-            let value: i64 = connection.query_row(
-                "SELECT legacy_imported FROM access_meta WHERE id = 1",
-                [],
-                |row| row.get(0),
-            )?;
-            Ok(value != 0)
-        })
     }
 
     pub fn access_import_legacy(&self, digest: &str, now_unix: i64) -> Result<bool, StoreError> {
@@ -185,53 +298,7 @@ impl Store {
         self.with_tx(move |transaction| {
             let mut changed = false;
             for record in &snapshot.tokens {
-                let mut modules = Modules::parse(&record.modules)
-                    .map_err(|error| StoreError::invalid(error.to_string()))?;
-                if !record.owner {
-                    modules.remove(Module::Admin);
-                }
-                let modules_json = serde_json::to_string(&clean_modules(&modules, record.owner)?)
-                    .map_err(|error| StoreError::invalid(error.to_string()))?;
-                let existing = token(transaction, &record.id)?;
-                if let Some(existing) = existing {
-                    if record.owner && existing.owner {
-                        let digest: String = transaction.query_row(
-                            "SELECT sha256 FROM app_tokens WHERE id = ?1",
-                            params![record.id],
-                            |row| row.get(0),
-                        )?;
-                        if digest != record.sha256 {
-                            transaction.execute(
-                                "UPDATE app_tokens SET sha256 = ?, modules_json = ?, name = ?, updated_unix = ? WHERE id = ?",
-                                params![record.sha256, modules_json, record.name, now_unix, record.id],
-                            )?;
-                            changed = true;
-                        }
-                    }
-                    continue;
-                }
-                let name_taken: i64 = transaction.query_row(
-                    "SELECT COUNT(*) FROM app_tokens WHERE name = ?",
-                    params![record.name],
-                    |row| row.get(0),
-                )?;
-                if name_taken != 0 {
-                    continue;
-                }
-                transaction.execute(
-                    "INSERT INTO app_tokens (id, name, sha256, modules_json, is_owner, created_unix, updated_unix, revoked_unix)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, 0)",
-                    params![
-                        record.id,
-                        record.name,
-                        record.sha256,
-                        modules_json,
-                        i64::from(record.owner),
-                        now_unix,
-                        now_unix
-                    ],
-                )?;
-                changed = true;
+                changed |= import_seed_record(transaction, record, now_unix)?;
             }
             if changed {
                 bump(transaction)?;
@@ -278,13 +345,16 @@ impl Store {
         let id = id.to_owned();
         let digest = digest.to_owned();
         self.with_tx(move |transaction| {
-            let duplicate: i64 = transaction.query_row(
-                "SELECT COUNT(*) FROM app_tokens WHERE lower(name) = lower(?) AND revoked_unix = 0",
-                params![name],
+            let count: i64 = transaction.query_row(
+                "SELECT COUNT(*) FROM app_tokens WHERE revoked_unix = 0",
+                [],
                 |row| row.get(0),
             )?;
-            if duplicate != 0 {
-                return Err(StoreError::invalid("token name is already used"));
+            if count >= MAX_APP_TOKENS {
+                return Err(StoreError::limit("too many application tokens"));
+            }
+            if name_taken(transaction, &name, None)? {
+                return Err(StoreError::precondition("token name is already used"));
             }
             transaction.execute(
                 "INSERT INTO app_tokens (id, name, sha256, modules_json, is_owner, created_unix, updated_unix, revoked_unix)
@@ -296,60 +366,57 @@ impl Store {
         })
     }
 
-    pub fn access_rename(
+    pub fn access_update(
         &self,
         id: &str,
-        name: &str,
-        now_unix: i64,
-    ) -> Result<AccessToken, StoreError> {
-        let name = clean_name(name)?;
-        let id = id.to_owned();
-        self.with_tx(move |transaction| {
-            token(transaction, &id)?.ok_or(StoreError::NotFound)?;
-            let duplicate: i64 = transaction.query_row(
-                "SELECT COUNT(*) FROM app_tokens WHERE lower(name) = lower(?) AND id != ? AND revoked_unix = 0",
-                params![name, id],
-                |row| row.get(0),
-            )?;
-            if duplicate != 0 {
-                return Err(StoreError::invalid("token name is already used"));
-            }
-            transaction.execute(
-                "UPDATE app_tokens SET name = ?, updated_unix = ? WHERE id = ?",
-                params![name, now_unix, id],
-            )?;
-            bump(transaction)?;
-            token(transaction, &id)?.ok_or(StoreError::NotFound)
-        })
-    }
-
-    pub fn access_set_modules(
-        &self,
-        id: &str,
-        modules: &Modules,
+        name: Option<&str>,
+        modules: Option<&Modules>,
         now_unix: i64,
     ) -> Result<AccessToken, StoreError> {
         let id = id.to_owned();
-        let requested = modules.clone();
+        let name = name.map(clean_name).transpose()?;
+        let requested = modules.cloned();
         self.with_tx(move |transaction| {
             let current = token(transaction, &id)?.ok_or(StoreError::NotFound)?;
-            if current.owner && !requested.contains(Module::Admin) {
-                return Err(StoreError::precondition(
-                    "owner token must keep the admin module",
-                ));
+            if let Some(name) = name.as_deref()
+                && name_taken(transaction, name, Some(&id))?
+            {
+                return Err(StoreError::precondition("token name is already used"));
             }
-            if !current.owner && requested.contains(Module::Admin) {
-                return Err(StoreError::precondition(
-                    "the admin module belongs to the owner token",
-                ));
+            let modules_json = match requested.as_ref() {
+                Some(requested) => {
+                    if current.owner && !requested.contains(Module::Admin) {
+                        return Err(StoreError::precondition(
+                            "owner token must keep the admin module",
+                        ));
+                    }
+                    if !current.owner && requested.contains(Module::Admin) {
+                        return Err(StoreError::precondition(
+                            "the admin module belongs to the owner token",
+                        ));
+                    }
+                    Some(
+                        serde_json::to_string(&clean_modules(requested, current.owner)?)
+                            .map_err(|error| StoreError::invalid(error.to_string()))?,
+                    )
+                }
+                None => None,
+            };
+            if let Some(name) = name.as_deref() {
+                transaction.execute(
+                    "UPDATE app_tokens SET name = ?, updated_unix = ? WHERE id = ?",
+                    params![name, now_unix, id],
+                )?;
             }
-            let modules_json = serde_json::to_string(&clean_modules(&requested, current.owner)?)
-                .map_err(|error| StoreError::invalid(error.to_string()))?;
-            transaction.execute(
-                "UPDATE app_tokens SET modules_json = ?, updated_unix = ? WHERE id = ?",
-                params![modules_json, now_unix, id],
-            )?;
-            bump(transaction)?;
+            if let Some(modules_json) = modules_json {
+                transaction.execute(
+                    "UPDATE app_tokens SET modules_json = ?, updated_unix = ? WHERE id = ?",
+                    params![modules_json, now_unix, id],
+                )?;
+            }
+            if name.is_some() || requested.is_some() {
+                bump(transaction)?;
+            }
             token(transaction, &id)?.ok_or(StoreError::NotFound)
         })
     }
@@ -368,8 +435,9 @@ impl Store {
                 params![id],
             )?;
             transaction.execute("DELETE FROM push_devices WHERE token_id = ?1", params![id])?;
+            transaction.execute("DELETE FROM vpn_peers WHERE token_id = ?1", params![id])?;
             transaction.execute(
-                "UPDATE app_tokens SET revoked_unix = ?, updated_unix = ? WHERE id = ?",
+                "UPDATE app_tokens SET name = name || '#' || id, revoked_unix = ?, updated_unix = ? WHERE id = ?",
                 params![now_unix, now_unix, id],
             )?;
             bump(transaction)?;
@@ -452,7 +520,7 @@ mod tests {
         store.access_import_seed(&snapshot, 10).expect("import");
         assert!(
             store
-                .access_set_modules("owner", &Modules::member(), 11)
+                .access_update("owner", None, Some(&Modules::member()), 11)
                 .is_err()
         );
         assert!(store.access_revoke("owner", 11).is_err());
@@ -471,10 +539,12 @@ mod tests {
             )
             .expect("create");
         assert!(created.modules.contains(Module::Notifications));
-        let renamed = store.access_rename("phone", "Kitchen", 11).expect("rename");
+        let renamed = store
+            .access_update("phone", Some("Kitchen"), None, 11)
+            .expect("rename");
         assert_eq!(renamed.name, "Kitchen");
         let updated = store
-            .access_set_modules("phone", &Modules::member(), 12)
+            .access_update("phone", None, Some(&Modules::member()), 12)
             .expect("modules");
         assert_eq!(updated.modules.ids(), Modules::member().ids());
         let revision = store.access_snapshot().expect("snapshot").revision;
@@ -482,16 +552,124 @@ mod tests {
         let snapshot = store.access_snapshot().expect("snapshot");
         assert!(snapshot.tokens.is_empty());
         assert!(snapshot.revision > revision);
+        store
+            .access_create(
+                "dup",
+                "Kitchen",
+                &sha256_hex("other"),
+                &Modules::member(),
+                14,
+            )
+            .expect("revoked name can be reused");
+    }
+
+    #[test]
+    fn names_are_unique_case_insensitively_including_cyrillic() {
+        let store = store();
+        store
+            .access_create("a", "Гость", &sha256_hex("a"), &Modules::member(), 10)
+            .expect("first");
+        let error = store
+            .access_create("b", "гость", &sha256_hex("b"), &Modules::member(), 11)
+            .expect_err("duplicate");
+        assert_eq!(error.kind(), Some(crate::domain::ErrorKind::Precondition));
+        store
+            .access_create("c", "Кухня", &sha256_hex("c"), &Modules::member(), 12)
+            .expect("other");
+        let error = store
+            .access_update("c", Some("ГОСТЬ"), None, 13)
+            .expect_err("rename to a used name");
+        assert_eq!(error.kind(), Some(crate::domain::ErrorKind::Precondition));
+    }
+
+    #[test]
+    fn a_failed_update_changes_nothing() {
+        let store = store();
+        store
+            .access_create("a", "Phone", &sha256_hex("a"), &Modules::member(), 10)
+            .expect("token");
+        let revision = store.access_snapshot().expect("snapshot").revision;
+        let mut admin = Modules::member();
+        admin.insert(Module::Admin);
         assert!(
             store
-                .access_create(
-                    "dup",
-                    "Kitchen",
-                    &sha256_hex("other"),
-                    &Modules::member(),
-                    14
-                )
+                .access_update("a", Some("Kitchen"), Some(&admin), 11)
                 .is_err()
+        );
+        assert_eq!(store.access_token("a").expect("token").name, "Phone");
+        assert_eq!(
+            store.access_snapshot().expect("snapshot").revision,
+            revision
+        );
+    }
+
+    #[test]
+    fn the_token_count_is_bounded() {
+        let store = store();
+        let existing = i64::try_from(store.access_list().expect("list").len()).expect("count");
+        for index in existing..MAX_APP_TOKENS {
+            store
+                .access_create(
+                    &format!("t{index}"),
+                    &format!("T{index}"),
+                    &sha256_hex(&format!("t{index}")),
+                    &Modules::member(),
+                    10,
+                )
+                .expect("within the limit");
+        }
+        let error = store
+            .access_create("x", "X", &sha256_hex("x"), &Modules::member(), 11)
+            .expect_err("limit");
+        assert_eq!(error.kind(), Some(crate::domain::ErrorKind::LimitExceeded));
+    }
+
+    fn owner_seed(id: &str, name: &str, token: &str) -> AccessSnapshot {
+        AccessSnapshot {
+            revision: 0,
+            tokens: vec![TokenRecord {
+                id: id.to_owned(),
+                name: name.to_owned(),
+                sha256: sha256_hex(token),
+                owner: true,
+                modules: vec!["admin".to_owned()],
+            }],
+        }
+    }
+
+    #[test]
+    fn a_seed_never_creates_a_second_owner_or_fails_on_a_taken_name() {
+        let store = store();
+        assert!(
+            !store
+                .access_import_seed(&owner_seed("guest", "guest", "x"), 10)
+                .expect("owner with a foreign id is skipped")
+        );
+        store
+            .access_create("kitchen", "Стас", &sha256_hex("k"), &Modules::member(), 11)
+            .expect("token");
+        assert!(
+            !store
+                .access_import_seed(&owner_seed(OWNER_TOKEN_ID, "Стас", "owner-1"), 12)
+                .expect("a taken name skips the new owner instead of failing")
+        );
+        assert!(
+            store
+                .access_import_seed(&owner_seed(OWNER_TOKEN_ID, "owner", "owner-1"), 13)
+                .expect("owner")
+        );
+        assert!(
+            store
+                .access_import_seed(&owner_seed(OWNER_TOKEN_ID, "Стас", "owner-2"), 14)
+                .expect("rotation with a taken name keeps the stored name")
+        );
+        let owner = store.access_token(OWNER_TOKEN_ID).expect("owner");
+        assert_eq!(owner.name, "owner");
+        let snapshot = store.access_snapshot().expect("snapshot");
+        assert!(snapshot.authenticate_token("owner-2").is_some());
+        assert_eq!(
+            snapshot.tokens.iter().filter(|token| token.owner).count(),
+            1
         );
     }
 

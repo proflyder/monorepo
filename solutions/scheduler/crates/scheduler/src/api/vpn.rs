@@ -217,9 +217,10 @@ pub async fn register(
     headers: HeaderMap,
     Json(body): Json<ProfileBody>,
 ) -> Response {
-    if let Some(response) = require_vpn(&state, &headers) {
-        return response;
-    }
+    let principal = match require_vpn(&state, &headers) {
+        Ok(principal) => principal,
+        Err(response) => return *response,
+    };
     let Some(settings) = state.settings.clone() else {
         return error(StatusCode::SERVICE_UNAVAILABLE, "vpn is not configured");
     };
@@ -231,7 +232,7 @@ pub async fn register(
     let pool = settings.pool;
     let now = super::now_unix();
     let result = blocking(Arc::clone(&state.store), move |store| {
-        store.register_vpn_peer(pool, &input, now)
+        store.register_vpn_peer_for(pool, &input, &principal.id, principal.owner, now)
     })
     .await;
     match result {
@@ -248,12 +249,14 @@ pub async fn remove(
     headers: HeaderMap,
     Json(body): Json<RemoveBody>,
 ) -> Response {
-    if let Some(response) = require_vpn(&state, &headers) {
-        return response;
-    }
+    let principal = match require_vpn(&state, &headers) {
+        Ok(principal) => principal,
+        Err(response) => return *response,
+    };
     let device_id = body.device_id;
+    let scope = (!principal.owner).then(|| principal.id.clone());
     match blocking(Arc::clone(&state.store), move |store| {
-        store.remove_vpn_peer(&device_id)
+        store.remove_vpn_peer_for(&device_id, scope.as_deref())
     })
     .await
     {
@@ -262,14 +265,16 @@ pub async fn remove(
     }
 }
 
-fn require_vpn(state: &VpnState, headers: &HeaderMap) -> Option<Response> {
+fn require_vpn(
+    state: &VpnState,
+    headers: &HeaderMap,
+) -> Result<home_app_auth::Principal, Box<Response>> {
     state
         .app_auth
         .app(headers.get(header::AUTHORIZATION), Module::Vpn)
-        .err()
-        .map(|forbidden| {
+        .map_err(|forbidden| {
             let (status, headers, body) = error_response(forbidden);
-            (status, headers, body).into_response()
+            Box::new((status, headers, body).into_response())
         })
 }
 

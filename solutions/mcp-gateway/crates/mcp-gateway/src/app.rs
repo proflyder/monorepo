@@ -217,21 +217,17 @@ pub async fn run() -> anyhow::Result<()> {
         .map_err(anyhow::Error::msg)
         .context("select tool groups")?;
 
-    let access = if config.app_token.is_empty() {
-        None
-    } else {
-        let url = format!(
-            "{}/v1/access/snapshot",
-            config.scheduler_url.trim_end_matches('/')
-        );
-        let client =
-            AccessClient::new(url, config.scheduler_token.clone()).map_err(anyhow::Error::msg)?;
-        if let Err(error) = client.refresh().await {
-            tracing::warn!(%error, "access snapshot is unavailable");
-        }
+    let access = if config.app_api {
+        let client = AccessClient::new(
+            home_app_auth::snapshot_url(&config.scheduler_url),
+            config.scheduler_token.clone(),
+        )
+        .map_err(anyhow::Error::msg)?;
         Some(AccessBinding { client })
+    } else {
+        None
     };
-    let system = (!config.app_token.is_empty()).then(|| {
+    let system = config.app_api.then(|| {
         Arc::new(crate::system::Dashboard::new(crate::system::Sources {
             prom: deps.prom.clone(),
             alerts: deps.alerts.clone(),
@@ -313,7 +309,7 @@ pub async fn run() -> anyhow::Result<()> {
         let client = binding.client;
         let refresh_cancel = cancel.clone();
         supervisor.spawn("access-refresh", async move {
-            client.run(refresh_cancel, ACCESS_REFRESH).await;
+            client.run(refresh_cancel).await;
         });
     }
     let server = home_http::serve(listener, router, cancel.clone());
@@ -337,8 +333,6 @@ pub async fn run() -> anyhow::Result<()> {
     tracing::info!(event = "stopped", "mcp-gateway stopped");
     Ok(())
 }
-
-const ACCESS_REFRESH: Duration = Duration::from_secs(30);
 
 fn non_empty(value: &str) -> Option<String> {
     (!value.trim().is_empty()).then(|| value.trim().to_owned())

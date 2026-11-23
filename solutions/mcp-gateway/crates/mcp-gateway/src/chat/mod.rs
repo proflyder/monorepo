@@ -228,10 +228,10 @@ impl Chat {
         } else {
             card.summary.clone()
         };
-        self.push_message(format!("{icon} {}", card.name), &body, id);
+        self.push_message(Module::Alerts, format!("{icon} {}", card.name), &body, id);
     }
 
-    fn push_message(&self, title: String, body: &str, id: &str) {
+    fn push_message(&self, module: Module, title: String, body: &str, id: &str) {
         let Some(push) = self.push.clone() else {
             return;
         };
@@ -241,7 +241,7 @@ impl Chat {
         }
         let link = format!("home://chat/message/{id}");
         tokio::spawn(async move {
-            if let Err(error) = push.notify_alerts(&title, &body, Some(&link), None).await {
+            if let Err(error) = push.notify_module(module, &title, &body, Some(&link)).await {
                 tracing::warn!(%error, "chat: push failed");
             }
         });
@@ -528,7 +528,12 @@ impl Chat {
         match terminal {
             TurnEvent::Completed(final_text) => {
                 self.update(reply_id, Some(&final_text), Status::Done, None);
-                self.push_message(self.notify.assistant_title.clone(), &final_text, reply_id);
+                self.push_message(
+                    Module::Chat,
+                    self.notify.assistant_title.clone(),
+                    &final_text,
+                    reply_id,
+                );
             }
             TurnEvent::Failed(key) => self.update(reply_id, Some(&text), Status::Failed, Some(key)),
             TurnEvent::Delta(_) => {}

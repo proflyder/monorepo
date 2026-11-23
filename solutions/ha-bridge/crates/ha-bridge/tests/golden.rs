@@ -584,9 +584,7 @@ fn catalog_vectors_match_the_go_server() {
                     .collect(),
             }],
         };
-        let client = home_app_auth::AccessClient::new("http://test", "test").expect("client");
-        client.cache().replace(snapshot);
-        client
+        home_app_auth::AccessClient::fixed(snapshot)
     };
 
     let ha = make();

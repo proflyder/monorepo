@@ -62,6 +62,7 @@ rust_test(
     size = "small",
     crate = ":scheduler_lib",
     compile_data = [
+        "//packages/proto/home/v1:protos",
         "//solutions/scheduler:ids_vectors",
         "//solutions/scheduler:planner_vectors",
     ],

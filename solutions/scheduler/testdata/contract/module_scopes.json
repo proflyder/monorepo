@@ -1,0 +1,91 @@
+{
+  "name": "module_scopes",
+  "description": "An application token without the module of a procedure gets 403 module_forbidden with the module in the error details; service-only procedures answer 403 service_only to any application token; a granted module passes.",
+  "steps": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/home.v1.SchedulerService/ListDueEvents",
+        "headers": {
+          "Authorization": "Bearer contract-member-token",
+          "Content-Type": "application/json"
+        },
+        "body": {}
+      },
+      "response": {
+        "status": 403,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "code": "permission_denied",
+          "message": "service_only"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/home.v1.AlarmService/ListAlarms",
+        "headers": {
+          "Authorization": "Bearer contract-member-token",
+          "Content-Type": "application/json"
+        },
+        "body": {}
+      },
+      "response": {
+        "status": 403,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "code": "permission_denied",
+          "message": "module_forbidden",
+          "details": [
+            {
+              "type": "home.v1.ModuleForbidden",
+              "debug": {
+                "module": "alarms_timers"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/home.v1.SchedulerService/GetStatus",
+        "headers": {
+          "Authorization": "Bearer contract-member-token",
+          "Content-Type": "application/json"
+        },
+        "body": {}
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "nowUnix": "1767268800",
+          "queues": [
+            {
+              "name": "home"
+            },
+            {
+              "name": "scenario"
+            },
+            {
+              "name": "tasks"
+            }
+          ],
+          "ready": true,
+          "scenarioStoreSupported": true,
+          "schemaVersion": 10,
+          "version": "test"
+        }
+      }
+    }
+  ]
+}

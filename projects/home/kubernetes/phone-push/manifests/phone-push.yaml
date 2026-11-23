@@ -49,8 +49,6 @@ spec:
               value: /run/secrets/phone-push/service_token
             - name: PUSH_FCM_SERVICE_ACCOUNT_FILE
               value: /run/secrets/phone-push/service_account_json
-            - name: LOG_LEVEL
-              value: info
           ports:
             - name: http
               containerPort: 8095

@@ -1,5 +1,5 @@
 use rusqlite::types::Value;
-use rusqlite::{Row, params, params_from_iter};
+use rusqlite::{OptionalExtension, Row, params, params_from_iter};
 
 use super::{Store, StoreError};
 
@@ -159,7 +159,19 @@ impl Store {
         let kind_wire = kind.wire();
         let key = device_id.clone();
         let entry_id = id.clone();
-        self.call(move |connection| {
+        self.with_tx(move |connection| {
+            let owner: Option<String> = connection
+                .query_row(
+                    "SELECT device_id FROM notifications WHERE id = ?1",
+                    params![entry_id],
+                    |row| row.get(0),
+                )
+                .optional()?;
+            if owner.is_some_and(|owner| owner != key) {
+                return Err(StoreError::precondition(
+                    "notification id belongs to another device",
+                ));
+            }
             connection.execute(
                 "INSERT INTO notifications (id, device_id, type, title, body, deep_link, created_unix, read_unix)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 0)
@@ -376,6 +388,26 @@ mod tests {
         assert_eq!(recorded.read_unix, 0);
         assert_eq!(recorded.kind, NotificationKind::Notify);
         assert_eq!(store.unread_notifications(DEVICE).expect("unread"), 1);
+    }
+
+    #[test]
+    fn a_notification_id_of_another_device_cannot_be_overwritten() {
+        let store = store();
+        device(&store, DEVICE, TOKEN);
+        let other = "device-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+        device(&store, other, "token-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+        entry(&store, DEVICE, "n-1", 100);
+        let mut forged = input("n-1");
+        forged.title = "Forged".to_owned();
+        let error = store
+            .record_notification(other, &forged, 101)
+            .expect_err("foreign id");
+        assert_eq!(error.kind(), Some(crate::domain::ErrorKind::Precondition));
+        let kept = store
+            .notification(DEVICE, "n-1")
+            .expect("read")
+            .expect("entry");
+        assert_eq!(kept.title, "Title");
     }
 
     #[test]

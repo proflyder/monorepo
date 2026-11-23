@@ -52,7 +52,7 @@ mise run kubectl -- -n home-assistant port-forward svc/phone-push 8095:8095
 Звонок проверяется голосом: «<wake word>, где телефон?» — колонка отвечает
 «Звоню на телефон», телефон звонит как будильник и останавливается кнопкой
 «Нашёл» или через минуту. Отдельная проверка без телефона (в кластере,
-service-токен — `scheduler-auth#service_token` (fallback `#token`):
+service-токен — `scheduler-auth#service_token` (без fallback на legacy `#token`):
 
 ```bash
 curl -fsS -X POST "$PHONE_PUSH_URL/v1/push/find" \
@@ -84,8 +84,8 @@ data-only FCM без уведомления: `{type:"sync", entity, op, id}`. `e
 
 ## Секреты и сеть
 
-- `secret/k8s/home-assistant/scheduler-auth` (extract: `token`, `service_token`, `app_tokens`) → `phone-push`
-  (общий токен приложения: его же предъявляет mcp-gateway и scheduler API).
+- `secret/k8s/home-assistant/scheduler-auth` (property `service_token`) → `phone-push`
+  (service-токен: его же предъявляют mcp-gateway и scheduler).
 - `secret/k8s/home-assistant/phone-push#service_account_json` →
   `phone-push#service_account_json` (FCM).
 - NetworkPolicy: ingress только от `mcp-gateway`, scheduler и kubelet; egress —
