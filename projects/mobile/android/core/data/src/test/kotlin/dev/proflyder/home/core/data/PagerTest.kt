@@ -188,10 +188,12 @@ class PagerTest {
         runCurrent()
         pager.loadMore()
         advanceUntilIdle()
+        pager.optimisticUpdate("a", { it.copy(read = false) }, { Outcome.Success(Unit) })
         gate.complete(Outcome.Failure(RemoteFailure.Offline("offline")))
         failing.await()
 
         assertEquals(false, pager.state.value.items.first { it.id == "a" }.read)
+        assertEquals(false, pager.state.value.items.first { it.id == "b" }.read)
         assertEquals(false, pager.state.value.items.first { it.id == "c" }.read)
     }
 

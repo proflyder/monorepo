@@ -132,12 +132,13 @@ class Pager<T : Any>(
         request: suspend () -> Outcome<R>,
     ): Outcome<R> {
         val before = mutable.value.items.associateBy(keyOf)
+        val optimistic = before.mapValues { (_, value) -> transform(value) }
         replaceLocal(mutable.value.items.map(transform))
         val result = runCatching { request() }.getOrElse { failure ->
-            restoreKeys(before)
+            restoreEach(before, optimistic)
             throw failure
         }
-        if (result is Outcome.Failure) restoreKeys(before)
+        if (result is Outcome.Failure) restoreEach(before, optimistic)
         return result
     }
 
@@ -152,8 +153,18 @@ class Pager<T : Any>(
         restoreLocal(removal)
     }
 
-    private fun restoreKeys(before: Map<String, T>) {
-        replaceLocal(mutable.value.items.map { before[keyOf(it)] ?: it })
+    private fun restoreEach(before: Map<String, T>, optimistic: Map<String, T>) {
+        replaceLocal(
+            mutable.value.items.map { current ->
+                val key = keyOf(current)
+                val previous = before[key]
+                when {
+                    previous == null -> current
+                    current != optimistic[key] -> current
+                    else -> previous
+                }
+            },
+        )
     }
 
     private fun canLoadMore(current: PagingState<T>): Boolean {
