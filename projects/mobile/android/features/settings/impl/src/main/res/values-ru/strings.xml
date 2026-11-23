@@ -10,9 +10,9 @@
     <string name="settings_notifications_title">Уведомления телефона и поиск</string>
     <string name="settings_notifications_subtitle">Разрешения для уведомлений и громкого звонка</string>
     <string name="settings_history_title">История уведомлений</string>
-    <string name="settings_history_subtitle">Последние сообщения, полученные этим телефоном</string>
     <string name="history_count">Сохранено: %1$d</string>
     <string name="history_clear">Очистить</string>
+    <string name="history_read_all">Прочитать все</string>
     <string name="history_clear_message">Все сохранённые уведомления будут удалены с этого телефона. Уведомления, уже показанные в шторке, останутся.</string>
     <string name="history_day_today">Сегодня</string>
     <string name="history_day_yesterday">Вчера</string>
@@ -29,4 +29,6 @@
     <string name="settings_appearance_mode_light">Светлый</string>
     <string name="settings_appearance_mode_dark">Тёмный</string>
     <string name="settings_toolbar_action">Настройки</string>
+    <string name="bell_description">Уведомления</string>
+    <string name="bell_description_unread">Уведомления, непрочитанных: %1$d</string>
 </resources>

@@ -31,6 +31,15 @@ internal class DataStoreNotificationHistoryStore(
         preferences[KEY_ENTRIES] = NotificationHistoryCodec.encode(updated)
     }
 
+    override suspend fun markRead(id: String) = update { NotificationHistoryRules.markRead(it, id) }
+
+    override suspend fun markAllRead() = update(NotificationHistoryRules::markAllRead)
+
+    private suspend fun update(change: (List<NotificationHistoryEntry>) -> List<NotificationHistoryEntry>) = write { preferences ->
+        val stored = NotificationHistoryCodec.decode(preferences[KEY_ENTRIES])
+        preferences[KEY_ENTRIES] = NotificationHistoryCodec.encode(change(stored))
+    }
+
     override suspend fun clear() = write { preferences -> preferences.remove(KEY_ENTRIES) }
 
     private suspend fun write(change: (androidx.datastore.preferences.core.MutablePreferences) -> Unit) {

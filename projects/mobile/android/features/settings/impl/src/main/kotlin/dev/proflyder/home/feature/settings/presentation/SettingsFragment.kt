@@ -19,7 +19,6 @@ internal class SettingsFragment :
         link(binding.settingsConnection, SettingsLink.CONNECTION)
         link(binding.settingsVpn, SettingsLink.VPN)
         link(binding.settingsNotifications, SettingsLink.NOTIFICATIONS)
-        link(binding.settingsHistory, SettingsLink.HISTORY)
         link(binding.settingsAppearance, SettingsLink.APPEARANCE)
         link(binding.settingsDesignSystem, SettingsLink.DESIGN_SYSTEM)
         render(SettingsUiState::designSystemVisible) { binding.settingsDesignSystem.isVisible = it }

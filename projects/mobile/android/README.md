@@ -590,3 +590,13 @@ the `default_notification_*` meta-data in the push manifest only covers
 messages still carrying a `notification` block. HyperOS in its own
 notification style draws the cached application icon instead of the small
 icon; that is a system choice and the app does not work around it.
+
+## Notification bell
+
+`NotificationBellContribution` (settings feature) adds a bell to the toolbar
+end slot on every tab; it opens the notification history (`settings/history`),
+which is no longer listed in Settings. Every received notification is stored
+unread (`NotificationHistoryEntry.read`); tapping an entry or "Mark all read"
+marks it read, and the bell badge shows the unread count (capped at `99+`).
+Entries saved before read state existed decode as read, so an upgrade does not
+light the badge with old history.

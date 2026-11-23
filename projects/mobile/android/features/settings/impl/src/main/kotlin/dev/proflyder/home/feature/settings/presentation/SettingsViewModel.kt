@@ -7,7 +7,6 @@ import dev.proflyder.home.core.runtime.AppVersion
 import dev.proflyder.home.core.ui.ViewModelSource
 import dev.proflyder.home.feature.settings.AppearanceDestination
 import dev.proflyder.home.feature.settings.DesignSystemDestination
-import dev.proflyder.home.feature.settings.NotificationHistoryDestination
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ClassKey
 import dev.zacsweers.metro.ContributesIntoMap
@@ -20,7 +19,6 @@ internal enum class SettingsLink(val route: Route) {
     CONNECTION(Route.Tab("connection")),
     VPN(Route.Tab("vpn")),
     NOTIFICATIONS(Route.Tab("push")),
-    HISTORY(Route.Screen(NotificationHistoryDestination)),
     APPEARANCE(Route.Screen(AppearanceDestination)),
     DESIGN_SYSTEM(Route.Screen(DesignSystemDestination)),
 }

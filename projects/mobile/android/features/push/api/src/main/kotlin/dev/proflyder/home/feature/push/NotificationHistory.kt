@@ -15,6 +15,7 @@ data class NotificationHistoryEntry(
     val body: String,
     val deepLink: String? = null,
     val receivedAtMillis: Long,
+    val read: Boolean = false,
 )
 
 object NotificationHistoryRules {
@@ -28,12 +29,24 @@ object NotificationHistoryRules {
 
     fun bounded(entries: List<NotificationHistoryEntry>): List<NotificationHistoryEntry> =
         entries.take(MAX_ENTRIES)
+
+    fun markRead(entries: List<NotificationHistoryEntry>, id: String): List<NotificationHistoryEntry> =
+        entries.map { if (it.id == id) it.copy(read = true) else it }
+
+    fun markAllRead(entries: List<NotificationHistoryEntry>): List<NotificationHistoryEntry> =
+        entries.map { it.copy(read = true) }
+
+    fun unread(entries: List<NotificationHistoryEntry>): Int = entries.count { !it.read }
 }
 
 interface NotificationHistoryStore {
     val entries: StateFlow<List<NotificationHistoryEntry>>
 
     suspend fun record(entry: NotificationHistoryEntry)
+
+    suspend fun markRead(id: String)
+
+    suspend fun markAllRead()
 
     suspend fun clear()
 }
