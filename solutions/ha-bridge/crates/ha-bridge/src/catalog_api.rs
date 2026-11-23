@@ -6,7 +6,7 @@ use axum::extract::State;
 use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
-use home_app_auth::{AccessCache, Forbidden, Module};
+use home_app_auth::{AccessCache, AccessSnapshot, Forbidden, Module, RefreshGate};
 use serde::Serialize;
 
 use crate::catalog::{Catalog, Entry, Light, Volume};
@@ -94,10 +94,24 @@ struct CatalogResponse {
 struct AppState {
     source: Arc<dyn CatalogSource>,
     access: AccessCache,
+    access_url: String,
+    service_token: String,
+    gate: Arc<RefreshGate>,
 }
 
-pub fn router(source: Arc<dyn CatalogSource>, access: AccessCache) -> Router {
-    let state = AppState { source, access };
+pub fn router(
+    source: Arc<dyn CatalogSource>,
+    access: AccessCache,
+    access_url: String,
+    service_token: String,
+) -> Router {
+    let state = AppState {
+        source,
+        access,
+        access_url,
+        service_token,
+        gate: Arc::new(RefreshGate::new(std::time::Duration::from_secs(5))),
+    };
     Router::new()
         .route("/v1/catalog", get(catalog))
         .route("/healthz", get(healthz))
@@ -110,10 +124,22 @@ async fn healthz() -> StatusCode {
 }
 
 async fn catalog(State(state): State<AppState>, headers: HeaderMap) -> Response {
-    let Some(principal) = state
-        .access
-        .authenticate(headers.get(header::AUTHORIZATION))
-    else {
+    let url = state.access_url.clone();
+    let token = state.service_token.clone();
+    let header = headers.get(header::AUTHORIZATION).cloned();
+    let principal = home_app_auth::authenticate_with_refresh(
+        &state.access,
+        &state.gate,
+        header.as_ref(),
+        || async move {
+            if url.is_empty() {
+                return Err("access refresh is not configured".to_owned());
+            }
+            fetch_access(&url, &token).await
+        },
+    )
+    .await;
+    let Some(principal) = principal else {
         return unauthorized();
     };
     if let Err(forbidden) = principal.require(Module::Home) {
@@ -240,7 +266,31 @@ fn text(status: StatusCode, body: &'static str) -> Response {
         .into_response()
 }
 
-pub fn unauthorized() -> Response {
+pub async fn fetch_access(url: &str, token: &str) -> Result<AccessSnapshot, String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .map_err(|error| format!("access client: {error}"))?;
+    let response = client
+        .get(url)
+        .bearer_auth(token)
+        .send()
+        .await
+        .map_err(|_| "access request failed".to_owned())?;
+    if !response.status().is_success() {
+        return Err(format!(
+            "access returned HTTP {}",
+            response.status().as_u16()
+        ));
+    }
+    let body = response
+        .bytes()
+        .await
+        .map_err(|_| "access body".to_owned())?;
+    AccessSnapshot::parse(&body).map_err(|error| error.to_string())
+}
+
+fn unauthorized() -> Response {
     let mut response = text(StatusCode::UNAUTHORIZED, "unauthorized\n");
     response
         .headers_mut()
@@ -264,6 +314,7 @@ mod tests {
     use super::*;
     use crate::catalog::{LightInput, Raw, Rules, build};
     use crate::discovery::{DiscoveryError, Snapshot};
+    use home_app_auth::{Modules, TokenRecord, sha256_hex};
 
     struct Source {
         snapshot: Result<Snapshot, DiscoveryError>,
@@ -327,24 +378,24 @@ mod tests {
 
     #[test]
     fn the_home_module_is_required_for_the_catalog() {
-        let snapshot = home_app_auth::AccessSnapshot {
+        let snapshot = AccessSnapshot {
             revision: 1,
             tokens: vec![
-                home_app_auth::TokenRecord {
+                TokenRecord {
                     id: "owner".to_owned(),
                     name: "owner".to_owned(),
-                    sha256: home_app_auth::sha256_hex("owner"),
+                    sha256: sha256_hex("owner"),
                     owner: true,
-                    modules: home_app_auth::Modules::owner()
+                    modules: Modules::owner()
                         .ids()
                         .into_iter()
                         .map(str::to_owned)
                         .collect(),
                 },
-                home_app_auth::TokenRecord {
+                TokenRecord {
                     id: "chat".to_owned(),
                     name: "chat".to_owned(),
-                    sha256: home_app_auth::sha256_hex("chat"),
+                    sha256: sha256_hex("chat"),
                     owner: false,
                     modules: vec!["chat".to_owned()],
                 },

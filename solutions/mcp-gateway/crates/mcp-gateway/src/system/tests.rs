@@ -441,7 +441,12 @@ async fn server_requires_the_app_bearer() {
         auth_token: "mcp".to_owned(),
         voice_token: None,
         voice: None,
-        access: Some(home_app_auth::AccessCache::new(snapshot)),
+        access: Some(crate::server::AccessBinding {
+            cache: home_app_auth::AccessCache::new(snapshot),
+            url: String::new(),
+            token: String::new(),
+            gate: Arc::new(home_app_auth::RefreshGate::new(Duration::from_secs(5))),
+        }),
         system: Some(dashboard(prom, Duration::from_secs(60))),
         chat: None,
         chat_alerts_token: None,

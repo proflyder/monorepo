@@ -45,10 +45,18 @@ pub async fn run() -> anyhow::Result<()> {
     .with_sync(Arc::clone(&sync));
     let vpn_access = vpn_access(&config);
     let cache = access_cache(&config, &store)?;
-    let auth = Arc::new(api::AccessAuth::new(
-        cache.clone(),
-        home_secret::Token::new(config.service_token.expose()),
-    ));
+    let auth = Arc::new(
+        api::AccessAuth::new(
+            cache.clone(),
+            home_secret::Token::new(config.service_token.expose()),
+        )
+        .with_previous(
+            config
+                .service_token_previous
+                .as_ref()
+                .map(|token| home_secret::Token::new(token.expose())),
+        ),
+    );
     let router = api::router(
         service.clone(),
         AlarmFacade::new(service),

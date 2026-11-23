@@ -43,7 +43,7 @@ spec:
             - name: SCHEDULER_ENDPOINT
               value: http://scheduler.home-assistant.svc.cluster.local:8098
             - name: SCHEDULER_TOKEN_FILE
-              value: /run/secrets/scheduler/token
+              value: /run/secrets/scheduler/service_token
             - name: CONTROL_TOKEN_FILE
               value: /run/secrets/scheduler/token
             - name: CONTROL_CONSUMER_ID

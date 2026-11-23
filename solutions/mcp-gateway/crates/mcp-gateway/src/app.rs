@@ -3,7 +3,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Context as _;
-use home_app_auth::{AccessCache, AccessSnapshot};
+use home_app_auth::{AccessCache, AccessSnapshot, RefreshGate};
 use home_runtime::{Supervisor, shutdown_signal};
 use home_telemetry::TelemetryBuilder;
 use tokio::net::TcpListener;
@@ -16,6 +16,7 @@ use crate::domain::clock::SystemClock;
 use crate::domain::state::{AgentMode, KeyedStore, PendingStore};
 use crate::metrics::Metrics;
 use crate::server;
+use crate::server::AccessBinding;
 use crate::ssh::{Options as SshOptions, SshRunner};
 use crate::tools::bb::{BbActGroup, BbReadGroup};
 use crate::tools::infra_fix::FixGroup;
@@ -219,7 +220,15 @@ pub async fn run() -> anyhow::Result<()> {
     let access = if config.app_token.is_empty() {
         None
     } else {
-        Some(AccessCache::new(fetch_initial_access(&config).await))
+        Some(AccessBinding {
+            cache: AccessCache::new(fetch_initial_access(&config).await),
+            url: format!(
+                "{}/v1/access/snapshot",
+                config.scheduler_url.trim_end_matches('/')
+            ),
+            token: config.scheduler_token.clone(),
+            gate: Arc::new(RefreshGate::new(Duration::from_secs(5))),
+        })
     };
     let system = (!config.app_token.is_empty()).then(|| {
         Arc::new(crate::system::Dashboard::new(crate::system::Sources {
@@ -299,12 +308,10 @@ pub async fn run() -> anyhow::Result<()> {
 
     let supervisor = Supervisor::new();
     let cancel = supervisor.token();
-    if let Some(cache) = access {
-        let url = format!(
-            "{}/v1/access/snapshot",
-            config.scheduler_url.trim_end_matches('/')
-        );
-        let token = config.scheduler_token.clone();
+    if let Some(binding) = access {
+        let url = binding.url.clone();
+        let token = binding.token.clone();
+        let cache = binding.cache;
         let refresh_cancel = cancel.clone();
         supervisor.spawn("access-refresh", async move {
             let mut tick = tokio::time::interval(ACCESS_REFRESH);

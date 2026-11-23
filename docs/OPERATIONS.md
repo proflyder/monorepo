@@ -47,13 +47,15 @@ App-токены (модули доступа) выпускаются после
 
 ```bash
 mise run admin:app-token-bootstrap          # печатает owner-токен один раз
-mise run kubectl -- -n home-assistant annotate externalsecret scheduler-auth \
-  force-sync="$(date +%s)" --overwrite
-mise run kubectl -- -n home-assistant rollout restart deploy/scheduler
 ```
 
-Принудительный `force-sync` нужен потому, что `scheduler-auth` обновляется
-ESO раз в час; без него pod перезапустится со старым секретом.
+Задача сама делает force-sync ESO, перезапуск scheduler, затем phone-push,
+mcp-gateway, intercom, ha-control/ha-bridge/ha-scenario, hermes/voice-proxy,
+после успешного rollout удаляет `service_token_previous` и снова
+перезапускает scheduler. Перед запуском private values Hermes/voice-proxy
+должны брать `HERMES_SCHEDULER_TOKEN` из `scheduler-auth#service_token`, а не
+`#token`: этот файл вне Git. Старый `token` после bootstrap — только app-токен
+«Мама», service-прав у него нет.
 
 Команда пишет в OpenBao `secret/k8s/home-assistant/scheduler-auth` только
 sha256 owner-токена (поле `app_tokens`) и `service_token`; старый `token`

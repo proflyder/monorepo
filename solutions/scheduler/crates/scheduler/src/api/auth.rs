@@ -59,6 +59,7 @@ impl Interceptor for BearerAuth {
 pub struct AccessAuth {
     cache: AccessCache,
     service: Token,
+    previous_service: Option<Token>,
 }
 
 impl std::fmt::Debug for AccessAuth {
@@ -69,7 +70,17 @@ impl std::fmt::Debug for AccessAuth {
 
 impl AccessAuth {
     pub fn new(cache: AccessCache, service: Token) -> Self {
-        Self { cache, service }
+        Self {
+            cache,
+            service,
+            previous_service: None,
+        }
+    }
+
+    #[must_use]
+    pub fn with_previous(mut self, previous: Option<Token>) -> Self {
+        self.previous_service = previous;
+        self
     }
 
     #[cfg(test)]
@@ -99,6 +110,10 @@ impl AccessAuth {
             return false;
         };
         self.service.ct_eq(candidate)
+            || self
+                .previous_service
+                .as_ref()
+                .is_some_and(|previous| previous.ct_eq(candidate))
     }
 
     pub fn authenticate(&self, header: Option<&http::HeaderValue>) -> Result<Principal, Forbidden> {
@@ -272,6 +287,18 @@ mod tests {
 
     fn header(value: &str) -> HeaderValue {
         HeaderValue::from_str(value).expect("header")
+    }
+
+    #[test]
+    fn a_previous_service_token_is_accepted_only_when_configured() {
+        let cache = AccessCache::default();
+        let old = Some(&header("Bearer old-service"));
+        let rolling = AccessAuth::new(cache.clone(), Token::new("new-service"))
+            .with_previous(Some(Token::new("old-service")));
+        assert!(rolling.service_authorized(old));
+        let finalized = AccessAuth::new(cache, Token::new("new-service"));
+        assert!(!finalized.service_authorized(old));
+        assert!(!finalized.service_authorized(Some(&header("Bearer app-token"))));
     }
 
     #[test]

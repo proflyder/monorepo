@@ -9,6 +9,7 @@ pub struct PushDevice {
     pub platform: String,
     pub app_version: String,
     pub device_name: String,
+    pub token_id: String,
     pub created_unix: i64,
     pub updated_unix: i64,
 }
@@ -30,7 +31,7 @@ pub const MIN_DEVICE_ID_BYTES: usize = 8;
 pub const MAX_DEVICE_ID_BYTES: usize = 128;
 
 const COLS: &str =
-    "device_id, token, platform, app_version, device_name, created_unix, updated_unix";
+    "device_id, token, platform, app_version, device_name, token_id, created_unix, updated_unix";
 
 fn scan_device(row: &Row<'_>) -> rusqlite::Result<PushDevice> {
     Ok(PushDevice {
@@ -39,8 +40,9 @@ fn scan_device(row: &Row<'_>) -> rusqlite::Result<PushDevice> {
         platform: row.get(2)?,
         app_version: row.get(3)?,
         device_name: row.get(4)?,
-        created_unix: row.get(5)?,
-        updated_unix: row.get(6)?,
+        token_id: row.get(5)?,
+        created_unix: row.get(6)?,
+        updated_unix: row.get(7)?,
     })
 }
 
@@ -98,10 +100,25 @@ pub fn validate_device(input: &PushDeviceInput) -> Result<PushDeviceInput, Store
     })
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DeviceScope {
+    All,
+    Token(String),
+}
+
 impl Store {
     pub fn register_push_device(
         &self,
         input: &PushDeviceInput,
+        now_unix: i64,
+    ) -> Result<PushDevice, StoreError> {
+        self.register_push_device_for(input, "", now_unix)
+    }
+
+    pub fn register_push_device_for(
+        &self,
+        input: &PushDeviceInput,
+        token_id: &str,
         now_unix: i64,
     ) -> Result<PushDevice, StoreError> {
         let mut device = validate_device(input)?;
@@ -111,11 +128,22 @@ impl Store {
             device.device_name = legacy.device_name;
         }
         let count = self.list_push_devices()?.len();
-        let known = self.push_device(&device.device_id)?.is_some();
+        let existing = self.push_device(&device.device_id)?;
+        if let Some(existing) = existing.as_ref()
+            && !existing.token_id.is_empty()
+            && !token_id.is_empty()
+            && existing.token_id != token_id
+        {
+            return Err(StoreError::precondition(
+                "push device belongs to another application token",
+            ));
+        }
+        let known = existing.is_some();
         if !known && count >= MAX_PUSH_DEVICES {
             return Err(StoreError::limit("too many push devices"));
         }
         let device_id = device.device_id.clone();
+        let token_id = token_id.to_owned();
         self.call(move |connection| {
             connection.execute(
                 "DELETE FROM notifications WHERE device_id IN (
@@ -128,14 +156,16 @@ impl Store {
                 params![device.token, device.device_id],
             )?;
             connection.execute(
-                "INSERT INTO push_devices (device_id, token, platform, app_version, device_name, created_unix, updated_unix)
-				 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)
+                "INSERT INTO push_devices (device_id, token, platform, app_version, device_name, token_id, created_unix, updated_unix)
+				 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7)
 				 ON CONFLICT(device_id) DO UPDATE SET
 					token = excluded.token,
 					platform = excluded.platform,
 					app_version = excluded.app_version,
 					device_name = CASE WHEN excluded.device_name = ''
 						THEN push_devices.device_name ELSE excluded.device_name END,
+					token_id = CASE WHEN excluded.token_id = ''
+						THEN push_devices.token_id ELSE excluded.token_id END,
 					updated_unix = excluded.updated_unix",
                 params![
                     device.device_id,
@@ -143,6 +173,7 @@ impl Store {
                     device.platform,
                     device.app_version,
                     device.device_name,
+                    token_id,
                     now_unix
                 ],
             )?;
@@ -170,6 +201,97 @@ impl Store {
             connection.execute(
                 "UPDATE push_devices SET device_name = ?1, updated_unix = ?2 WHERE device_id = ?3",
                 params![name, now_unix, key],
+            )
+        })?;
+        if changed == 0 {
+            return Err(StoreError::NotFound);
+        }
+        self.push_device(device_id.trim())
+            .and_then(|device| device.ok_or(StoreError::NotFound))
+    }
+
+    pub fn assign_unowned_push_devices(
+        &self,
+        owner_device_name: &str,
+        mama_id: &str,
+        owner_id: &str,
+    ) -> Result<usize, StoreError> {
+        let owner_name = owner_device_name.trim().to_owned();
+        let mama_id = mama_id.to_owned();
+        let owner_id = owner_id.to_owned();
+        self.call(move |connection| {
+            let changed = connection.execute(
+                "UPDATE push_devices SET token_id = CASE
+                    WHEN trim(device_name) = ?1 THEN ?2 ELSE ?3 END
+                 WHERE token_id = ''",
+                params![owner_name, owner_id, mama_id],
+            )?;
+            Ok(changed)
+        })
+    }
+
+    pub fn list_push_devices_for(&self, scope: DeviceScope) -> Result<Vec<PushDevice>, StoreError> {
+        let token_id = match scope {
+            DeviceScope::All => None,
+            DeviceScope::Token(id) => Some(id),
+        };
+        self.call(move |connection| {
+            let mut devices = Vec::new();
+            if let Some(id) = token_id.as_deref() {
+                let mut statement = connection.prepare(&format!(
+                    "SELECT {COLS} FROM push_devices WHERE token_id = ?1 ORDER BY updated_unix DESC, device_id ASC"
+                ))?;
+                let rows = statement.query_map(params![id], scan_device)?;
+                for row in rows {
+                    devices.push(row?);
+                }
+            } else {
+                let mut statement = connection.prepare(&format!(
+                    "SELECT {COLS} FROM push_devices ORDER BY updated_unix DESC, device_id ASC"
+                ))?;
+                let rows = statement.query_map([], scan_device)?;
+                for row in rows {
+                    devices.push(row?);
+                }
+            }
+            Ok(devices)
+        })
+    }
+
+    pub fn rename_push_device_for(
+        &self,
+        device_id: &str,
+        device_name: &str,
+        scope: DeviceScope,
+        now_unix: i64,
+    ) -> Result<PushDevice, StoreError> {
+        let device_id = device_id.trim().to_owned();
+        if device_id.is_empty() {
+            return Err(StoreError::invalid("device_id is required"));
+        }
+        let name = clean_meta(device_name, "device_name")?;
+        if name.is_empty() {
+            return Err(StoreError::invalid("device_name is required"));
+        }
+        let key = device_id.clone();
+        let token_id = match scope {
+            DeviceScope::All => None,
+            DeviceScope::Token(id) => Some(id),
+        };
+        let changed = self.call(move |connection| {
+            token_id.as_deref().map_or_else(
+                || {
+                    connection.execute(
+                        "UPDATE push_devices SET device_name = ?1, updated_unix = ?2 WHERE device_id = ?3",
+                        params![name, now_unix, key],
+                    )
+                },
+                |token| {
+                    connection.execute(
+                        "UPDATE push_devices SET device_name = ?1, updated_unix = ?2 WHERE device_id = ?3 AND token_id = ?4",
+                        params![name, now_unix, key, token],
+                    )
+                },
             )
         })?;
         if changed == 0 {
@@ -221,17 +343,41 @@ impl Store {
     }
 
     pub fn remove_push_device(&self, token: &str) -> Result<bool, StoreError> {
+        self.remove_push_device_for(token, DeviceScope::All)
+    }
+
+    pub fn remove_push_device_for(
+        &self,
+        token: &str,
+        scope: DeviceScope,
+    ) -> Result<bool, StoreError> {
         let token = token.to_owned();
+        let token_id = match scope {
+            DeviceScope::All => None,
+            DeviceScope::Token(id) => Some(id),
+        };
         self.call(move |connection| {
             let transaction = connection.transaction()?;
-            transaction.execute(
-                "DELETE FROM notifications WHERE device_id IN (
-                    SELECT device_id FROM push_devices WHERE token = ?1
-                )",
-                params![token],
-            )?;
-            let deleted =
-                transaction.execute("DELETE FROM push_devices WHERE token = ?1", params![token])?;
+            let deleted = if let Some(id) = token_id.as_deref() {
+                transaction.execute(
+                    "DELETE FROM notifications WHERE device_id IN (
+                        SELECT device_id FROM push_devices WHERE token = ?1 AND token_id = ?2
+                    )",
+                    params![token, id],
+                )?;
+                transaction.execute(
+                    "DELETE FROM push_devices WHERE token = ?1 AND token_id = ?2",
+                    params![token, id],
+                )?
+            } else {
+                transaction.execute(
+                    "DELETE FROM notifications WHERE device_id IN (
+                        SELECT device_id FROM push_devices WHERE token = ?1
+                    )",
+                    params![token],
+                )?;
+                transaction.execute("DELETE FROM push_devices WHERE token = ?1", params![token])?
+            };
             transaction.commit()?;
             Ok(deleted > 0)
         })
@@ -511,5 +657,88 @@ mod tests {
             crate::store::SCHEMA_VERSION
         );
         std::fs::remove_dir_all(directory).expect("cleanup");
+    }
+    #[test]
+    fn devices_are_scoped_to_the_registering_token() {
+        let store = store();
+        let mut owner_input = input(TOKEN_A);
+        owner_input.device_name = "Стас".to_owned();
+        let owner = store
+            .register_push_device_for(&owner_input, "owner", 100)
+            .expect("owner device");
+        let mut mama_input = input(TOKEN_B);
+        mama_input.device_id = "device-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".to_owned();
+        mama_input.device_name = "Мама".to_owned();
+        let mama = store
+            .register_push_device_for(&mama_input, "mama", 101)
+            .expect("member device");
+        assert_eq!(owner.token_id, "owner");
+        assert_eq!(mama.token_id, "mama");
+
+        let own = store
+            .list_push_devices_for(DeviceScope::Token("mama".to_owned()))
+            .expect("own list");
+        assert_eq!(own.len(), 1);
+        assert_eq!(own[0].device_id, mama.device_id);
+        assert_eq!(
+            store
+                .list_push_devices_for(DeviceScope::All)
+                .expect("all")
+                .len(),
+            2
+        );
+        assert!(
+            store
+                .rename_push_device_for(
+                    &owner.device_id,
+                    "Чужой",
+                    DeviceScope::Token("mama".to_owned()),
+                    102,
+                )
+                .is_err()
+        );
+        assert!(
+            !store
+                .remove_push_device_for(TOKEN_A, DeviceScope::Token("mama".to_owned()))
+                .expect("remove scope")
+        );
+        assert!(
+            store
+                .register_push_device_for(&input(TOKEN_A), "mama", 103)
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn unowned_devices_are_assigned_by_name() {
+        let store = store();
+        let mut owner = input(TOKEN_A);
+        owner.device_name = "Стас".to_owned();
+        store.register_push_device(&owner, 100).expect("owner");
+        let mut mama = input(TOKEN_B);
+        mama.device_id = "device-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".to_owned();
+        mama.device_name = "Мама".to_owned();
+        store.register_push_device(&mama, 101).expect("mama");
+        let changed = store
+            .assign_unowned_push_devices("Стас", "mama", "owner")
+            .expect("assign");
+        assert_eq!(changed, 2);
+        let devices = store.list_push_devices().expect("list");
+        assert_eq!(
+            devices
+                .iter()
+                .find(|device| device.device_name == "Стас")
+                .expect("owner")
+                .token_id,
+            "owner"
+        );
+        assert_eq!(
+            devices
+                .iter()
+                .find(|device| device.device_name == "Мама")
+                .expect("mama")
+                .token_id,
+            "mama"
+        );
     }
 }

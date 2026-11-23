@@ -41,7 +41,8 @@ class IssueTests(unittest.TestCase):
         self.assertEqual(entry["sha256"], app_tokens.digest("home_secret"))
         self.assertTrue(entry["owner"])
         self.assertIn("admin", entry["modules"])
-        self.assertTrue(values["service_token"])
+        self.assertNotEqual(values["service_token"], "mama")
+        self.assertEqual(values["service_token_previous"], "mama")
         self.assertEqual(bao.calls[0][0], "GET")
         self.assertEqual(bao.calls[1][0], "POST")
 
@@ -50,6 +51,13 @@ class IssueTests(unittest.TestCase):
         second = app_tokens.merge_token(first, "owner", "two")
         self.assertEqual(len(second["tokens"]), 1)
         self.assertEqual(second["tokens"][0]["sha256"], app_tokens.digest("two"))
+
+    def test_finalize_removes_the_previous_service_token(self):
+        bao = FakeBao({"token": "mama", "service_token": "new", "service_token_previous": "old"})
+        values = app_tokens.finalize(bao, app_tokens.PATH)
+        self.assertNotIn("service_token_previous", values)
+        self.assertEqual(values["service_token"], "new")
+        self.assertEqual(bao.calls[1][2]["options"]["cas"], 7)
 
     def test_dry_run_never_writes_or_prints_a_token(self):
         bao = FakeBao({"token": "mama"})
@@ -74,6 +82,7 @@ class IssueTests(unittest.TestCase):
         seed = json.loads(bao.values["app_tokens"])
         self.assertEqual(seed["tokens"][0]["sha256"], app_tokens.digest(tokens[0]))
         self.assertNotIn(bao.values["service_token"], text)
+        self.assertNotIn(bao.values["service_token_previous"], text)
         self.assertNotIn("mama", text)
 
 

@@ -13,7 +13,7 @@ use axum::http::{HeaderMap, Method, Request, Response, StatusCode, header};
 use axum::middleware::{self, Next};
 use axum::response::IntoResponse;
 use axum::routing::{any, any_service, get};
-use home_app_auth::{AccessCache, Module};
+use home_app_auth::{AccessCache, AccessSnapshot, Module, RefreshGate};
 use http_body_util::BodyExt as _;
 use rmcp::transport::streamable_http_server::session::local::LocalSessionManager;
 use rmcp::transport::streamable_http_server::{StreamableHttpServerConfig, StreamableHttpService};
@@ -31,11 +31,19 @@ pub const ALERTS_REALM: &str = "home-alerts";
 
 const MAX_MCP_BODY: usize = 4 << 20;
 
+#[derive(Clone)]
+pub struct AccessBinding {
+    pub cache: AccessCache,
+    pub url: String,
+    pub token: String,
+    pub gate: Arc<RefreshGate>,
+}
+
 pub struct Options {
     pub auth_token: String,
     pub voice_token: Option<String>,
     pub voice: Option<Router<ObserveState>>,
-    pub access: Option<AccessCache>,
+    pub access: Option<AccessBinding>,
     pub system: Option<Arc<crate::system::Dashboard>>,
     pub chat: Option<Arc<crate::chat::Chat>>,
     pub chat_alerts_token: Option<String>,
@@ -115,7 +123,7 @@ pub fn router(options: Options) -> Router {
             let routes =
                 crate::system::router(dashboard).route_layer(middleware::from_fn_with_state(
                     AppAccess {
-                        access: access.clone(),
+                        binding: access.clone(),
                         module: Module::System,
                         realm: APP_REALM,
                     },
@@ -126,7 +134,7 @@ pub fn router(options: Options) -> Router {
         if let Some(chat) = options.chat {
             let routes = crate::chat::router(chat).route_layer(middleware::from_fn_with_state(
                 AppAccess {
-                    access,
+                    binding: access,
                     module: Module::Chat,
                     realm: APP_REALM,
                 },
@@ -200,7 +208,7 @@ fn text_response(status: StatusCode, body: &'static str) -> Response<Body> {
 
 #[derive(Clone)]
 struct AppAccess {
-    access: AccessCache,
+    binding: AccessBinding,
     module: Module,
     realm: &'static str,
 }
@@ -210,10 +218,17 @@ async fn require_app(
     mut request: Request<Body>,
     next: Next,
 ) -> Response<Body> {
-    let Some(principal) = auth
-        .access
-        .authenticate(request.headers().get(header::AUTHORIZATION))
-    else {
+    let url = auth.binding.url.clone();
+    let token = auth.binding.token.clone();
+    let header = request.headers().get(header::AUTHORIZATION).cloned();
+    let principal = home_app_auth::authenticate_with_refresh(
+        &auth.binding.cache,
+        &auth.binding.gate,
+        header.as_ref(),
+        || async move { fetch_access(&url, &token).await },
+    )
+    .await;
+    let Some(principal) = principal else {
         tracing::warn!(
             path = %request.uri().path(),
             realm = auth.realm,
@@ -242,6 +257,30 @@ async fn require_app(
     );
     request.extensions_mut().insert(principal);
     next.run(request).await
+}
+
+async fn fetch_access(url: &str, token: &str) -> Result<AccessSnapshot, String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .map_err(|error| format!("access client: {error}"))?;
+    let response = client
+        .get(url)
+        .bearer_auth(token)
+        .send()
+        .await
+        .map_err(|_| "access request failed".to_owned())?;
+    if !response.status().is_success() {
+        return Err(format!(
+            "access returned HTTP {}",
+            response.status().as_u16()
+        ));
+    }
+    let body = response
+        .bytes()
+        .await
+        .map_err(|_| "access body".to_owned())?;
+    AccessSnapshot::parse(&body).map_err(|error| error.to_string())
 }
 
 fn unauthorized(realm: &'static str) -> Response<Body> {

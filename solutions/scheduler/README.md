@@ -317,7 +317,7 @@ CA хранится только у владельца.
 
 ## Доступ приложения (модули)
 
-Источник правды — SQLite scheduler (schema v8): `app_tokens` хранит только
+Источник правды — SQLite scheduler (schema v9): `app_tokens` хранит только
 sha256, имя, набор модулей и флаг owner; `access_meta` — монотонную ревизию.
 Токен создаётся только через admin API (значение показывается один раз), а
 старый общий токен при миграции импортируется как «Мама» с модулями обычного
@@ -327,11 +327,11 @@ sha256, имя, набор модулей и флаг owner; `access_meta` — �
 | Модуль | Эндпоинты |
 |---|---|
 | `base` | `SchedulerService/GetStatus`, `GET /v1/me`, `POST /v1/push/devices` (регистрация устройства) |
-| `home` | `SchedulerService/EnqueueTask`, `SchedulerService/CancelTask`, `GET /v1/catalog` (ha-control) |
+| `home` | `GET /v1/catalog` (ha-control); `EnqueueTask/CancelTask` только `queue=control`, `taskType=home.control` (остальное — owner/service) |
 | `scenarios` | `ScenarioService/*` |
 | `alarms_timers` | `AlarmService/*`, `SchedulerService/*` по расписаниям и таймерам |
 | `intercom_call` | `IntercomService/*` |
-| `notifications` | `GET /v1/push/devices`, `/v1/push/devices/{remove,rename}`, `/v1/push/history*` |
+| `notifications` | `GET /v1/push/devices`, `/v1/push/devices/{remove,rename}`, `/v1/push/history*` — только устройства своего токена; admin видит все |
 | `chat` | `mcp-gateway /v1/chat/*` (кроме сервисного `/v1/chat/alerts`) |
 | `vpn` | `POST /v1/vpn/profile`, `/v1/vpn/profile/remove` |
 | `system` | `mcp-gateway /v1/system/summary|hosts|k8s|devices` |
@@ -353,12 +353,16 @@ Admin API:
 - `DELETE /v1/access/tokens/{id}` — отзыв (owner запрещён);
 - `GET /v1/me` — `{name,modules,owner}` для текущего токена.
 
+Устройства push привязаны к `token_id` регистрации (schema v9): list/rename/remove/history фильтруются по токену, чужой `Home-Device-Id` → `404`, admin/owner и service-token видят все. При первом bootstrap устройства без владельца назначаются по имени: `SCHEDULER_OWNER_DEVICE_NAME` (по умолчанию «Стас») → owner, остальные → «Мама».
+
 Внутренний `GET /v1/access/snapshot` (service-token) отдаёт
 `{revision,tokens:[{id,name,sha256,owner,modules}]}`. Сервисы держат кэш 30 с и
 перечитывают его; после изменения токена scheduler также шлёт sync
 `entity=access` всем телефонам, чтобы приложение перечитало `/v1/me` раньше
-TTL. `service_token` живёт в том же секрете; до bootstrap он совпадает с
-legacy `token`, поэтому сервисные вызовы не ломаются.
+TTL. `service_token` живёт в том же секрете. Bootstrap ротирует его и оставляет
+`service_token_previous` до финализации: scheduler принимает оба, сервисы
+перезапускаются на новый, затем предыдущий удаляется. Legacy `token` после
+этого — только app-токен «Мама».
 
 ## Конфигурация
 
@@ -369,7 +373,9 @@ SCHEDULER_DB_PATH=scheduler.db              (ALARM_DB_PATH)
 SCHEDULER_LISTEN=127.0.0.1:8098             (ALARM_LISTEN; loopback default)
 SCHEDULER_TOKEN=...                         (или SCHEDULER_TOKEN_FILE; legacy app token «Мама»)
 SCHEDULER_APP_TOKENS_FILE=...               (optional seed owner-токена из OpenBao)
-SCHEDULER_SERVICE_TOKEN_FILE=...            (optional service-token, fallback на legacy)
+SCHEDULER_SERVICE_TOKEN_FILE=...            (service-token, fallback на legacy до bootstrap)
+SCHEDULER_SERVICE_TOKEN_PREVIOUS_FILE=...   (optional, второй service-token на время ротации)
+SCHEDULER_OWNER_DEVICE_NAME=Стас            (имя устройства владельца для миграции v9)
 SCHEDULER_MISSED_GRACE_SECONDS=600
 SCHEDULER_RING_WINDOW_SECONDS=900
 SCHEDULER_EVENT_RETENTION_SECONDS=2592000

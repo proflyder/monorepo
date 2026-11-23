@@ -102,8 +102,8 @@ impl Config {
         let ha_url = base_url("HA_URL", getenv("HA_URL").as_deref(), true)?;
 
         let scheduler_token =
-            token(getenv, read_file, "SCHEDULER_TOKEN")?.ok_or(ConfigError::TokenRequired {
-                name: "SCHEDULER_TOKEN",
+            service_token(getenv, read_file)?.ok_or(ConfigError::TokenRequired {
+                name: "SCHEDULER_SERVICE_TOKEN",
             })?;
         let ha_token =
             token(getenv, read_file, "HA_TOKEN")?.unwrap_or_else(|| Token::new(String::new()));
@@ -231,6 +231,33 @@ fn required_lease_seconds(
     let per_event = ha_timeout + scheduler_timeout + LEDGER_BUDGET;
     let total = per_event * batch_size + LEASE_CUSHION;
     u32::try_from(total.as_secs() + u64::from(total.subsec_nanos() > 0)).unwrap_or(u32::MAX)
+}
+
+pub(crate) fn service_token(
+    getenv: &dyn Fn(&str) -> Option<String>,
+    read_file: &dyn Fn(&str) -> std::io::Result<Vec<u8>>,
+) -> Result<Option<Token>, ConfigError> {
+    let file_key = "SCHEDULER_SERVICE_TOKEN_FILE";
+    if let Some(path) = non_empty(getenv(file_key)) {
+        return match read_file(&path) {
+            Ok(data) => {
+                let value = String::from_utf8_lossy(&data);
+                let value = value.trim();
+                if value.is_empty() {
+                    return Err(ConfigError::EmptyTokenFile { name: file_key });
+                }
+                Ok(Some(Token::new(value)))
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                token(getenv, read_file, "SCHEDULER_TOKEN")
+            }
+            Err(_) => Err(ConfigError::TokenFile { name: file_key }),
+        };
+    }
+    if let Some(value) = non_empty(getenv("SCHEDULER_SERVICE_TOKEN")) {
+        return Ok(Some(Token::new(value)));
+    }
+    token(getenv, read_file, "SCHEDULER_TOKEN")
 }
 
 pub(crate) fn token(

@@ -23,7 +23,9 @@ pub struct Config {
     pub listen: String,
     pub token: Secret,
     pub service_token: Secret,
+    pub service_token_previous: Option<Secret>,
     pub access_seed_file: Option<PathBuf>,
+    pub owner_device_name: String,
     pub missed_grace: Duration,
     pub ring_window: Duration,
     pub event_retention: Duration,
@@ -90,7 +92,10 @@ impl Config {
 
         let token = load_token(getenv, read_file)?;
         let service_token = load_service_token(getenv, read_file, &token)?;
+        let service_token_previous = load_previous_service_token(getenv, read_file)?;
         let access_seed_file = first(getenv, &["SCHEDULER_APP_TOKENS_FILE"]).map(PathBuf::from);
+        let owner_device_name =
+            first(getenv, &["SCHEDULER_OWNER_DEVICE_NAME"]).unwrap_or_else(|| "Стас".to_owned());
 
         let missed_grace = duration_seconds(
             getenv,
@@ -149,7 +154,9 @@ impl Config {
             listen,
             token,
             service_token,
+            service_token_previous,
             access_seed_file,
+            owner_device_name,
             missed_grace,
             ring_window,
             event_retention,
@@ -286,6 +293,30 @@ fn load_service_token(
             Ok(Secret::new(token))
         }
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(legacy.clone()),
+        Err(_) => Err(ConfigError::ServiceToken),
+    }
+}
+
+fn load_previous_service_token(
+    getenv: &dyn Fn(&str) -> Option<String>,
+    read_file: &dyn Fn(&str) -> std::io::Result<Vec<u8>>,
+) -> Result<Option<Secret>, ConfigError> {
+    if let Some(token) = first(getenv, &["SCHEDULER_SERVICE_TOKEN_PREVIOUS"]) {
+        return Ok(Some(Secret::new(token)));
+    }
+    let Some(path) = first(getenv, &["SCHEDULER_SERVICE_TOKEN_PREVIOUS_FILE"]) else {
+        return Ok(None);
+    };
+    match read_file(&path) {
+        Ok(data) => {
+            let token = String::from_utf8_lossy(&data);
+            let token = token.trim();
+            if token.is_empty() {
+                return Err(ConfigError::ServiceToken);
+            }
+            Ok(Some(Secret::new(token)))
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(_) => Err(ConfigError::ServiceToken),
     }
 }

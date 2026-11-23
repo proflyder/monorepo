@@ -50,6 +50,8 @@ pub async fn run() -> anyhow::Result<()> {
         &config.phone.id,
         home_secret::Token::new(config.station_token.expose()),
         &config.station.id,
+        &config.access_url,
+        config.service_token.expose(),
     );
     let router = api::router(api, auth);
 

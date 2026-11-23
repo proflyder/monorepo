@@ -6,9 +6,9 @@ use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use serde::{Deserialize, Serialize};
 
-use crate::store::{PushDevice, PushDeviceInput, Store, StoreError};
+use crate::store::{DeviceScope, PushDevice, PushDeviceInput, Store, StoreError};
 
-use super::auth::{AccessAuth, error_response};
+use super::auth::{AccessAuth, Caller, error_response};
 
 #[derive(Clone, Debug)]
 pub struct PushState {
@@ -93,25 +93,34 @@ struct ErrorResponse {
     error: &'static str,
 }
 
-fn authorized_base(auth: &AccessAuth, headers: &HeaderMap) -> Option<Response> {
-    auth.any_app(headers.get(header::AUTHORIZATION))
-        .err()
-        .map(|forbidden| {
-            let (status, headers, body) = error_response(forbidden);
-            (status, headers, body).into_response()
-        })
+fn forbidden_response(forbidden: home_app_auth::Forbidden) -> Response {
+    let (status, headers, body) = error_response(forbidden);
+    (status, headers, body).into_response()
 }
 
-fn authorized(auth: &AccessAuth, headers: &HeaderMap) -> Option<Response> {
-    auth.require(
-        headers.get(header::AUTHORIZATION),
-        home_app_auth::Module::Notifications,
-    )
-    .err()
-    .map(|forbidden| {
-        let (status, headers, body) = error_response(forbidden);
-        (status, headers, body).into_response()
-    })
+fn app_principal(
+    auth: &AccessAuth,
+    headers: &HeaderMap,
+) -> Result<home_app_auth::Principal, Box<Response>> {
+    auth.any_app(headers.get(header::AUTHORIZATION))
+        .map_err(|forbidden| Box::new(forbidden_response(forbidden)))
+}
+
+fn caller(
+    auth: &AccessAuth,
+    headers: &HeaderMap,
+    module: home_app_auth::Module,
+) -> Result<Caller, Box<Response>> {
+    auth.require(headers.get(header::AUTHORIZATION), module)
+        .map_err(|forbidden| Box::new(forbidden_response(forbidden)))
+}
+
+fn scope(caller: &Caller) -> DeviceScope {
+    match caller {
+        Caller::Service => DeviceScope::All,
+        Caller::App(principal) if principal.owner => DeviceScope::All,
+        Caller::App(principal) => DeviceScope::Token(principal.id.clone()),
+    }
 }
 
 pub async fn register(
@@ -119,9 +128,10 @@ pub async fn register(
     headers: HeaderMap,
     Json(body): Json<RegisterBody>,
 ) -> Response {
-    if let Some(response) = authorized_base(&state.auth, &headers) {
-        return response;
-    }
+    let principal = match app_principal(&state.auth, &headers) {
+        Ok(principal) => principal,
+        Err(response) => return *response,
+    };
     let input = PushDeviceInput {
         device_id: body.device_id,
         token: body.token,
@@ -131,7 +141,7 @@ pub async fn register(
     };
     let now = now_unix();
     let result = blocking(Arc::clone(&state.store), move |store| {
-        store.register_push_device(&input, now)
+        store.register_push_device_for(&input, &principal.id, now)
     })
     .await;
     match result {
@@ -148,12 +158,14 @@ pub async fn rename(
     headers: HeaderMap,
     Json(body): Json<RenameBody>,
 ) -> Response {
-    if let Some(response) = authorized(&state.auth, &headers) {
-        return response;
-    }
+    let caller = match caller(&state.auth, &headers, home_app_auth::Module::Notifications) {
+        Ok(caller) => caller,
+        Err(response) => return *response,
+    };
     let now = now_unix();
+    let scope = scope(&caller);
     let result = blocking(Arc::clone(&state.store), move |store| {
-        store.rename_push_device(&body.device_id, &body.device_name, now)
+        store.rename_push_device_for(&body.device_id, &body.device_name, scope, now)
     })
     .await;
     match result {
@@ -166,10 +178,16 @@ pub async fn rename(
 }
 
 pub async fn list(State(state): State<PushState>, headers: HeaderMap) -> Response {
-    if let Some(response) = authorized(&state.auth, &headers) {
-        return response;
-    }
-    match blocking(Arc::clone(&state.store), Store::list_push_devices).await {
+    let caller = match caller(&state.auth, &headers, home_app_auth::Module::Notifications) {
+        Ok(caller) => caller,
+        Err(response) => return *response,
+    };
+    let scope = scope(&caller);
+    match blocking(Arc::clone(&state.store), move |store| {
+        store.list_push_devices_for(scope)
+    })
+    .await
+    {
         Ok(devices) => Json(DevicesResponse {
             devices: devices.iter().map(DeviceView::from).collect(),
         })
@@ -183,12 +201,14 @@ pub async fn remove(
     headers: HeaderMap,
     Json(body): Json<RemoveBody>,
 ) -> Response {
-    if let Some(response) = authorized(&state.auth, &headers) {
-        return response;
-    }
+    let caller = match caller(&state.auth, &headers, home_app_auth::Module::Notifications) {
+        Ok(caller) => caller,
+        Err(response) => return *response,
+    };
     let token = body.token;
+    let scope = scope(&caller);
     match blocking(Arc::clone(&state.store), move |store| {
-        store.remove_push_device(&token)
+        store.remove_push_device_for(&token, scope)
     })
     .await
     {

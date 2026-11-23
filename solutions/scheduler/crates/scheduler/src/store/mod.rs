@@ -29,14 +29,14 @@ pub use notifications::{
     DEFAULT_HISTORY_LIMIT, MAX_HISTORY_LIMIT, Notification, NotificationInput, NotificationKind,
     NotificationPage,
 };
-pub use push::{PushDevice, PushDeviceInput};
+pub use push::{DeviceScope, PushDevice, PushDeviceInput};
 pub use status::{ConsumerStatus, QueueInfo, Status};
 pub use tick::TickStats;
 pub use vpn::{VpnPeer, VpnPeerInput, VpnPool, is_wireguard_key as vpn_key_is_valid};
 
 use crate::domain::ScheduleKind as DomainScheduleKind;
 
-pub const SCHEMA_VERSION: i64 = 8;
+pub const SCHEMA_VERSION: i64 = 9;
 
 pub const QUEUE_HOME: &str = "home";
 pub const QUEUE_TASKS: &str = "tasks";
@@ -188,6 +188,11 @@ const V7: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS notifications_device ON notifications(device_id, created_unix DESC)",
 ];
 
+const V9: &[&str] = &[
+    "ALTER TABLE push_devices ADD COLUMN token_id TEXT NOT NULL DEFAULT ''",
+    "CREATE INDEX IF NOT EXISTS push_devices_owner ON push_devices(token_id, updated_unix)",
+];
+
 const V8: &[&str] = &[
     "CREATE TABLE IF NOT EXISTS app_tokens (
 			id TEXT PRIMARY KEY,
@@ -245,9 +250,14 @@ pub const MIGRATIONS: &[Migration] = &[
         statements: V7,
     },
     Migration {
-        version: SCHEMA_VERSION,
+        version: 8,
         description: "scheduler v8 application access tokens",
         statements: V8,
+    },
+    Migration {
+        version: SCHEMA_VERSION,
+        description: "scheduler v9 push device ownership",
+        statements: V9,
     },
 ];
 

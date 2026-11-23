@@ -69,8 +69,24 @@ def issue(bao: ws.Bao, path: str, name: str, token: str, dry_run: bool = False) 
     seed = decode_seed(values.get("app_tokens", ""))
     seed = merge_token(seed, name, token)
     values["app_tokens"] = json.dumps(seed, ensure_ascii=False, separators=(",", ":"))
-    if not values.get("service_token"):
-        values["service_token"] = values.get("token") or new_token()
+    previous = values.get("service_token") or values.get("token")
+    values["service_token"] = new_token()
+    if previous:
+        values["service_token_previous"] = previous
+    else:
+        values.pop("service_token_previous", None)
+    if not dry_run:
+        bao.call(
+            "POST",
+            f"secret/data/{path}",
+            {"data": values, "options": {"cas": version}},
+        )
+    return values
+
+
+def finalize(bao: ws.Bao, path: str, dry_run: bool = False) -> dict:
+    values, version = read_secret(bao, path)
+    values.pop("service_token_previous", None)
     if not dry_run:
         bao.call(
             "POST",
@@ -87,11 +103,19 @@ def main(argv: list[str] | None = None, out=print) -> int:
     parser.add_argument("--name", default=NAME)
     parser.add_argument("--path", default=PATH)
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--finalize", action="store_true")
     args = parser.parse_args(argv)
     if not args.name.strip() or "/" in args.name:
         raise SystemExit("name must be a non-empty plain string")
-    token = new_token()
     bao = ws.operator(ws.SECRETS)
+    if args.finalize:
+        try:
+            finalize(bao, args.path, args.dry_run)
+        except ws.Error as error:
+            raise SystemExit(str(error)) from None
+        out("previous service token removed from OpenBao")
+        return 0
+    token = new_token()
     try:
         issue(bao, args.path, args.name.strip(), token, args.dry_run)
     except ws.Error as error:
@@ -101,7 +125,7 @@ def main(argv: list[str] | None = None, out=print) -> int:
         return 0
     out("Owner application token (shown once, not stored anywhere else):")
     out(token)
-    out("Service token updated in OpenBao; restart the workloads to pick it up.")
+    out("Service token rotated; the previous one stays accepted until finalize.")
     return 0
 
 

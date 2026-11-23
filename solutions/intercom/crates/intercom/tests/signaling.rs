@@ -60,6 +60,8 @@ async fn spawn() -> Server {
         &phone.id,
         home_secret::Token::new(STATION),
         &station.id,
+        "",
+        "",
     );
     let api = Api::new(intercom, "test");
     let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");

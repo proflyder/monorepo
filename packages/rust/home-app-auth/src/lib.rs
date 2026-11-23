@@ -1,6 +1,8 @@
 use std::collections::BTreeSet;
 use std::fmt;
+use std::future::Future;
 use std::sync::{Arc, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::time::{Duration, Instant};
 
 use http::HeaderValue;
 use serde::{Deserialize, Serialize};
@@ -347,6 +349,54 @@ impl Principal {
     }
 }
 
+#[derive(Debug)]
+pub struct RefreshGate {
+    interval: Duration,
+    last: RwLock<Option<Instant>>,
+}
+
+impl RefreshGate {
+    #[must_use]
+    pub fn new(interval: Duration) -> Self {
+        Self {
+            interval,
+            last: RwLock::new(None),
+        }
+    }
+
+    #[must_use]
+    pub fn allow(&self) -> bool {
+        let now = Instant::now();
+        let mut last = self.last.write().unwrap_or_else(PoisonError::into_inner);
+        let allowed = last.is_none_or(|previous| now.duration_since(previous) >= self.interval);
+        if allowed {
+            *last = Some(now);
+        }
+        allowed
+    }
+}
+
+pub async fn authenticate_with_refresh<F, Fut>(
+    cache: &AccessCache,
+    gate: &RefreshGate,
+    header: Option<&HeaderValue>,
+    refresh: F,
+) -> Option<Principal>
+where
+    F: FnOnce() -> Fut,
+    Fut: Future<Output = Result<AccessSnapshot, String>>,
+{
+    if let Some(principal) = cache.authenticate(header) {
+        return Some(principal);
+    }
+    if !gate.allow() {
+        return None;
+    }
+    let snapshot = refresh().await.ok()?;
+    cache.replace(snapshot);
+    cache.authenticate(header)
+}
+
 #[must_use]
 pub fn bearer(value: &str) -> Option<&str> {
     let value = value.trim();
@@ -438,6 +488,39 @@ mod tests {
         assert_eq!(
             Modules::parse(&["nope".to_owned()]),
             Err(Error::UnknownModule("nope".to_owned()))
+        );
+    }
+
+    #[tokio::test]
+    async fn an_unknown_token_refreshes_once_and_then_respects_the_gate() {
+        let cache = AccessCache::default();
+        let gate = RefreshGate::new(Duration::from_secs(5));
+        let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let counter = Arc::clone(&calls);
+        let snapshot = snapshot();
+        let mama = header("Bearer mama-token");
+        let principal = authenticate_with_refresh(&cache, &gate, Some(&mama), || {
+            counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            let snapshot = snapshot.clone();
+            async move { Ok(snapshot) }
+        })
+        .await
+        .expect("refreshed token");
+        assert_eq!(principal.name, "mama");
+        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 1);
+        let wrong = header("Bearer wrong");
+        assert!(
+            authenticate_with_refresh(&cache, &gate, Some(&wrong), || {
+                counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                async move { Err("blocked".to_owned()) }
+            })
+            .await
+            .is_none()
+        );
+        assert_eq!(
+            calls.load(std::sync::atomic::Ordering::SeqCst),
+            1,
+            "refresh must be rate limited"
         );
     }
 

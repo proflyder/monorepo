@@ -350,7 +350,7 @@
     `ItemTouchHelper`. Причина: прежние `Pager`/`PagingDelegate` были тонкими
     обёртками, интенты и undo дублировались в каждом экране.
 69. **Доступ приложения — модули, а не роли.** Источник правды — SQLite
-    scheduler (schema v8): `app_tokens` (имя, sha256, модули, owner) и
+    scheduler (schema v9): `app_tokens` (имя, sha256, модули, owner) и
     `access_meta.revision`; plaintext не хранится. Каждый app-эндпоинт
     принадлежит ровно одному модулю: `base` (`GetStatus`, `/v1/me`,
     регистрация push-устройства), `home` (`/v1/catalog`, `EnqueueTask`,
@@ -366,4 +366,7 @@
     кэш 30 с; scheduler после изменения токенов шлёт sync `entity=access`
     телефонам. Причина: один список модулей и одна проверка вместо ролей,
     копипасты и расхождений между сервисами; сервис-к-сервису остаётся на
-    отдельном `service_token`, а не на app-токенах.
+    отдельном `service_token`, а не на app-токенах. Bootstrap ротирует
+    service-token с окном `service_token_previous`, затем финализирует; push-
+    устройства привязаны к `token_id` регистрации (v9), чужой deviceId — 404;
+    `EnqueueTask/CancelTask` для `home` ограничены `control`/`home.control`.

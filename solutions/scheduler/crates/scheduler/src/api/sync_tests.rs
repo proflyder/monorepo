@@ -150,3 +150,48 @@ async fn a_fired_timer_is_announced_by_the_engine_tick() {
         }]
     );
 }
+
+async fn call_status(app: &axum::Router, method: &str, body: Value) -> StatusCode {
+    let request = Request::builder()
+        .method("POST")
+        .uri(format!("/home.v1.SchedulerService/{method}"))
+        .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+        .header(header::CONTENT_TYPE, "application/json")
+        .header("connect-protocol-version", "1")
+        .body(Body::from(body.to_string()))
+        .expect("request");
+    app.clone()
+        .oneshot(request)
+        .await
+        .expect("response")
+        .status()
+}
+
+#[tokio::test]
+async fn a_member_can_only_enqueue_the_app_control_task() {
+    let fixture = fixture();
+    let allowed = call_status(
+        &fixture.app,
+        "EnqueueTask",
+        json!({
+            "taskType": "home.control",
+            "queue": "control",
+            "payloadJson": "{}",
+            "idempotencyKey": "app-control",
+        }),
+    )
+    .await;
+    assert_eq!(allowed, StatusCode::OK);
+    let denied = call_status(
+        &fixture.app,
+        "EnqueueTask",
+        json!({
+            "taskType": "home.control",
+            "queue": "tasks",
+            "payloadJson": "{}",
+            "idempotencyKey": "foreign-queue",
+        }),
+    )
+    .await;
+    assert_eq!(denied, StatusCode::FORBIDDEN);
+}

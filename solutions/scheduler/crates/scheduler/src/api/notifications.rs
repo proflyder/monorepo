@@ -12,7 +12,7 @@ use crate::store::{
 };
 use crate::sync::{Announcement, SyncSink};
 
-use super::auth::{AccessAuth, error_response};
+use super::auth::{AccessAuth, Caller, error_response};
 
 pub const DEVICE_HEADER: &str = "home-device-id";
 const MAX_DEVICE_ID_CHARS: usize = 128;
@@ -131,16 +131,37 @@ struct ErrorResponse {
     error: &'static str,
 }
 
-fn authorized(auth: &AccessAuth, headers: &HeaderMap) -> Option<Response> {
+fn caller(auth: &AccessAuth, headers: &HeaderMap) -> Result<Caller, Box<Response>> {
     auth.require(
         headers.get(header::AUTHORIZATION),
         home_app_auth::Module::Notifications,
     )
-    .err()
-    .map(|forbidden| {
+    .map_err(|forbidden| {
         let (status, headers, body) = error_response(forbidden);
-        (status, headers, body).into_response()
+        Box::new((status, headers, body).into_response())
     })
+}
+
+async fn ensure_device(
+    state: &NotificationState,
+    caller: &Caller,
+    device_id: &str,
+) -> Result<(), Box<Response>> {
+    let principal = match caller {
+        Caller::Service => return Ok(()),
+        Caller::App(principal) if principal.owner => return Ok(()),
+        Caller::App(principal) => principal,
+    };
+    let id = device_id.to_owned();
+    let device = blocking(Arc::clone(&state.store), move |store| {
+        store.push_device(&id)
+    })
+    .await
+    .map_err(|response| *response)?;
+    match device {
+        Some(device) if device.token_id == principal.id => Ok(()),
+        _ => Err(Box::new(error(StatusCode::NOT_FOUND, "not_found"))),
+    }
 }
 
 pub async fn record(
@@ -148,11 +169,15 @@ pub async fn record(
     headers: HeaderMap,
     Json(body): Json<RecordBody>,
 ) -> Response {
-    if let Some(response) = authorized(&state.auth, &headers) {
-        return response;
-    }
+    let caller = match caller(&state.auth, &headers) {
+        Ok(caller) => caller,
+        Err(response) => return *response,
+    };
     if body.device_id.trim().is_empty() {
         return error(StatusCode::BAD_REQUEST, "deviceId is required");
+    }
+    if let Err(response) = ensure_device(&state, &caller, &body.device_id).await {
+        return *response;
     }
     let device_id = body.device_id;
     let input = NotificationInput {
@@ -190,12 +215,16 @@ pub async fn history(
     headers: HeaderMap,
     Query(query): Query<HistoryQuery>,
 ) -> Response {
-    if let Some(response) = authorized(&state.auth, &headers) {
-        return response;
-    }
+    let caller = match caller(&state.auth, &headers) {
+        Ok(caller) => caller,
+        Err(response) => return *response,
+    };
     let Some(device_id) = header_device(&headers) else {
         return error(StatusCode::BAD_REQUEST, "device_required");
     };
+    if let Err(response) = ensure_device(&state, &caller, &device_id).await {
+        return *response;
+    }
     let cursor = query
         .cursor
         .as_deref()
@@ -214,12 +243,16 @@ pub async fn history(
 }
 
 pub async fn unread(State(state): State<NotificationState>, headers: HeaderMap) -> Response {
-    if let Some(response) = authorized(&state.auth, &headers) {
-        return response;
-    }
+    let caller = match caller(&state.auth, &headers) {
+        Ok(caller) => caller,
+        Err(response) => return *response,
+    };
     let Some(device_id) = header_device(&headers) else {
         return error(StatusCode::BAD_REQUEST, "device_required");
     };
+    if let Err(response) = ensure_device(&state, &caller, &device_id).await {
+        return *response;
+    }
     match blocking(Arc::clone(&state.store), move |store| {
         store.unread_notifications(&device_id)
     })
@@ -235,12 +268,16 @@ pub async fn set_read(
     headers: HeaderMap,
     Json(body): Json<ReadBody>,
 ) -> Response {
-    if let Some(response) = authorized(&state.auth, &headers) {
-        return response;
-    }
+    let caller = match caller(&state.auth, &headers) {
+        Ok(caller) => caller,
+        Err(response) => return *response,
+    };
     let Some(device_id) = header_device(&headers) else {
         return error(StatusCode::BAD_REQUEST, "device_required");
     };
+    if let Err(response) = ensure_device(&state, &caller, &device_id).await {
+        return *response;
+    }
     let now = now_unix();
     let id = body.id;
     let read = body.read;
@@ -267,12 +304,16 @@ pub async fn set_read(
 }
 
 pub async fn read_all(State(state): State<NotificationState>, headers: HeaderMap) -> Response {
-    if let Some(response) = authorized(&state.auth, &headers) {
-        return response;
-    }
+    let caller = match caller(&state.auth, &headers) {
+        Ok(caller) => caller,
+        Err(response) => return *response,
+    };
     let Some(device_id) = header_device(&headers) else {
         return error(StatusCode::BAD_REQUEST, "device_required");
     };
+    if let Err(response) = ensure_device(&state, &caller, &device_id).await {
+        return *response;
+    }
     let now = now_unix();
     let target = device_id.clone();
     match blocking(Arc::clone(&state.store), move |store| {
@@ -301,12 +342,16 @@ pub async fn remove(
     headers: HeaderMap,
     Json(body): Json<RemoveBody>,
 ) -> Response {
-    if let Some(response) = authorized(&state.auth, &headers) {
-        return response;
-    }
+    let caller = match caller(&state.auth, &headers) {
+        Ok(caller) => caller,
+        Err(response) => return *response,
+    };
     let Some(device_id) = header_device(&headers) else {
         return error(StatusCode::BAD_REQUEST, "device_required");
     };
+    if let Err(response) = ensure_device(&state, &caller, &device_id).await {
+        return *response;
+    }
     let id = body.id;
     let key = id.clone();
     let target = device_id.clone();
@@ -332,12 +377,16 @@ pub async fn remove(
 }
 
 pub async fn clear(State(state): State<NotificationState>, headers: HeaderMap) -> Response {
-    if let Some(response) = authorized(&state.auth, &headers) {
-        return response;
-    }
+    let caller = match caller(&state.auth, &headers) {
+        Ok(caller) => caller,
+        Err(response) => return *response,
+    };
     let Some(device_id) = header_device(&headers) else {
         return error(StatusCode::BAD_REQUEST, "device_required");
     };
+    if let Err(response) = ensure_device(&state, &caller, &device_id).await {
+        return *response;
+    }
     let target = device_id.clone();
     match blocking(Arc::clone(&state.store), move |store| {
         store.clear_notifications(&device_id)
@@ -688,5 +737,57 @@ mod tests {
         assert_eq!(announcements[1].target.as_deref(), Some(DEVICE));
         assert_eq!(announcements[1].origin.as_deref(), Some(DEVICE));
         assert_eq!(announcements[2].change.op, SyncOp::Delete);
+    }
+    #[tokio::test]
+    async fn a_foreign_device_id_is_not_found() {
+        let store = Arc::new(Store::open_in_memory(Config::default()).expect("store"));
+        store
+            .register_push_device_for(
+                &PushDeviceInput {
+                    device_id: DEVICE.to_owned(),
+                    token: "token-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_owned(),
+                    platform: "android".to_owned(),
+                    app_version: "0.1.0".to_owned(),
+                    device_name: "Стас".to_owned(),
+                },
+                "owner",
+                1,
+            )
+            .expect("device");
+        let snapshot = home_app_auth::AccessSnapshot {
+            revision: 1,
+            tokens: vec![home_app_auth::TokenRecord {
+                id: "member".to_owned(),
+                name: "Мама".to_owned(),
+                sha256: home_app_auth::sha256_hex("member-token"),
+                owner: false,
+                modules: home_app_auth::Modules::member()
+                    .ids()
+                    .into_iter()
+                    .map(str::to_owned)
+                    .collect(),
+            }],
+        };
+        let cache = home_app_auth::AccessCache::new(snapshot);
+        let auth = Arc::new(AccessAuth::new(
+            cache,
+            home_secret::Token::new("service-token"),
+        ));
+        let state = NotificationState {
+            store,
+            auth,
+            sync: Arc::new(MemorySync::default()),
+        };
+        let router = Router::new()
+            .route("/v1/push/history", get(history))
+            .with_state(state);
+        let request = Request::builder()
+            .uri("/v1/push/history")
+            .header(header::AUTHORIZATION, "Bearer member-token")
+            .header(DEVICE_HEADER, DEVICE)
+            .body(Body::empty())
+            .expect("request");
+        let (status, _) = call(router, request).await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
     }
 }

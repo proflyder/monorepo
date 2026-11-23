@@ -597,7 +597,7 @@ fn catalog_vectors_match_the_go_server() {
     let source: Arc<dyn CatalogSource> = provider;
     assert_catalog_response(
         &catalog_request(
-            catalog_api::router(Arc::clone(&source), token()),
+            catalog_api::router(Arc::clone(&source), token(), String::new(), String::new()),
             Some("Bearer control-secret"),
         ),
         &fixture.responses["live"],
@@ -605,7 +605,10 @@ fn catalog_vectors_match_the_go_server() {
     );
 
     assert_catalog_response(
-        &catalog_request(catalog_api::router(Arc::clone(&source), token()), None),
+        &catalog_request(
+            catalog_api::router(Arc::clone(&source), token(), String::new(), String::new()),
+            None,
+        ),
         &fixture.responses["unauthorized"],
         "unauthorized",
     );
@@ -616,7 +619,12 @@ fn catalog_vectors_match_the_go_server() {
         Vec::new(),
         Duration::from_secs(0),
     ));
-    let stale_router = catalog_api::router(Arc::clone(&stale_source), token());
+    let stale_router = catalog_api::router(
+        Arc::clone(&stale_source),
+        token(),
+        String::new(),
+        String::new(),
+    );
     let live = catalog_request(stale_router.clone(), Some("Bearer control-secret"));
     assert_eq!(live.0, 200, "the first stale-provider request is live");
     ha.down.store(true, std::sync::atomic::Ordering::SeqCst);
@@ -639,7 +647,7 @@ fn catalog_vectors_match_the_go_server() {
     ));
     assert_catalog_response(
         &catalog_request(
-            catalog_api::router(outage_source, token()),
+            catalog_api::router(outage_source, token(), String::new(), String::new()),
             Some("Bearer control-secret"),
         ),
         &fixture.responses["scenarioLabelOutage"],
@@ -658,7 +666,7 @@ fn catalog_vectors_match_the_go_server() {
     ));
     assert_catalog_response(
         &catalog_request(
-            catalog_api::router(down_source, token()),
+            catalog_api::router(down_source, token(), String::new(), String::new()),
             Some("Bearer control-secret"),
         ),
         &fixture.responses["unreachable"],

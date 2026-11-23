@@ -111,10 +111,14 @@ spec:
               value: http://scheduler.home-assistant.svc.cluster.local:8098
             - name: MCP_SCHEDULER_TOKEN_FILE
               value: /run/secrets/mcp-gateway-scheduler/token
+            - name: MCP_SCHEDULER_SERVICE_TOKEN_FILE
+              value: /run/secrets/mcp-gateway-scheduler/service_token
             - name: MCP_PUSH_URL
               value: http://phone-push.home-assistant.svc.cluster.local:8095
             - name: MCP_PUSH_TOKEN_FILE
               value: /run/secrets/mcp-gateway-scheduler/token
+            - name: MCP_PUSH_SERVICE_TOKEN_FILE
+              value: /run/secrets/mcp-gateway-scheduler/service_token
             - name: MCP_APP_TOKEN_FILE
               value: /run/secrets/mcp-gateway-scheduler/token
             - name: MCP_CHAT_HERMES_URL

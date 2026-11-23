@@ -433,10 +433,18 @@ class ManifestTests(unittest.TestCase):
             env["MCP_SCHEDULER_TOKEN_FILE"], "/run/secrets/mcp-gateway-scheduler/token"
         )
         self.assertEqual(
+            env["MCP_SCHEDULER_SERVICE_TOKEN_FILE"],
+            "/run/secrets/mcp-gateway-scheduler/service_token",
+        )
+        self.assertEqual(
             env["MCP_PUSH_URL"], "http://phone-push.home-assistant.svc.cluster.local:8095"
         )
         self.assertEqual(
             env["MCP_PUSH_TOKEN_FILE"], "/run/secrets/mcp-gateway-scheduler/token"
+        )
+        self.assertEqual(
+            env["MCP_PUSH_SERVICE_TOKEN_FILE"],
+            "/run/secrets/mcp-gateway-scheduler/service_token",
         )
         self.assertNotIn("TELEGRAM_BOT_TOKEN", env)
         self.assertNotIn("MCP_AUTH_TOKEN", env)

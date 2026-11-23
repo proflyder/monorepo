@@ -41,7 +41,15 @@ pub async fn run() -> anyhow::Result<()> {
     let source: Arc<dyn CatalogSource> = provider;
     let access = AccessCache::new(fetch_initial_access(&config).await);
     let router = home_http::with_timeout(
-        catalog_api::router(Arc::clone(&source), access.clone()),
+        catalog_api::router(
+            Arc::clone(&source),
+            access.clone(),
+            format!(
+                "{}/v1/access/snapshot",
+                config.scheduler_url.trim_end_matches('/')
+            ),
+            config.scheduler_token.expose().to_owned(),
+        ),
         REQUEST_TIMEOUT,
     );
 

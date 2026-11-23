@@ -59,7 +59,7 @@ spec:
             - name: SCHEDULER_ENDPOINT
               value: http://scheduler.home-assistant.svc.cluster.local:8098
             - name: SCHEDULER_TOKEN_FILE
-              value: /run/secrets/scheduler/token
+              value: /run/secrets/scheduler/service_token
             - name: BRIDGE_CONSUMER_ID
               value: ha-bridge-home
             - name: BRIDGE_QUEUE
