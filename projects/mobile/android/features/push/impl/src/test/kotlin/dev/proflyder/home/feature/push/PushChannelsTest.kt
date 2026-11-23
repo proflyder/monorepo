@@ -7,6 +7,7 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import dev.proflyder.home.core.theme.AppTheme
 import dev.proflyder.home.core.theme.AppearanceController
+import dev.proflyder.home.core.theme.ThemedNotificationAccent
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -74,7 +75,7 @@ class PushChannelsTest {
         val context = RuntimeEnvironment.getApplication()
         PushChannels.ensure(context)
 
-        val notification = PushNotifier(context, appearance(context), AndroidNotificationPermission(context)).ring("Рикардо")
+        val notification = PushNotifier(context, ThemedNotificationAccent(context, appearance(context)), AndroidNotificationPermission(context)).ring("Рикардо")
 
         assertEquals(PushChannels.FIND, notification.channelId)
         assertNull(notification.sound)

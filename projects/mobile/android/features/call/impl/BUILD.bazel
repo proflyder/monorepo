@@ -19,6 +19,7 @@ metro_android_library(
         "//projects/mobile/android/core/network/api",
         "//projects/mobile/android/core/presentation",
         "//projects/mobile/android/core/settings",
+        "//projects/mobile/android/core/theme",
         "//projects/mobile/android/core/ui",
         "//projects/mobile/android/features/call/api",
         "//projects/mobile/android/features/control/api",

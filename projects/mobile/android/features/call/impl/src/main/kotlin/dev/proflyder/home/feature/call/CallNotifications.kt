@@ -8,11 +8,15 @@ import androidx.core.app.NotificationChannelCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.Person
+import dev.proflyder.home.core.theme.NotificationAccent
 import dev.proflyder.home.feature.call.impl.R
 import dev.proflyder.home.feature.call.presentation.CallActivity
 import dev.proflyder.home.feature.call.presentation.CallTexts
 
-internal class CallNotifications(private val context: Context) {
+internal class CallNotifications(
+    private val context: Context,
+    private val accent: NotificationAccent,
+) {
     private val texts = CallTexts(context)
 
     fun createChannel() {
@@ -29,6 +33,7 @@ internal class CallNotifications(private val context: Context) {
         val person = Person.Builder().setName(station).setImportant(true).build()
         return NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.call_ic_phone)
+            .setColor(accent.color())
             .setContentTitle(station)
             .setContentText(texts.phase(state.phase))
             .setContentIntent(contentIntent())

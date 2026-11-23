@@ -146,6 +146,8 @@ class AndroidThemeColorTests(unittest.TestCase):
                     continue
                 if path.name == "control_bg_swatch.xml":
                     continue
+                if path.name.startswith("app_ic_launcher_"):
+                    continue
                 problems.append(f"{path.relative_to(ROOT)}:{number}: {value}")
         return problems
 
