@@ -550,3 +550,20 @@ navigate by route string, not by an impl destination.
 ## App identity
 
 `dev.proflyder.home`, minSdk 26, target/compile SDK 36, JVM target 17.
+
+## Launcher icon per theme
+
+Each `AppTheme` has an `activity-alias` `dev.proflyder.home.launcher.<Name>`
+targeting `MainActivity`, with its own adaptive icon
+(`app_ic_launcher_<theme>`: background, foreground and a shared monochrome
+layer; the system theme uses wallpaper colours on API 31+). Only the alias of
+`AppTheme.DEFAULT` is enabled in the manifest. `LauncherIcons`
+(`core/launchericon/api`) is implemented by `PackageManagerLauncherIcons`
+(`core/launchericon/impl`), which enables the target alias first, then
+disables the others with `DONT_KILL_APP`, skipping writes when the state
+already matches. `LauncherIconSync` (an `AppStartable`) waits for the stored
+appearance and applies every distinct theme, so the startup sync and theme
+changes share one path. `MainActivity` stays exported without a launcher
+filter, so explicit intents and `getLaunchIntentForPackage` (push, VPN
+notifications) keep working. A new `AppTheme` entry fails compilation in
+`LauncherAliases` until its alias and icon exist.

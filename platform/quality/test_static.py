@@ -130,8 +130,7 @@ class AndroidThemeColorTests(unittest.TestCase):
     COLOR = __import__("re").compile(r'"(#[0-9A-Fa-f]{3,8}|@color/[a-z0-9_]+|@android:color/(?!transparent)[a-z_]+)"')
     ALLOWED_REFS = {"@color/ds_pill_text", "@color/alarms_day_toggle_text", "@color/alarms_day_toggle_background",
                     "@color/alarms_day_toggle_stroke", "@color/alarms_delete_ripple",
-                    "@color/control_scrim", "@color/control_speed_dial_label",
-                    "@color/home_launcher_bg", "@color/home_launcher_fg"}
+                    "@color/control_scrim", "@color/control_speed_dial_label"}
 
     def _problems(self, path: Path) -> list[str]:
         text = path.read_text(encoding="utf-8")
