@@ -501,8 +501,7 @@ services:
       source: loki
       selector: '{namespace="monitoring",container="pve-exporter"}'
     restart:
-      allowed: true
-      warning: "Метрики гостей Proxmox пропадут из дашборда «Система» на время перезапуска; VM и CT продолжат работу."
+      allowed: false
     description: prometheus-pve-exporter для метрик гостей Proxmox VE (job pve-guests).
 
   - id: loki

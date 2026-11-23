@@ -102,7 +102,6 @@ rules:
       - monitoring-grafana
       - monitoring-kube-state-metrics
       - monitoring-operator
-      - pve-exporter
     verbs: ["patch"]
   - apiGroups: ["apps"]
     resources: ["statefulsets"]
