@@ -56,3 +56,5 @@ interface FavoritePreferences {
 
     suspend fun toggle(ref: FavoriteRef): Boolean
 }
+
+private fun unusedDemoHelper(): Int = 1

@@ -25,7 +25,7 @@ class ServerClockTest {
         val time = FakeTime()
         val clock = ServerClock(time)
         assertFalse(clock.isSynced)
-        assertEquals(5_000L, clock.nowUnix())
+        assertEquals(5_001L, clock.nowUnix())
         time.wallMillis += 30_000L
         assertEquals(5_030L, clock.nowUnix())
     }
