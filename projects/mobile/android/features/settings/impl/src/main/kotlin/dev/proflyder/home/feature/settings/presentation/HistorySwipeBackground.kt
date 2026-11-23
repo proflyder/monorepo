@@ -19,14 +19,13 @@ internal class HistorySwipeBackground(private val context: Context) {
     private val radius = context.resources.getDimension(R.dimen.settings_history_swipe_radius)
     private val inset = context.resources.getDimensionPixelSize(R.dimen.settings_history_swipe_icon_inset)
     private val delete = side(R.drawable.settings_ic_delete, com.google.android.material.R.attr.colorError, com.google.android.material.R.attr.colorOnError)
-    private val markRead = side(R.drawable.settings_ic_mark_read, androidx.appcompat.R.attr.colorPrimary, com.google.android.material.R.attr.colorOnPrimary)
-    private val markUnread = side(R.drawable.settings_ic_mark_unread, androidx.appcompat.R.attr.colorPrimary, com.google.android.material.R.attr.colorOnPrimary)
+    private val toggle = side(R.drawable.settings_ic_mark_unread, androidx.appcompat.R.attr.colorPrimary, com.google.android.material.R.attr.colorOnPrimary)
 
-    fun draw(canvas: Canvas, item: View, dx: Float, read: Boolean) {
+    fun draw(canvas: Canvas, item: View, dx: Float) {
         if (dx == 0f) return
         val left = dx < 0
         val area = area(item, dx)
-        val side = sideFor(left, read)
+        val side = sideFor(left)
         paint.color = side.color
         canvas.drawRoundRect(area, radius, radius, paint)
         canvas.withClip(area) {
@@ -35,11 +34,7 @@ internal class HistorySwipeBackground(private val context: Context) {
         }
     }
 
-    fun sideFor(left: Boolean, read: Boolean): Side = when {
-        left -> delete
-        read -> markUnread
-        else -> markRead
-    }
+    fun sideFor(left: Boolean): Side = if (left) delete else toggle
 
     private fun area(item: View, dx: Float): RectF = when {
         dx < 0 -> RectF(item.right + dx, item.top.toFloat(), item.right.toFloat(), item.bottom.toFloat())

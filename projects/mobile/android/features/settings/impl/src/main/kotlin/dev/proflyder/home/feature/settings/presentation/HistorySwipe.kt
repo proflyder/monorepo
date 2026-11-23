@@ -32,9 +32,27 @@ internal class HistorySwipe(
         val position = viewHolder.bindingAdapterPosition
         val entry = actions.entryAt(position) ?: return
         when (direction) {
-            ItemTouchHelper.LEFT -> actions.onDelete(entry)
-            else -> actions.onToggleRead(entry)
+            ItemTouchHelper.LEFT -> {
+                actions.onDelete(entry)
+                recover(viewHolder)
+            }
+            else -> {
+                actions.onToggleRead(entry)
+                viewHolder.bindingAdapter?.notifyItemChanged(position)
+            }
         }
+    }
+
+    override fun clearView(recyclerView: RecyclerView, viewHolder: RecyclerView.ViewHolder) {
+        super.clearView(recyclerView, viewHolder)
+        viewHolder.itemView.translationX = 0f
+        viewHolder.itemView.translationY = 0f
+    }
+
+    private fun recover(viewHolder: RecyclerView.ViewHolder) {
+        val recyclerView = viewHolder.itemView.parent as? RecyclerView ?: return
+        clearView(recyclerView, viewHolder)
+        viewHolder.itemView.translationX = 0f
     }
 
     override fun onChildDraw(
@@ -46,8 +64,13 @@ internal class HistorySwipe(
         actionState: Int,
         isCurrentlyActive: Boolean,
     ) {
+        if (!isCurrentlyActive) {
+            viewHolder.itemView.translationX = 0f
+            viewHolder.itemView.translationY = 0f
+            return
+        }
         val entry = actions.entryAt(viewHolder.bindingAdapterPosition)
-        if (entry != null) background.draw(canvas, viewHolder.itemView, dX, entry.read)
+        if (entry != null) background.draw(canvas, viewHolder.itemView, dX)
         super.onChildDraw(canvas, recyclerView, viewHolder, dX, dY, actionState, isCurrentlyActive)
     }
 

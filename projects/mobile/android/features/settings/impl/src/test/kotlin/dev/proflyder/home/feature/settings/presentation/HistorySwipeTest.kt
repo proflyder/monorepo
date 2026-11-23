@@ -108,9 +108,8 @@ class HistorySwipeTest {
     fun swipeBackgroundsUseTheActionColourAndIcon() {
         val themed = theme()
         val background = HistorySwipeBackground(themed)
-        assertEquals(R.drawable.settings_ic_delete, background.sideFor(left = true, read = false).iconRes)
-        assertEquals(R.drawable.settings_ic_mark_read, background.sideFor(left = false, read = false).iconRes)
-        assertEquals(R.drawable.settings_ic_mark_unread, background.sideFor(left = false, read = true).iconRes)
+        assertEquals(R.drawable.settings_ic_delete, background.sideFor(left = true).iconRes)
+        assertEquals(R.drawable.settings_ic_mark_unread, background.sideFor(left = false).iconRes)
 
         val binding = list(themed)
         val root = binding.root
@@ -118,19 +117,19 @@ class HistorySwipeTest {
         val bitmap = Bitmap.createBitmap(root.width, root.height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         root.draw(canvas)
-        swiped(binding, background, canvas, position = 1, dx = -SWIPE_PX, read = false)
-        swiped(binding, background, canvas, position = 3, dx = SWIPE_PX, read = false)
+        swiped(binding, background, canvas, position = 1, dx = -SWIPE_PX)
+        swiped(binding, background, canvas, position = 3, dx = SWIPE_PX)
         save(bitmap, "notification-history-swipe-dark.png")
         val deleteItem = checkNotNull(binding.historyList.findViewHolderForAdapterPosition(1)).itemView
         val deleteArea = bitmap.getPixel(binding.historyList.left + deleteItem.right - EDGE_PX, centerOf(binding, 1))
-        assertEquals(background.sideFor(left = true, read = false).color, deleteArea)
+        assertEquals(background.sideFor(left = true).color, deleteArea)
     }
 
-    private fun swiped(binding: FragmentNotificationHistoryBinding, background: HistorySwipeBackground, canvas: Canvas, position: Int, dx: Float, read: Boolean) {
+    private fun swiped(binding: FragmentNotificationHistoryBinding, background: HistorySwipeBackground, canvas: Canvas, position: Int, dx: Float) {
         val item = checkNotNull(binding.historyList.findViewHolderForAdapterPosition(position)).itemView
         canvas.save()
         canvas.translate(binding.historyList.left.toFloat(), binding.historyList.top.toFloat() + parentTop(binding))
-        background.draw(canvas, item, dx, read)
+        background.draw(canvas, item, dx)
         canvas.translate(item.left + dx, item.top.toFloat())
         item.draw(canvas)
         canvas.restore()
