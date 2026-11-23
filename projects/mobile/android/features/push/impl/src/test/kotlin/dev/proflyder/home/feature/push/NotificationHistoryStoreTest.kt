@@ -79,13 +79,30 @@ class NotificationHistoryStoreTest {
         store.record(entry("b", NotificationHistoryType.NOTIFY, 2_000))
         assertEquals(2, NotificationHistoryRules.unread(store.settled(2)))
 
-        store.markRead("a")
+        store.setRead("a", true)
         val afterOne = DataStoreNotificationHistoryStore(dataStore, lifetime())
         assertEquals(listOf(false, true), afterOne.settledUnread(1).map { it.read })
 
         afterOne.markAllRead()
         val afterAll = DataStoreNotificationHistoryStore(dataStore, lifetime())
         assertEquals(0, NotificationHistoryRules.unread(afterAll.settledUnread(0)))
+    }
+
+    @Test
+    fun deletedEntryComesBackInPlaceAndReadCanBeToggledBack() = runBlocking {
+        val context = RuntimeEnvironment.getApplication()
+        val store = DataStoreNotificationHistoryStore(store(context, "history-delete"), lifetime())
+        listOf("a" to 1_000L, "b" to 2_000L, "c" to 3_000L).forEach { (id, at) -> store.record(entry(id, NotificationHistoryType.NOTIFY, at)) }
+        val middle = store.settled(3).first { it.id == "b" }
+
+        store.delete("b")
+        assertEquals(listOf("c", "a"), store.settled(2).map { it.id })
+        store.restore(middle)
+        assertEquals(listOf("c", "b", "a"), store.settled(3, first = "c").map { it.id })
+
+        store.setRead("b", true)
+        store.setRead("b", false)
+        assertEquals(3, NotificationHistoryRules.unread(withTimeout(TIMEOUT_MILLIS) { store.entries.first { all -> all.size == 3 && all.none { it.read } } }))
     }
 
     @Test

@@ -2,7 +2,10 @@ package dev.proflyder.home.feature.settings.presentation
 
 import android.os.Bundle
 import dev.proflyder.home.core.presentation.IntentAdapterCallback
+import androidx.recyclerview.widget.ItemTouchHelper
 import dev.proflyder.home.core.presentation.ScreenFragment
+import dev.proflyder.home.core.presentation.UndoNotice
+import dev.proflyder.home.feature.push.NotificationHistoryEntry
 import dev.proflyder.home.core.presentation.screenViewModel
 import dev.proflyder.home.core.ui.AdapterCallback
 import dev.proflyder.home.core.ui.applyScrollBottomInset
@@ -21,19 +24,23 @@ internal class NotificationHistoryFragment :
         AdapterCallback<HistoryRow> by IntentAdapterCallback(::dispatch, ::openIntent) {}
 
     private val adapter by lazy { NotificationHistoryAdapter(callback) }
+    private val undo = UndoNotice(::requireView) { dispatch(HistoryIntent.Undo) }
 
     override fun onViewReady(binding: FragmentNotificationHistoryBinding, savedInstanceState: Bundle?) {
         binding.historyList.applyScrollBottomInset()
         binding.historyList.adapter = adapter
         binding.historyList.addHistoryDecorations()
+        ItemTouchHelper(HistorySwipe(Swipes(), HistorySwipeBackground(requireContext()))).attachToRecyclerView(binding.historyList)
         binding.historyClear.setOnClickListener { confirmClear() }
         binding.historyReadAll.setOnClickListener { dispatch(HistoryIntent.ReadAll) }
         render(NotificationHistoryUiState::rows, adapter::submitList)
         render({ it.entries.size }, ::renderCount)
         render(NotificationHistoryUiState::unread) { binding.historyReadAll.setVisible(it > 0) }
+        render(NotificationHistoryUiState::undo) { deleted -> undo.render(deleted?.let { getString(R.string.history_deleted) }) }
     }
 
     override fun onBindingDestroyed() {
+        undo.clear()
         binding.historyList.adapter = null
     }
 
@@ -52,6 +59,14 @@ internal class NotificationHistoryFragment :
     }
 
     private fun openIntent(row: HistoryRow): HistoryIntent? = (row as? HistoryRow.Item)?.let { HistoryIntent.Open(it.entry) }
+
+    private inner class Swipes : HistorySwipeActions {
+        override fun entryAt(position: Int) = (adapter.currentList.getOrNull(position) as? HistoryRow.Item)?.entry
+
+        override fun onDelete(entry: NotificationHistoryEntry) = dispatch(HistoryIntent.Delete(entry))
+
+        override fun onToggleRead(entry: NotificationHistoryEntry) = dispatch(HistoryIntent.ToggleRead(entry))
+    }
 
     private fun confirmClear() {
         confirm(

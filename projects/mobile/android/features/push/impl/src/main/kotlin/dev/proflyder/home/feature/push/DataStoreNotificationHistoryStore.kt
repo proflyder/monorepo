@@ -31,7 +31,11 @@ internal class DataStoreNotificationHistoryStore(
         preferences[KEY_ENTRIES] = NotificationHistoryCodec.encode(updated)
     }
 
-    override suspend fun markRead(id: String) = update { NotificationHistoryRules.markRead(it, id) }
+    override suspend fun setRead(id: String, read: Boolean) = update { NotificationHistoryRules.setRead(it, id, read) }
+
+    override suspend fun delete(id: String) = update { NotificationHistoryRules.remove(it, id) }
+
+    override suspend fun restore(entry: NotificationHistoryEntry) = update { NotificationHistoryRules.restore(it, entry) }
 
     override suspend fun markAllRead() = update(NotificationHistoryRules::markAllRead)
 

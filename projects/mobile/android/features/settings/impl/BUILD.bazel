@@ -40,9 +40,12 @@ home_android_local_test(
     custom_package = "dev.proflyder.home.feature.settings.impl",
     manifest = "src/test/AndroidManifest.xml",
     test_classes = [
+        "dev.proflyder.home.feature.settings.presentation.HistorySwipeTest",
         "dev.proflyder.home.feature.settings.presentation.SettingsScreensScreenshotTest",
     ],
     deps = [
+        "//projects/mobile/android/core/model",
+        "//projects/mobile/android/core/testing",
         "//projects/mobile/android/features/push/api",
         "@maven//:androidx_appcompat_appcompat",
         "@maven//:androidx_recyclerview_recyclerview",

@@ -31,4 +31,5 @@
     <string name="settings_toolbar_action">Настройки</string>
     <string name="bell_description">Уведомления</string>
     <string name="bell_description_unread">Уведомления, непрочитанных: %1$d</string>
+    <string name="history_deleted">Уведомление удалено.</string>
 </resources>

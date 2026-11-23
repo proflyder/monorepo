@@ -1,0 +1,218 @@
+package dev.proflyder.home.feature.settings.presentation
+
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.os.Looper
+import android.view.LayoutInflater
+import android.view.View
+import androidx.appcompat.view.ContextThemeWrapper
+import androidx.recyclerview.widget.ItemTouchHelper
+import androidx.recyclerview.widget.LinearLayoutManager
+import dev.proflyder.home.core.testing.FakeClock
+import dev.proflyder.home.core.ui.BaseAdapterCallback
+import dev.proflyder.home.feature.push.NotificationHistoryEntry
+import dev.proflyder.home.feature.push.NotificationHistoryRules
+import dev.proflyder.home.feature.push.NotificationHistoryStore
+import dev.proflyder.home.feature.push.NotificationHistoryType
+import dev.proflyder.home.feature.settings.impl.R
+import dev.proflyder.home.feature.settings.impl.databinding.FragmentNotificationHistoryBinding
+import java.io.File
+import java.time.LocalDate
+import java.time.ZoneId
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
+import org.robolectric.Shadows.shadowOf
+import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
+
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [35], qualifiers = "w411dp-h891dp-night-xxhdpi")
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+class HistorySwipeTest {
+    private val now = System.currentTimeMillis()
+    private val entries = listOf(entry("a", now, read = false), entry("b", now - HOUR, read = true), entry("c", now - 2 * HOUR, read = false))
+
+    @Test
+    fun deletingKeepsTheEntryForUndoAndUndoPutsItBack() {
+        val store = FakeStore(entries)
+        val model = NotificationHistoryViewModel(store, FakeClock(now))
+        idle()
+
+        model.dispatch(HistoryIntent.Delete(entries[1]))
+        idle()
+        assertEquals(listOf("a", "c"), store.entries.value.map { it.id })
+        assertEquals("b", model.state.value.undo?.id)
+
+        model.dispatch(HistoryIntent.Undo)
+        idle()
+        assertEquals(listOf("a", "b", "c"), store.entries.value.map { it.id })
+        assertNull(model.state.value.undo)
+    }
+
+    @Test
+    fun swipingRightTogglesReadBothWays() {
+        val store = FakeStore(entries)
+        val model = NotificationHistoryViewModel(store, FakeClock(now))
+        idle()
+
+        model.dispatch(HistoryIntent.ToggleRead(entries[0]))
+        idle()
+        assertEquals(true, store.entries.value.first { it.id == "a" }.read)
+        model.dispatch(HistoryIntent.ToggleRead(store.entries.value.first { it.id == "b" }))
+        idle()
+        assertEquals(false, store.entries.value.first { it.id == "b" }.read)
+    }
+
+    @Test
+    fun leftDeletesRightTogglesAndDayHeadersDoNotSwipe() {
+        val themed = theme()
+        val binding = list(themed)
+        val calls = mutableListOf<String>()
+        val swipe = HistorySwipe(Recorder(binding, calls), HistorySwipeBackground(themed))
+        val header = checkNotNull(binding.historyList.findViewHolderForAdapterPosition(0))
+        val first = checkNotNull(binding.historyList.findViewHolderForAdapterPosition(1))
+
+        assertEquals(0, swipe.getSwipeDirs(binding.historyList, header))
+        assertEquals(ItemTouchHelper.LEFT or ItemTouchHelper.RIGHT, swipe.getSwipeDirs(binding.historyList, first))
+        swipe.onSwiped(first, ItemTouchHelper.LEFT)
+        swipe.onSwiped(first, ItemTouchHelper.RIGHT)
+        assertEquals(listOf("delete:a", "toggle:a"), calls)
+    }
+
+    @Test
+    fun swipeBackgroundsUseTheActionColourAndIcon() {
+        val themed = theme()
+        val background = HistorySwipeBackground(themed)
+        assertEquals(R.drawable.settings_ic_delete, background.sideFor(left = true, read = false).iconRes)
+        assertEquals(R.drawable.settings_ic_mark_read, background.sideFor(left = false, read = false).iconRes)
+        assertEquals(R.drawable.settings_ic_mark_unread, background.sideFor(left = false, read = true).iconRes)
+
+        val binding = list(themed)
+        val root = binding.root
+        idle()
+        val bitmap = Bitmap.createBitmap(root.width, root.height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        root.draw(canvas)
+        swiped(binding, background, canvas, position = 1, dx = -SWIPE_PX, read = false)
+        swiped(binding, background, canvas, position = 3, dx = SWIPE_PX, read = false)
+        save(bitmap, "notification-history-swipe-dark.png")
+        val deleteItem = checkNotNull(binding.historyList.findViewHolderForAdapterPosition(1)).itemView
+        val deleteArea = bitmap.getPixel(binding.historyList.left + deleteItem.right - EDGE_PX, centerOf(binding, 1))
+        assertEquals(background.sideFor(left = true, read = false).color, deleteArea)
+    }
+
+    private fun swiped(binding: FragmentNotificationHistoryBinding, background: HistorySwipeBackground, canvas: Canvas, position: Int, dx: Float, read: Boolean) {
+        val item = checkNotNull(binding.historyList.findViewHolderForAdapterPosition(position)).itemView
+        canvas.save()
+        canvas.translate(binding.historyList.left.toFloat(), binding.historyList.top.toFloat() + parentTop(binding))
+        background.draw(canvas, item, dx, read)
+        canvas.translate(item.left + dx, item.top.toFloat())
+        item.draw(canvas)
+        canvas.restore()
+    }
+
+    private fun parentTop(binding: FragmentNotificationHistoryBinding): Float = (binding.historyList.parent as View).top.toFloat()
+
+    private fun centerOf(binding: FragmentNotificationHistoryBinding, position: Int): Int {
+        val item = checkNotNull(binding.historyList.findViewHolderForAdapterPosition(position)).itemView
+        return (parentTop(binding) + binding.historyList.top + item.top + item.height / 2).toInt()
+    }
+
+    private fun list(themed: ContextThemeWrapper): FragmentNotificationHistoryBinding {
+        val binding = FragmentNotificationHistoryBinding.inflate(LayoutInflater.from(themed))
+        binding.historyList.layoutManager = LinearLayoutManager(themed)
+        binding.historyList.adapter = NotificationHistoryAdapter(NoopCallback()).apply {
+            submitList(HistoryRows.of(entries, LocalDate.now(), ZoneId.systemDefault()))
+        }
+        binding.historyEmpty.visibility = View.GONE
+        val metrics = themed.resources.displayMetrics
+        val width = (WIDTH_DP * metrics.density).toInt()
+        val height = (HEIGHT_DP * metrics.density).toInt()
+        binding.root.measure(exactly(width), exactly(height))
+        binding.root.layout(0, 0, width, height)
+        return binding
+    }
+
+    private class Recorder(private val binding: FragmentNotificationHistoryBinding, private val calls: MutableList<String>) : HistorySwipeActions {
+        override fun entryAt(position: Int): NotificationHistoryEntry? =
+            ((binding.historyList.adapter as NotificationHistoryAdapter).currentList.getOrNull(position) as? HistoryRow.Item)?.entry
+
+        override fun onDelete(entry: NotificationHistoryEntry) {
+            calls += "delete:${entry.id}"
+        }
+
+        override fun onToggleRead(entry: NotificationHistoryEntry) {
+            calls += "toggle:${entry.id}"
+        }
+    }
+
+    private class FakeStore(initial: List<NotificationHistoryEntry>) : NotificationHistoryStore {
+        private val state = MutableStateFlow(initial)
+        override val entries: StateFlow<List<NotificationHistoryEntry>> = state
+
+        override suspend fun record(entry: NotificationHistoryEntry) {
+            state.value = NotificationHistoryRules.record(state.value, entry)
+        }
+
+        override suspend fun setRead(id: String, read: Boolean) {
+            state.value = NotificationHistoryRules.setRead(state.value, id, read)
+        }
+
+        override suspend fun delete(id: String) {
+            state.value = NotificationHistoryRules.remove(state.value, id)
+        }
+
+        override suspend fun restore(entry: NotificationHistoryEntry) {
+            state.value = NotificationHistoryRules.restore(state.value, entry)
+        }
+
+        override suspend fun markAllRead() {
+            state.value = NotificationHistoryRules.markAllRead(state.value)
+        }
+
+        override suspend fun clear() {
+            state.value = emptyList()
+        }
+    }
+
+    private class NoopCallback : BaseAdapterCallback<HistoryRow>(), NotificationHistoryAdapterCallback
+
+    private fun entry(id: String, at: Long, read: Boolean) = NotificationHistoryEntry(
+        id = id,
+        type = NotificationHistoryType.NOTIFY,
+        title = "Дверь открыта $id",
+        body = "Кто-то у двери",
+        receivedAtMillis = at,
+        read = read,
+    )
+
+    private fun theme(): ContextThemeWrapper = ContextThemeWrapper(
+        RuntimeEnvironment.getApplication(),
+        com.google.android.material.R.style.Theme_Material3_Dark_NoActionBar,
+    )
+
+    private fun idle() = shadowOf(Looper.getMainLooper()).idle()
+
+    private fun save(bitmap: Bitmap, name: String) {
+        val dir = System.getenv("TEST_UNDECLARED_OUTPUTS_DIR") ?: return
+        File(dir).mkdirs()
+        File(dir, name).outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, PNG_QUALITY, it) }
+    }
+
+    private fun exactly(size: Int): Int = View.MeasureSpec.makeMeasureSpec(size, View.MeasureSpec.EXACTLY)
+
+    private companion object {
+        const val HOUR = 3_600_000L
+        const val WIDTH_DP = 411
+        const val HEIGHT_DP = 891
+        const val SWIPE_PX = 360f
+        const val PNG_QUALITY = 100
+        const val EDGE_PX = 12
+    }
+}

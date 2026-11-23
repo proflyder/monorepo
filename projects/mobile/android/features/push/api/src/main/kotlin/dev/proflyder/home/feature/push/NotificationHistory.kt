@@ -30,8 +30,14 @@ object NotificationHistoryRules {
     fun bounded(entries: List<NotificationHistoryEntry>): List<NotificationHistoryEntry> =
         entries.take(MAX_ENTRIES)
 
-    fun markRead(entries: List<NotificationHistoryEntry>, id: String): List<NotificationHistoryEntry> =
-        entries.map { if (it.id == id) it.copy(read = true) else it }
+    fun setRead(entries: List<NotificationHistoryEntry>, id: String, read: Boolean): List<NotificationHistoryEntry> =
+        entries.map { if (it.id == id) it.copy(read = read) else it }
+
+    fun remove(entries: List<NotificationHistoryEntry>, id: String): List<NotificationHistoryEntry> =
+        entries.filterNot { it.id == id }
+
+    fun restore(entries: List<NotificationHistoryEntry>, entry: NotificationHistoryEntry): List<NotificationHistoryEntry> =
+        (remove(entries, entry.id) + entry).sortedByDescending { it.receivedAtMillis }.take(MAX_ENTRIES)
 
     fun markAllRead(entries: List<NotificationHistoryEntry>): List<NotificationHistoryEntry> =
         entries.map { it.copy(read = true) }
@@ -44,7 +50,11 @@ interface NotificationHistoryStore {
 
     suspend fun record(entry: NotificationHistoryEntry)
 
-    suspend fun markRead(id: String)
+    suspend fun setRead(id: String, read: Boolean)
+
+    suspend fun delete(id: String)
+
+    suspend fun restore(entry: NotificationHistoryEntry)
 
     suspend fun markAllRead()
 
