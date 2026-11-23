@@ -5,7 +5,6 @@
     <dimen name="ds_space_m">12dp</dimen>
     <dimen name="ds_space_l">16dp</dimen>
     <dimen name="ds_space_xl">24dp</dimen>
-    <dimen name="ds_space_xxl">32dp</dimen>
 
     <dimen name="ds_radius_s">8dp</dimen>
     <dimen name="ds_radius_m">12dp</dimen>
@@ -35,7 +34,6 @@
     <dimen name="ds_empty_icon">48dp</dimen>
     <dimen name="ds_list_row_min_height">56dp</dimen>
     <dimen name="ds_pill_button_padding">10dp</dimen>
-    <dimen name="ds_pill_button_icon_gap">6dp</dimen>
     <dimen name="ds_time_display_height">96dp</dimen>
     <dimen name="ds_time_display_text">48sp</dimen>
     <dimen name="ds_bar_action_height">64dp</dimen>

@@ -2,4 +2,8 @@
 <lint>
     <issue id="all" severity="error" />
     <issue id="HardcodedText" severity="error" />
+    <issue id="Overdraw">
+        <ignore regexp="features/settings/impl/src/main/res/layout/item_notification_history\.xml" />
+        <ignore regexp="features/vpn/impl/src/main/res/layout/vpn_route_banner\.xml" />
+    </issue>
 </lint>

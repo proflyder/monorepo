@@ -32,7 +32,7 @@ class PushSettingsScreenshotTest {
         binding.pushDndRow.subtitle = missing
         binding.pushFullScreenRow.subtitle = missing
         binding.pushRingSummary.text = themed.getString(R.string.push_ring_incomplete)
-        binding.pushDeviceName.setText(themed.getString(R.string.push_device_name_sample))
+        binding.pushDeviceName.setText(SAMPLE_DEVICE_NAME)
         binding.pushDeviceNameSave.isEnabled = true
         binding.pushRegistration.text = themed.getString(R.string.push_not_registered)
         savePng(binding.root, "push-settings-dark.png")
@@ -53,3 +53,5 @@ class PushSettingsScreenshotTest {
 
     private fun exactly(size: Int): Int = View.MeasureSpec.makeMeasureSpec(size, View.MeasureSpec.EXACTLY)
 }
+
+private const val SAMPLE_DEVICE_NAME = "Stas"

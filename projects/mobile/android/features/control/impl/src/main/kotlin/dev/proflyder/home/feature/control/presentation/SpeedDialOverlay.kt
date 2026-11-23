@@ -7,10 +7,10 @@ import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.view.animation.PathInterpolator
 import android.widget.FrameLayout
 import android.widget.PopupWindow
 import androidx.core.graphics.drawable.toDrawable
-import com.google.android.material.animation.AnimationUtils
 import com.google.android.material.color.MaterialColors
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import dev.proflyder.home.core.designsystem.bindAvailability
@@ -119,7 +119,7 @@ internal class SpeedDialOverlay(
         content.controlDialFab.animate()
             .rotation(0f)
             .setDuration(itemDuration)
-            .setInterpolator(AnimationUtils.FAST_OUT_SLOW_IN_INTERPOLATOR)
+            .setInterpolator(FAST_OUT_SLOW_IN)
             .start()
         animateIn()
     }
@@ -151,7 +151,7 @@ internal class SpeedDialOverlay(
         content.controlDialFab.animate()
             .rotation(-90f)
             .setDuration(itemDuration)
-            .setInterpolator(AnimationUtils.FAST_OUT_SLOW_IN_INTERPOLATOR)
+            .setInterpolator(FAST_OUT_SLOW_IN)
             .start()
         rows.forEachIndexed { index, row -> animateOut(index, row) }
         val total = rows.size.coerceAtLeast(1) * stagger + itemDuration
@@ -272,7 +272,7 @@ internal class SpeedDialOverlay(
             .alpha(1f)
             .setStartDelay((rows.lastIndex - index) * stagger)
             .setDuration(itemDuration)
-            .setInterpolator(AnimationUtils.FAST_OUT_SLOW_IN_INTERPOLATOR)
+            .setInterpolator(FAST_OUT_SLOW_IN)
             .start()
     }
 
@@ -285,7 +285,7 @@ internal class SpeedDialOverlay(
             .alpha(0f)
             .setStartDelay(index * stagger)
             .setDuration(itemDuration)
-            .setInterpolator(AnimationUtils.FAST_OUT_SLOW_IN_INTERPOLATOR)
+            .setInterpolator(FAST_OUT_SLOW_IN)
             .start()
     }
 
@@ -406,3 +406,5 @@ internal fun SpeedDialItem.isEnabled(): Boolean = when (this) {
     }
     is SpeedDialItem.Wake -> action.entry.available && !action.busy
 }
+
+private val FAST_OUT_SLOW_IN = PathInterpolator(0.4f, 0f, 0.2f, 1f)

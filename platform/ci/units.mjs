@@ -511,7 +511,7 @@ export const config = {
     {
       id: "android-lint",
       platform: "android",
-      title: "projects/mobile/android (Android Lint, whole app graph)",
+      title: "projects/mobile/android (Android Lint, per-module analysis)",
       paths: ["projects/mobile/android/**"],
       bazel: {
         roots: ["//projects/mobile/android"],

@@ -39,13 +39,6 @@
     <string name="chat_voice_label">Голосовое сообщение</string>
     <string name="chat_transcript_pending">Распознаю…</string>
     <string name="chat_open_image">Открыть фото</string>
-    <string name="chat_error_chat_attachment_too_large">Вложение слишком большое.</string>
-    <string name="chat_error_chat_attachment_unsupported">Такой тип файла не поддерживается.</string>
-    <string name="chat_error_chat_attachment_not_found">Вложение не найдено.</string>
-    <string name="chat_error_chat_attachment_missing">Файла больше нет на телефоне.</string>
-    <string name="chat_error_chat_too_many_attachments">Слишком много вложений в одном сообщении.</string>
-    <string name="chat_error_chat_voice_format">Неподдерживаемый формат записи.</string>
-    <string name="chat_error_chat_stt_failed">Не удалось распознать голосовое.</string>
     <string name="chat_alert_firing">Сработал</string>
     <string name="chat_alert_resolved">Решено</string>
     <string name="chat_alert_critical">Критичный алерт</string>

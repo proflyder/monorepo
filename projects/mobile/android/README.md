@@ -41,10 +41,19 @@ adb install -r bazel-bin/projects/mobile/android/app/app.apk
 
 - **Android Lint** is not part of `android_tests`: it is its own CI unit
   (`android / android-lint`) so a finding does not hide test results. It uses
-  the SDK `cmdline-tools;23.0` Lint CLI (or `ANDROID_LINT`), models every
-  module and runs once with `-Werror`. `lint.xml` is not a baseline;
-  `tools:ignore`/`@Suppress` only for a documented false positive, scoped to
-  the narrowest element.
+  the SDK `cmdline-tools;23.0` Lint CLI (`@android_lint_sdk`, a symlink of
+  `ANDROID_HOME` whose jars are action inputs) with partial analysis: one
+  cacheable `AndroidLintAnalyze` action per module (`--analyze-only` over that
+  module's lint model: its sources, resources, manifest, compile classpath and
+  the resources/jars of its module dependencies), then the test runs
+  `--report-only` over all module models and fails on any error or warning
+  (`-Werror`). Editing one module re-analyzes only that module.
+  `lint.xml` is not a baseline; `tools:ignore`/`@Suppress` only for a
+  documented false positive, scoped to the narrowest element. The two
+  `Overdraw` path ignores in `lint.xml` exist because the Overdraw detector
+  reads the application theme only from a manifest visited in the same Lint
+  process; per-module analysis of a library cannot see the app manifest and
+  falls back to `Theme.Holo`.
 - **detekt** (`android / android-detekt`): `detekt.yml` plus the first-party
   `home-rules` plug-in in `platform/android/detekt-rules`. There is no
   baseline; every finding fails.

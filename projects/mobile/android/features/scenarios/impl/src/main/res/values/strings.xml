@@ -47,8 +47,6 @@
     <string name="scenarios_state_on">On</string>
     <string name="scenarios_state_off">Off</string>
 
-    <string name="scenarios_step_catalog">Do action “%1$s” on %2$s</string>
-    <string name="scenarios_step_speak">Say “%1$s”</string>
     <string name="scenarios_step_speak_detail">“%1$s”</string>
     <string name="scenarios_step_delay">%1$d s</string>
     <string name="scenarios_step_unsupported">Unsupported step</string>

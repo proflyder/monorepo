@@ -9,7 +9,6 @@
     <string name="control_speak_send">Сказать</string>
     <string name="control_on_summary">Включено %1$d из %2$d</string>
     <string name="control_filter_all">Все</string>
-    <string name="control_filter_scenarios">Сценарии</string>
     <string name="control_filter_lights">Свет</string>
     <string name="control_filter_switches">Выключатели</string>
     <string name="control_empty">Пока нечем управлять. Home Assistant не отдаёт приложению свет, выключатели или сцены.</string>

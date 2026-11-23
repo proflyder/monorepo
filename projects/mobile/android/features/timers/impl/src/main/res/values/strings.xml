@@ -8,10 +8,7 @@
     <string name="timers_start">Start timer</string>
     <string name="timers_paused">Paused</string>
     <string name="timers_running">Running</string>
-    <string name="timers_remaining">Remaining %1$s</string>
     <string name="timers_duration_error">Enter a duration between 1 second and 7 days.</string>
-    <string name="timers_started">Timer started</string>
-    <string name="timers_cancelled">Timer cancelled</string>
     <string name="timers_cancel_confirm">Cancel this timer on the home server?</string>
     <string name="timers_cancel_yes">Cancel timer</string>
     <string name="timers_keep">Keep</string>

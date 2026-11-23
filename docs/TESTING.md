@@ -145,7 +145,9 @@ bazel test --config=android //platform/android/...
   или `test_targets` юнита, иначе `mise run ci:units`
   (`androidSuiteCoverageProblems`) красный.
 - `android_lint` (нужен `cmdline-tools;23.0`) и `detekt` — отдельные CI-юниты,
-  не в `android_tests`.
+  не в `android_tests`. Lint — partial analysis: кэшируемое действие
+  `AndroidLintAnalyze` на модуль и `--report-only` в тесте; правка одного
+  модуля переанализирует только его. Ошибки считаются по XML-отчёту.
 - `AndroidDesignSystemTests` в `platform/quality/test_static.py` запрещает
   стили `Widget.*` и компоненты без стиля дизайн-системы вне
   `core/designsystem` — см. `projects/mobile/android/core/designsystem/README.md`.
