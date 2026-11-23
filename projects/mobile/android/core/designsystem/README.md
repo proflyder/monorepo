@@ -39,6 +39,7 @@ the colour roles.
 | Card | `MaterialCardView` + `Widget.Home.Card` / `.Selected` / `.StateOn` | Filled `colorSurfaceContainer`, radius xl. |
 | Chip | `Chip` + `Widget.Home.Chip.Filter` / `.Assist` / `.Input` | From code: `Components.filterChip(parent)`, `Components.inputChip(parent)`. |
 | Switch | `MaterialSwitch` (theme default `Widget.Home.Switch` from core/theme) | Checked track `colorStateOn`. |
+| Slider | `Slider` without `style` (theme default `Widget.Home.Slider`) | Active track `colorPrimary`, inactive `colorSurfaceContainerHighest`, active ticks `colorOnPrimary`, inactive ticks `colorOnSurfaceVariant`, thumb `colorPrimary`. Gradient sliders: `GradientSlider` + `Widget.Home.Slider.Gradient`; the gradient is the track and ticks are hidden. |
 | Pills | `PillSegments` | The only choice-between-options control; no segmented buttons. |
 | Popup menu | `HomePopupMenu(anchor, menuRes)` | Card with 48 dp rows and icons. Opens below the anchor when it fits, otherwise above; stays inside the window insets (system bars, IME, cutout) and never covers a view marked with `HomePopupMenu.markObstacle` (the bottom navigation); scrolls inside when neither side fits. |
 | List row | `ListRow` (`app:rowIcon`, `rowTitle`, `rowSubtitle`, `rowValue`, `rowChevron`, `rowSwitch`); child views in XML become the trailing slot | Min height 56 dp; `subtitleTone` = `NEUTRAL`/`ERROR`/`WARNING`/`SUCCESS`; `app:rowIconTint` (default `colorOnSurfaceVariant`, `colorPrimary` for accent icons such as permissions); titles use a 20sp line height so a wrapped title stays compact. |
@@ -81,11 +82,12 @@ CI with the other static tests:
   `Widget.*` style;
 - in every layout outside the module, `MaterialButton`/`Button` must have a
   `Widget.Home.Button.*` or `Widget.Home.IconButton.*` style;
-  `TextInputLayout`, `FloatingActionButton`, `ExtendedFloatingActionButton`
-  and `OutlinedFloatingActionButton` either have no style (the theme default
-  is the design-system style) or a `Widget.Home.TextInput*`/
-  `Widget.Home.(Extended)FloatingActionButton*` one; `MaterialCardView` must
-  use `Widget.Home.Card*` and `Chip` `Widget.Home.Chip.*`;
+  `TextInputLayout`, `FloatingActionButton`, `ExtendedFloatingActionButton`,
+  `OutlinedFloatingActionButton` and `Slider` either have no style (the theme
+  default is the design-system style) or a `Widget.Home.TextInput*`/
+  `Widget.Home.(Extended)FloatingActionButton*`/`Widget.Home.Slider*` one;
+  `MaterialCardView` must use `Widget.Home.Card*` and `Chip`
+  `Widget.Home.Chip.*`;
 - Kotlin outside the module never calls the `MaterialButton(`,
   `TextInputLayout(`, `FloatingActionButton(`, `ExtendedFloatingActionButton(`,
   `MaterialCardView(` or `Chip(` constructors — use a layout or `Components`.
@@ -123,6 +125,17 @@ the new theme automatically.
 
 ## Заметки к коду
 
+- `GradientSlider` рисует полосу до `super.onDraw` по `trackSidePadding`,
+  `trackWidth` и `trackHeight` самого `Slider`, поэтому градиент совпадает с
+  треком и thumb едет по нему; отдельных `View` под полосой нет. В RTL
+  градиент разворачивается вместе с треком. В `Widget.Home.Slider.Gradient`
+  трек прозрачный, а тики выключены: на оранжево-белом и радужном градиенте
+  любой из ролейных цветов тиков теряет контраст. Полоса центрируется по
+  высоте `Slider`, поэтому стиль рассчитан на `labelBehavior=floating`
+  (по умолчанию).
+- У `Widget.Home.Slider` неактивный трек — `colorSurfaceContainerHighest`, а
+  не M3-ный `colorSecondaryContainer`: в Emerald и Neon secondary-контейнер
+  почти совпадает с фоном шторки, и граница «активно/неактивно» пропадает.
 - `ButtonLoading.kt` fixes `minWidth` to the current width and centres the
   indicator with `ICON_GRAVITY_START` plus a start padding of
   (width − icon size) / 2: `textStart` gravity with no text drifts left.

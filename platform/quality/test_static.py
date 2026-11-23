@@ -243,6 +243,7 @@ class AndroidDesignSystemTests(unittest.TestCase):
         "dev.proflyder.home.core.designsystem.OutlinedFloatingActionButton": (None, "Widget.Home.FloatingActionButton"),
         "com.google.android.material.card.MaterialCardView": ("Widget.Home.Card",),
         "com.google.android.material.chip.Chip": ("Widget.Home.Chip.",),
+        "com.google.android.material.slider.Slider": (None, "Widget.Home.Slider"),
     }
     KOTLIN = RE.compile(r"\b(MaterialButton|TextInputLayout|FloatingActionButton|ExtendedFloatingActionButton|MaterialCardView|Chip)\(")
 

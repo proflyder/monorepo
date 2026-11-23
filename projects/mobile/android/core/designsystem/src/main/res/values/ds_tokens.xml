@@ -23,6 +23,8 @@
     <dimen name="ds_stroke_thin">1dp</dimen>
     <dimen name="ds_stroke_thick">2dp</dimen>
 
+    <dimen name="ds_slider_track_height">14dp</dimen>
+
     <dimen name="ds_button_min_width">120dp</dimen>
     <dimen name="ds_icon_button_inset_s">8dp</dimen>
     <dimen name="ds_icon_button_inset_m">4dp</dimen>

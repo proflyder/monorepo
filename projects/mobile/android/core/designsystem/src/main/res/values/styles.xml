@@ -19,6 +19,24 @@
         <item name="strokeWidth">@dimen/ds_stroke_thin</item>
     </style>
 
+    <style name="Widget.Home.Slider" parent="Widget.Material3.Slider">
+        <item name="trackColorActive">?attr/colorPrimary</item>
+        <item name="trackColorInactive">?attr/colorSurfaceContainerHighest</item>
+        <item name="tickColorActive">?attr/colorOnPrimary</item>
+        <item name="tickColorInactive">?attr/colorOnSurfaceVariant</item>
+        <item name="tickRadiusActive">2dp</item>
+        <item name="tickRadiusInactive">2dp</item>
+        <item name="thumbColor">?attr/colorPrimary</item>
+        <item name="trackHeight">@dimen/ds_slider_track_height</item>
+        <item name="trackStopIndicatorSize">0dp</item>
+    </style>
+
+    <style name="Widget.Home.Slider.Gradient" parent="Widget.Home.Slider">
+        <item name="trackColorActive">@android:color/transparent</item>
+        <item name="trackColorInactive">@android:color/transparent</item>
+        <item name="tickVisibilityMode">hidden</item>
+    </style>
+
     <style name="Widget.Home.Chip.Filter" parent="Widget.Material3.Chip.Filter">
         <item name="chipCornerRadius">@dimen/ds_radius_s</item>
     </style>
