@@ -28,6 +28,11 @@ jobs:
           install_args: "python node shellcheck gitleaks actionlint"
           cache: true
 
+      - name: Install test dependencies
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install -r requirements-test.txt
+
       - name: Repository audit (private data, links, gitlinks)
         id: audit
         background: true
@@ -40,7 +45,7 @@ jobs:
         continue-on-error: true
         run: mise run lint:comments
 
-      - name: Python product gates (syntax, shellcheck, secret patterns)
+      - name: Python product gates (syntax, shellcheck, secrets, k8s catalog coverage)
         id: static
         background: true
         continue-on-error: true
@@ -86,7 +91,7 @@ jobs:
           node platform/ci/step_report.mjs --title quality
           --check 'audit=Repository audit'
           --check 'comments=No comments in code'
-          --check 'static=Python product gates'
+          --check 'static=Python product gates + k8s catalog coverage'
           --check 'units=CI unit map is valid and every source/test file is routed'
           --check 'ci-tests=CI routing and gate tests'
           --check 'shellcheck=Shellcheck'

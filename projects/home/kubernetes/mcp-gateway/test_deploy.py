@@ -162,7 +162,8 @@ class CatalogTests(unittest.TestCase):
                     self.assertTrue(check.get("host", "").startswith("${"))
                     self.assertTrue(0 < int(check["port"]) <= 65535)
                 if check["type"] == "http":
-                    self.assertIn("${", check["url"])
+                    if service["kind"] == "external":
+                        self.assertIn("${", check["url"])
                     self.assertIn(check.get("auth", "none"), {"none", "ha"})
                 if check["type"] in {"ha_state", "ha_template"}:
                     self.assertTrue(check.get("entity_id") or check.get("template"))

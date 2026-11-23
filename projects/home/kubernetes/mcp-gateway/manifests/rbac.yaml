@@ -69,6 +69,7 @@ rules:
       - wakegrant
       - mcp-gateway
       - ha-config-sync
+      - phone-push
     verbs: ["patch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -101,6 +102,7 @@ rules:
       - monitoring-grafana
       - monitoring-kube-state-metrics
       - monitoring-operator
+      - pve-exporter
     verbs: ["patch"]
   - apiGroups: ["apps"]
     resources: ["statefulsets"]

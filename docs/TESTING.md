@@ -52,7 +52,7 @@ teardown восстанавливает source/volume.
 | HA static | YAML, duplicate keys, entities/services/scripts, Jinja, intents |
 | Hermes | model/provider, MCP allowlist, web search, voice sanitizer |
 | Egress guard | IPv4/IPv6 allowlist, NTP, idempotency |
-| Static gates | shell syntax, ShellCheck errors, Python syntax, secret patterns |
+| Static gates | shell syntax, ShellCheck errors, Python syntax, secret patterns, workload'ы `projects/home/kubernetes` ↔ каталог отчёта |
 | Scheduler / HA bridge | SQLite store/tick/planner, Connect API, auth, очереди, at-least-once, ledger |
 | BLE gateway | token, Wi-Fi validation/rollback, WPA, GATT, HTTP auth/status |
 | Windows logon provider | protocol/HMAC/config-векторы, PE exports/imports, install-скрипты, self-test на ПК |
@@ -282,7 +282,7 @@ Push в `develop` CI не запускает: туда попадают толь
 | python | `_python.yml` | все затронутые Python-юниты одним job |
 | js | `_js.yml` | `node --test`, без npm |
 | native | `_native.yml` | кросс-сборка, `SHA256SUMS`, release-shaped `tree-<hash>` |
-| quality | `_quality.yml` | audit, lint:comments, static, ci:units, test:ci, shellcheck, actionlint, Gitleaks — параллельно, всегда; падает со списком всех упавших |
+| quality | `_quality.yml` | audit, lint:comments, static (включая сверку workload'ов манифестов с каталогом отчёта), ci:units, test:ci, shellcheck, actionlint, Gitleaks — параллельно, всегда; падает со списком всех упавших |
 
 Затронутость:
 

@@ -29,7 +29,10 @@ and, with `restart.allowed`, restart (Russian warning required;
 ~20 s so the reply is spoken first). External targets (HAOS, Music Assistant,
 station) are read-only checks with `${HAOS_IP}`/`${STATION_IP}` placeholders.
 Every Deployment/StatefulSet/DaemonSet in the cluster must be a catalog
-service or listed in `ignore_workloads`, otherwise the report flags it.
+service or listed in `ignore_workloads`, otherwise the report flags it; the
+same invariant is checked statically by `KubernetesCatalogCoverageTests`
+(`platform/quality/test_static.py`, `mise run test:static`) for every
+manifest under `projects/home/kubernetes`.
 
 - ClusterRole `mcp-gateway-read`: `get/list` on pods, pods/log, events,
   services, workloads, replicasets, Flux kustomizations/helmreleases.

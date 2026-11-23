@@ -20,9 +20,9 @@ overview: |
 
   - `home-assistant` — голосовой контур и планировщик: Hermes + voice-proxy,
     GigaAM/Whisper/Piper, health exporter, scheduler, ha-bridge, ha-control,
-    а также сам mcp-gateway.
+    phone-push, а также сам mcp-gateway.
   - `monitoring` — Prometheus, Alertmanager, Grafana, kube-state-metrics,
-    node-exporter, Prometheus Operator, Loki и Alloy.
+    node-exporter, pve-exporter, Prometheus Operator, Loki и Alloy.
   - `currency-bot` — бот курсов и Cloudflare Tunnel для его webhook.
   - `openbao` — единственный сервер секретов (raft, auto-unseal).
   - `external-secrets` — оператор, который материализует секреты из OpenBao.
@@ -481,6 +481,30 @@ services:
       warning: "Метрики процессора, памяти и диска узла пропадут на время перезапуска."
     description: Метрики узла K3s.
 
+  - id: pve-exporter
+    title: PVE Exporter
+    group: Мониторинг
+    aliases:
+      ru: [экспортер проксмокса, метрики виртуальных машин]
+      en: [pve-exporter, pve exporter, proxmox exporter]
+    kind: k8s
+    namespace: monitoring
+    workload:
+      kind: Deployment
+      name: pve-exporter
+    containers: [pve-exporter]
+    signals:
+      - promql: kube_deployment_status_replicas_available{namespace="monitoring",deployment="pve-exporter"} < 1
+        meaning: метрики гостей Proxmox недоступны
+        status: false
+    logs:
+      source: loki
+      selector: '{namespace="monitoring",container="pve-exporter"}'
+    restart:
+      allowed: true
+      warning: "Метрики гостей Proxmox пропадут из дашборда «Система» на время перезапуска; VM и CT продолжат работу."
+    description: prometheus-pve-exporter для метрик гостей Proxmox VE (job pve-guests).
+
   - id: loki
     title: Loki
     group: Мониторинг
@@ -599,6 +623,34 @@ services:
       allowed: true
       warning: "Активный звонок оборвётся, состояние звонков хранится только в памяти."
     description: Сигналинг звонка со станции (in-memory, NodePort и HTTPS-маршрут).
+
+  - id: phone-push
+    title: Phone Push
+    group: Приложения
+    aliases:
+      ru: [пуш на телефон, отправка уведомлений, поиск телефона]
+      en: [phone-push, phone push, fcm]
+    kind: k8s
+    namespace: home-assistant
+    workload:
+      kind: Deployment
+      name: phone-push
+    containers: [phone-push]
+    signals:
+      - promql: kube_deployment_status_replicas_available{namespace="home-assistant",deployment="phone-push"} < 1
+        meaning: доставка пушей на телефон недоступна
+        status: true
+    checks:
+      - type: http
+        label: готовность
+        url: "http://phone-push.home-assistant.svc.cluster.local:8095/readyz"
+        expect_status: 200
+    logs:
+      source: pods
+    restart:
+      allowed: true
+      warning: "Поиск телефона и уведомления не будут доставляться около тридцати секунд; реестр устройств и токены остаются в scheduler."
+    description: "FCM-доставка на телефон: поиск телефона, уведомления и sync-пуши приложения."
 
   - id: wakegrant
     title: Wake Grant
