@@ -199,7 +199,7 @@ jobs:
         if: inputs.unit == 'android-app' && steps.targets.outputs.test_targets != ''
         env:
           BAZEL_TARGETS: ${{ steps.targets.outputs.test_targets }}
-          BAZEL_EXTRA_ARGS: ${{ steps.version.outputs.define_args }}
+          BAZEL_EXTRA_ARGS: ${{ steps.version.outputs.define_args }} --local_test_jobs=4
         run: mise run test android-app
 
       - name: Android Lint

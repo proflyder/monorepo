@@ -26,6 +26,7 @@ metro_android_library(
 
 home_android_local_test(
     name = "robolectric_test",
+    shard_count = 3,
     srcs = glob(["src/test/kotlin/**/*.kt"]),
     associates = [":designsystem"],
     custom_package = "dev.proflyder.home.core.designsystem",
