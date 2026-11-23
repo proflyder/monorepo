@@ -5,8 +5,8 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import androidx.annotation.ColorInt
 import androidx.core.app.NotificationCompat
+import dev.proflyder.home.core.launchericon.ThemedNotifications
 import dev.proflyder.home.feature.push.PushIntents
 import dev.proflyder.home.feature.vpn.VpnConnection
 import dev.proflyder.home.feature.vpn.impl.R
@@ -27,10 +27,9 @@ internal object VpnNotifications {
         manager.createNotificationChannel(channel)
     }
 
-    fun build(context: Context, connection: VpnConnection, fallback: Intent?, @ColorInt accent: Int): android.app.Notification {
-        val builder = NotificationCompat.Builder(context, CHANNEL_ID)
+    fun build(context: Context, connection: VpnConnection, fallback: Intent?, themed: ThemedNotifications): android.app.Notification {
+        val builder = themed.decorate(NotificationCompat.Builder(context, CHANNEL_ID))
             .setSmallIcon(R.drawable.vpn_ic_shield)
-            .setColor(accent)
             .setContentTitle(context.getString(VpnTexts.title(connection)))
             .setContentText(VpnTexts.detail(context, connection, System.currentTimeMillis()))
             .setOngoing(true)

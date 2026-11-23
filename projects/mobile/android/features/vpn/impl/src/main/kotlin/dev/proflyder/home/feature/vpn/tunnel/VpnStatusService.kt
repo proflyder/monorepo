@@ -11,7 +11,7 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import dev.proflyder.home.core.runtime.appGraph
-import dev.proflyder.home.core.theme.NotificationAccent
+import dev.proflyder.home.core.launchericon.ThemedNotifications
 import dev.proflyder.home.core.ui.NotificationPermission
 import dev.proflyder.home.feature.vpn.VpnConnection
 import dev.proflyder.home.feature.vpn.VpnController
@@ -38,7 +38,7 @@ class VpnStatusService : Service() {
     internal lateinit var notificationPermission: NotificationPermission
 
     @Inject
-    internal lateinit var accent: NotificationAccent
+    internal lateinit var themed: ThemedNotifications
 
     override fun onCreate() {
         super.onCreate()
@@ -97,7 +97,7 @@ class VpnStatusService : Service() {
         this,
         connection,
         fallbackIntent(connection),
-        accent.color(),
+        themed,
     )
 
     private fun fallbackIntent(connection: VpnConnection): Intent? = when (connection) {

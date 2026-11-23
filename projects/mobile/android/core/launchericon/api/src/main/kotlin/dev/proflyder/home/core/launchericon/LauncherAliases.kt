@@ -4,6 +4,7 @@ import dev.proflyder.home.core.theme.AppTheme
 
 object LauncherAliases {
     const val PACKAGE: String = "dev.proflyder.home.launcher"
+    const val TARGET_ACTIVITY: String = "dev.proflyder.home.MainActivity"
 
     val manifestDefault: AppTheme = AppTheme.DEFAULT
 

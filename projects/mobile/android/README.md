@@ -564,9 +564,10 @@ navigate by route string, not by an impl destination.
 Each `AppTheme` has an `activity-alias` `dev.proflyder.home.launcher.<Name>`
 targeting `MainActivity`, with its own adaptive icon
 (`app_ic_launcher_<theme>`), built by one rule for every theme from colour
-roles in `launcher_icon_colors.xml`: `background` = the theme's surface,
-`symbol` = its primary, `glow` = its primary container (a radial halo in the
-background), plus a shared monochrome layer. Roles reference the theme
+roles in `launcher_icon_colors.xml`: `background` = the theme's surface
+container high, `glow` = its primary container (a wide radial halo),
+`symbol` = its primary (the house and a soft primary light at the halo's
+centre), plus a shared monochrome layer. Roles reference the theme
 palette, so icons follow light/dark mode; the system theme maps the same roles
 to wallpaper colours on API 31+. Only the alias of
 `AppTheme.DEFAULT` is enabled in the manifest. `LauncherIcons`
@@ -579,3 +580,20 @@ changes share one path. `MainActivity` stays exported without a launcher
 filter, so explicit intents and `getLaunchIntentForPackage` (push, VPN
 notifications) keep working. A new `AppTheme` entry fails compilation in
 `LauncherAliases` until its alias and icon exist.
+
+## Notification icon per theme
+
+HyperOS draws the application icon (`<application android:icon>`, cached by
+SystemUI, never the enabled alias) at the left of every notification and
+ignores the small icon and colour in its own notification style. The only
+image it puts there instead is a conversation's: `ThemedNotifications`
+(`core/launchericon`) renders the current theme's launcher-alias icon and
+- `conversation(...)` (push notifications) adds `MessagingStyle` with a
+  `Person` carrying that icon and a long-lived dynamic shortcut
+  `home_notifications` (intent to `MainActivity`), so HyperOS shows the theme
+  icon large with the app icon as a badge;
+- `decorate(...)` (find phone, call, VPN) sets the theme colour and the theme
+  icon as `largeIcon`.
+`phone-push` sends notifications data-only, so the app, not the FCM SDK,
+builds them even in the background; the `default_notification_*` meta-data in
+the push manifest only covers messages still carrying a `notification` block.

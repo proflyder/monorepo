@@ -9,5 +9,6 @@ metro_android_library(
     manifest = "src/main/AndroidManifest.xml",
     deps = [
         "//projects/mobile/android/core/theme",
+        "@maven//:androidx_core_core_ktx",
     ],
 )

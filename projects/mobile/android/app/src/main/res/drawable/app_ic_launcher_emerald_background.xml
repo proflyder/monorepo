@@ -11,8 +11,21 @@
                 android:centerX="54"
                 android:centerY="56"
                 android:endColor="@color/app_launcher_emerald_background"
-                android:gradientRadius="42"
+                android:gradientRadius="56"
                 android:startColor="@color/app_launcher_emerald_glow"
+                android:type="radial" />
+        </aapt:attr>
+    </path>
+    <path
+        android:fillAlpha="0.35"
+        android:pathData="M0,0h108v108h-108z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:centerX="54"
+                android:centerY="56"
+                android:endColor="@android:color/transparent"
+                android:gradientRadius="30"
+                android:startColor="@color/app_launcher_emerald_symbol"
                 android:type="radial" />
         </aapt:attr>
     </path>

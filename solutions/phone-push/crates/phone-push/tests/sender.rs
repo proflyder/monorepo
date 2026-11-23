@@ -137,7 +137,7 @@ fn a_find_message_is_sent_through_oauth_and_reuses_the_cached_token() {
 }
 
 #[test]
-fn a_notification_carries_the_channel_and_the_deep_link() {
+fn a_notification_is_sent_data_only_with_text_and_deep_link() {
     let Fixture { sender, fake } = fixture(200);
     let message = Message::Notification {
         title: "Дом".to_owned(),
@@ -146,10 +146,14 @@ fn a_notification_carries_the_channel_and_the_deep_link() {
     };
     block_on(sender.send("device-token", &message, 1_700_000_000)).expect("send");
     let messages = fake.messages.lock().expect("lock").clone();
-    assert_eq!(
-        messages[0].1["message"]["android"]["notification"]["channel_id"],
-        "home_notifications"
+    assert!(messages[0].1["message"].get("notification").is_none());
+    assert!(
+        messages[0].1["message"]["android"]
+            .get("notification")
+            .is_none()
     );
+    assert_eq!(messages[0].1["message"]["data"]["title"], "Дом");
+    assert_eq!(messages[0].1["message"]["data"]["body"], "Дверь открыта");
     assert_eq!(
         messages[0].1["message"]["data"]["deepLink"],
         "home://alarms"

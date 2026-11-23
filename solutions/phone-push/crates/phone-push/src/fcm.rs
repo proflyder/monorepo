@@ -9,7 +9,6 @@ use serde_json::{Value, json};
 pub const FIND_TYPE: &str = "phone_find";
 pub const NOTIFY_TYPE: &str = "phone_notify";
 pub const SYNC_TYPE: &str = "sync";
-pub const NOTIFICATION_CHANNEL: &str = "home_notifications";
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -158,18 +157,14 @@ impl Message {
                 body,
                 deep_link,
             } => {
-                let mut data = json!({"type": NOTIFY_TYPE});
+                let mut data = json!({"type": NOTIFY_TYPE, "title": title, "body": body});
                 if let Some(link) = deep_link {
                     data["deepLink"] = json!(link);
                 }
                 json!({
                     "message": {
                         "token": token,
-                        "android": {
-                            "priority": "high",
-                            "notification": {"channel_id": NOTIFICATION_CHANNEL},
-                        },
-                        "notification": {"title": title, "body": body},
+                        "android": {"priority": "high"},
                         "data": data,
                     }
                 })
@@ -381,7 +376,7 @@ mod tests {
     }
 
     #[test]
-    fn a_notification_names_the_app_channel_and_carries_the_deep_link() {
+    fn a_notification_is_data_only_so_the_app_draws_it_in_its_theme() {
         let payload = Message::Notification {
             title: "Дом".to_owned(),
             body: "Готово".to_owned(),
@@ -389,13 +384,13 @@ mod tests {
         }
         .payload("token");
         let message = &payload["message"];
-        assert_eq!(message["notification"]["title"], "Дом");
-        assert_eq!(
-            message["android"]["notification"]["channel_id"],
-            NOTIFICATION_CHANNEL
-        );
-        assert_eq!(message["data"]["deepLink"], "home://alarms");
+        assert!(message.get("notification").is_none());
+        assert!(message["android"].get("notification").is_none());
+        assert_eq!(message["android"]["priority"], "high");
         assert_eq!(message["data"]["type"], NOTIFY_TYPE);
+        assert_eq!(message["data"]["title"], "Дом");
+        assert_eq!(message["data"]["body"], "Готово");
+        assert_eq!(message["data"]["deepLink"], "home://alarms");
     }
 
     #[test]
