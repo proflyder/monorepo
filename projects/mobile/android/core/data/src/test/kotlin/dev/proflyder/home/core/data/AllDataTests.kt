@@ -8,5 +8,6 @@ import org.junit.runners.Suite
     EntityStoreTest::class,
     EntitySyncTest::class,
     FeatureScopeTest::class,
+    PagerTest::class,
 )
 class AllDataTests

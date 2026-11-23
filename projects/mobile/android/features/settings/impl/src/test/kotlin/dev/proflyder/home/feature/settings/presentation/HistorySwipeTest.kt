@@ -8,17 +8,23 @@ import android.view.View
 import androidx.appcompat.view.ContextThemeWrapper
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
+import dev.proflyder.home.core.data.Page
+import dev.proflyder.home.core.data.Pager
+import dev.proflyder.home.core.data.PagerRemoval
+import dev.proflyder.home.core.data.RefreshMode
+import dev.proflyder.home.core.model.NotificationHistory
+import dev.proflyder.home.core.model.NotificationHistoryType
+import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.testing.FakeClock
 import dev.proflyder.home.core.ui.BaseAdapterCallback
-import dev.proflyder.home.feature.push.NotificationHistoryEntry
-import dev.proflyder.home.feature.push.NotificationHistoryRules
-import dev.proflyder.home.feature.push.NotificationHistoryStore
-import dev.proflyder.home.feature.push.NotificationHistoryType
+import dev.proflyder.home.feature.push.NotificationHistoryRepository
 import dev.proflyder.home.feature.settings.impl.R
 import dev.proflyder.home.feature.settings.impl.databinding.FragmentNotificationHistoryBinding
 import java.io.File
 import java.time.LocalDate
 import java.time.ZoneId
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import org.junit.Assert.assertEquals
@@ -40,33 +46,46 @@ class HistorySwipeTest {
 
     @Test
     fun deletingKeepsTheEntryForUndoAndUndoPutsItBack() {
-        val store = FakeStore(entries)
-        val model = NotificationHistoryViewModel(store, FakeClock(now))
+        val repository = FakeRepository(entries)
+        val model = NotificationHistoryViewModel(repository, FakeClock(now))
         idle()
 
         model.dispatch(HistoryIntent.Delete(entries[1]))
         idle()
-        assertEquals(listOf("a", "c"), store.entries.value.map { it.id })
+        assertEquals(listOf("a", "c"), repository.pager.state.value.items.map { it.id })
         assertEquals("b", model.state.value.undo?.id)
 
         model.dispatch(HistoryIntent.Undo)
         idle()
-        assertEquals(listOf("a", "b", "c"), store.entries.value.map { it.id })
+        assertEquals(listOf("a", "b", "c"), repository.pager.state.value.items.map { it.id })
         assertNull(model.state.value.undo)
     }
 
     @Test
     fun swipingRightTogglesReadBothWays() {
-        val store = FakeStore(entries)
-        val model = NotificationHistoryViewModel(store, FakeClock(now))
+        val repository = FakeRepository(entries)
+        val model = NotificationHistoryViewModel(repository, FakeClock(now))
         idle()
 
         model.dispatch(HistoryIntent.ToggleRead(entries[0]))
         idle()
-        assertEquals(true, store.entries.value.first { it.id == "a" }.read)
-        model.dispatch(HistoryIntent.ToggleRead(store.entries.value.first { it.id == "b" }))
+        assertEquals(true, repository.pager.state.value.items.first { it.id == "a" }.read)
+        model.dispatch(HistoryIntent.ToggleRead(entries[1]))
         idle()
-        assertEquals(false, store.entries.value.first { it.id == "b" }.read)
+        assertEquals(false, repository.pager.state.value.items.first { it.id == "b" }.read)
+    }
+
+    @Test
+    fun readingAllMarksEveryEntryAndClearsTheUndoSlot() {
+        val repository = FakeRepository(entries)
+        val model = NotificationHistoryViewModel(repository, FakeClock(now))
+        idle()
+
+        model.dispatch(HistoryIntent.ReadAll)
+        idle()
+
+        assertEquals(0, model.state.value.unread)
+        assertEquals(listOf(true, true, true), repository.pager.state.value.items.map { it.read })
     }
 
     @Test
@@ -131,6 +150,7 @@ class HistorySwipeTest {
             submitList(HistoryRows.of(entries, LocalDate.now(), ZoneId.systemDefault()))
         }
         binding.historyEmpty.visibility = View.GONE
+        binding.historyProgress.visibility = View.GONE
         val metrics = themed.resources.displayMetrics
         val width = (WIDTH_DP * metrics.density).toInt()
         val height = (HEIGHT_DP * metrics.density).toInt()
@@ -140,55 +160,76 @@ class HistorySwipeTest {
     }
 
     private class Recorder(private val binding: FragmentNotificationHistoryBinding, private val calls: MutableList<String>) : HistorySwipeActions {
-        override fun entryAt(position: Int): NotificationHistoryEntry? =
+        override fun entryAt(position: Int): NotificationHistory? =
             ((binding.historyList.adapter as NotificationHistoryAdapter).currentList.getOrNull(position) as? HistoryRow.Item)?.entry
 
-        override fun onDelete(entry: NotificationHistoryEntry) {
+        override fun onDelete(entry: NotificationHistory) {
             calls += "delete:${entry.id}"
         }
 
-        override fun onToggleRead(entry: NotificationHistoryEntry) {
+        override fun onToggleRead(entry: NotificationHistory) {
             calls += "toggle:${entry.id}"
         }
     }
 
-    private class FakeStore(initial: List<NotificationHistoryEntry>) : NotificationHistoryStore {
-        private val state = MutableStateFlow(initial)
-        override val entries: StateFlow<List<NotificationHistoryEntry>> = state
+    private class FakeRepository(initial: List<NotificationHistory>) : NotificationHistoryRepository {
+        private var all = initial
+        private val scope = CoroutineScope(Dispatchers.Main)
+        private val mutableUnread = MutableStateFlow(initial.count { !it.read })
 
-        override suspend fun record(entry: NotificationHistoryEntry) {
-            state.value = NotificationHistoryRules.record(state.value, entry)
+        override val pager = Pager(scope, { _, _ -> Outcome.Success(Page(all, null)) }, NotificationHistory::id)
+
+        override val unread: StateFlow<Int> = mutableUnread
+
+        init {
+            pager.refresh(RefreshMode.HARD)
         }
 
-        override suspend fun setRead(id: String, read: Boolean) {
-            state.value = NotificationHistoryRules.setRead(state.value, id, read)
+        override fun refresh() = pager.refresh(RefreshMode.HARD)
+
+        override fun removeLocal(entry: NotificationHistory): PagerRemoval<NotificationHistory>? = pager.removeLocal(entry.id)
+
+        override fun restoreLocal(removal: PagerRemoval<NotificationHistory>) = pager.restoreLocal(removal)
+
+        override suspend fun setRead(entry: NotificationHistory, read: Boolean): Outcome<Unit> {
+            all = all.map { if (it.id == entry.id) it.copy(read = read) else it }
+            pager.updateLocal(entry.id) { it.copy(read = read) }
+            mutableUnread.value = pager.itemsSnapshot().count { !it.read }
+            return Outcome.Success(Unit)
         }
 
-        override suspend fun delete(id: String) {
-            state.value = NotificationHistoryRules.remove(state.value, id)
+        override suspend fun remove(entry: NotificationHistory): Outcome<Unit> {
+            all = all.filterNot { it.id == entry.id }
+            return Outcome.Success(Unit)
         }
 
-        override suspend fun restore(entry: NotificationHistoryEntry) {
-            state.value = NotificationHistoryRules.restore(state.value, entry)
+        override fun removeLater(entry: NotificationHistory) {
+            all = all.filterNot { it.id == entry.id }
         }
 
-        override suspend fun markAllRead() {
-            state.value = NotificationHistoryRules.markAllRead(state.value)
+        override suspend fun readAll(): Outcome<Unit> {
+            all = all.map { it.copy(read = true) }
+            pager.replaceLocal(pager.itemsSnapshot().map { it.copy(read = true) })
+            mutableUnread.value = 0
+            return Outcome.Success(Unit)
         }
 
-        override suspend fun clear() {
-            state.value = emptyList()
+        override suspend fun clear(): Outcome<Unit> {
+            all = emptyList()
+            pager.replaceLocal(emptyList())
+            mutableUnread.value = 0
+            return Outcome.Success(Unit)
         }
     }
 
     private class NoopCallback : BaseAdapterCallback<HistoryRow>(), NotificationHistoryAdapterCallback
 
-    private fun entry(id: String, at: Long, read: Boolean) = NotificationHistoryEntry(
+    private fun entry(id: String, at: Long, read: Boolean) = NotificationHistory(
         id = id,
         type = NotificationHistoryType.NOTIFY,
         title = "Дверь открыта $id",
         body = "Кто-то у двери",
-        receivedAtMillis = at,
+        createdUnix = at / MILLIS_PER_SECOND,
         read = read,
     )
 
@@ -209,6 +250,7 @@ class HistorySwipeTest {
 
     private companion object {
         const val HOUR = 3_600_000L
+        const val MILLIS_PER_SECOND = 1_000L
         const val WIDTH_DP = 411
         const val HEIGHT_DP = 891
         const val SWIPE_PX = 360f

@@ -1,62 +1,31 @@
 package dev.proflyder.home.feature.push
 
+import dev.proflyder.home.core.data.Pager
+import dev.proflyder.home.core.data.PagerRemoval
+import dev.proflyder.home.core.model.NotificationHistory
+import dev.proflyder.home.core.model.Outcome
 import kotlinx.coroutines.flow.StateFlow
 
-enum class NotificationHistoryType {
-    NOTIFY,
+typealias NotificationHistoryEntry = NotificationHistory
 
-    FIND,
-}
+interface NotificationHistoryRepository {
+    val pager: Pager<NotificationHistory>
 
-data class NotificationHistoryEntry(
-    val id: String,
-    val type: NotificationHistoryType,
-    val title: String,
-    val body: String,
-    val deepLink: String? = null,
-    val receivedAtMillis: Long,
-    val read: Boolean = false,
-)
+    val unread: StateFlow<Int>
 
-object NotificationHistoryRules {
-    const val MAX_ENTRIES: Int = 200
+    fun refresh()
 
-    fun record(
-        entries: List<NotificationHistoryEntry>,
-        entry: NotificationHistoryEntry,
-    ): List<NotificationHistoryEntry> =
-        (listOf(entry) + entries.filterNot { it.id == entry.id }).take(MAX_ENTRIES)
+    fun removeLocal(entry: NotificationHistory): PagerRemoval<NotificationHistory>?
 
-    fun bounded(entries: List<NotificationHistoryEntry>): List<NotificationHistoryEntry> =
-        entries.take(MAX_ENTRIES)
+    fun restoreLocal(removal: PagerRemoval<NotificationHistory>)
 
-    fun setRead(entries: List<NotificationHistoryEntry>, id: String, read: Boolean): List<NotificationHistoryEntry> =
-        entries.map { if (it.id == id) it.copy(read = read) else it }
+    suspend fun setRead(entry: NotificationHistory, read: Boolean): Outcome<Unit>
 
-    fun remove(entries: List<NotificationHistoryEntry>, id: String): List<NotificationHistoryEntry> =
-        entries.filterNot { it.id == id }
+    suspend fun remove(entry: NotificationHistory): Outcome<Unit>
 
-    fun restore(entries: List<NotificationHistoryEntry>, entry: NotificationHistoryEntry): List<NotificationHistoryEntry> =
-        (remove(entries, entry.id) + entry).sortedByDescending { it.receivedAtMillis }.take(MAX_ENTRIES)
+    fun removeLater(entry: NotificationHistory)
 
-    fun markAllRead(entries: List<NotificationHistoryEntry>): List<NotificationHistoryEntry> =
-        entries.map { it.copy(read = true) }
+    suspend fun readAll(): Outcome<Unit>
 
-    fun unread(entries: List<NotificationHistoryEntry>): Int = entries.count { !it.read }
-}
-
-interface NotificationHistoryStore {
-    val entries: StateFlow<List<NotificationHistoryEntry>>
-
-    suspend fun record(entry: NotificationHistoryEntry)
-
-    suspend fun setRead(id: String, read: Boolean)
-
-    suspend fun delete(id: String)
-
-    suspend fun restore(entry: NotificationHistoryEntry)
-
-    suspend fun markAllRead()
-
-    suspend fun clear()
+    suspend fun clear(): Outcome<Unit>
 }

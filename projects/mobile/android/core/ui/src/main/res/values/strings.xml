@@ -124,4 +124,6 @@
     <string name="ui_validation_entity">Enter a Home Assistant entity id such as light.kitchen.</string>
     <string name="ui_validation_unsupported">This scenario uses parts this app version does not support. Update the app to edit it.</string>
     <string name="ui_error_remote_config">Remote Config could not be refreshed.</string>
+    <string name="ui_paging_error">Could not load more.</string>
+    <string name="ui_paging_retry">Retry</string>
 </resources>

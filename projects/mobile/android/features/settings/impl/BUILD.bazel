@@ -44,6 +44,7 @@ home_android_local_test(
         "dev.proflyder.home.feature.settings.presentation.SettingsScreensScreenshotTest",
     ],
     deps = [
+        "//projects/mobile/android/core/data",
         "//projects/mobile/android/core/model",
         "//projects/mobile/android/core/testing",
         "//projects/mobile/android/features/push/api",
@@ -52,5 +53,6 @@ home_android_local_test(
         "@maven//:com_google_android_material_material",
         "@maven//:junit_junit",
         "@maven//:org_robolectric_robolectric",
+        "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_android",
     ],
 )

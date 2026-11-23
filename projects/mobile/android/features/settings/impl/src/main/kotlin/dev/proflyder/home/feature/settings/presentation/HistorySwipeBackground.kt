@@ -9,6 +9,7 @@ import android.view.View
 import androidx.annotation.AttrRes
 import androidx.annotation.DrawableRes
 import androidx.core.content.ContextCompat
+import androidx.core.graphics.withClip
 import com.google.android.material.color.MaterialColors
 import dev.proflyder.home.feature.settings.impl.R
 import kotlin.math.abs
@@ -28,11 +29,10 @@ internal class HistorySwipeBackground(private val context: Context) {
         val side = sideFor(left, read)
         paint.color = side.color
         canvas.drawRoundRect(area, radius, radius, paint)
-        canvas.save()
-        canvas.clipRect(area)
-        placeIcon(side.icon, item, left)
-        side.icon.draw(canvas)
-        canvas.restore()
+        canvas.withClip(area) {
+            placeIcon(side.icon, item, left)
+            side.icon.draw(this)
+        }
     }
 
     fun sideFor(left: Boolean, read: Boolean): Side = when {

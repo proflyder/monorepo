@@ -123,4 +123,6 @@
     <string name="ui_validation_entity">Введите идентификатор сущности Home Assistant, например light.kitchen.</string>
     <string name="ui_validation_unsupported">Сценарий использует части, которые эта версия приложения не поддерживает. Обновите приложение, чтобы его редактировать.</string>
     <string name="ui_error_remote_config">Не удалось обновить Remote Config.</string>
+    <string name="ui_paging_error">Не удалось загрузить ещё.</string>
+    <string name="ui_paging_retry">Повторить</string>
 </resources>
