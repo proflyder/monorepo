@@ -1598,7 +1598,6 @@ name = "home-app-auth"
 version = "0.1.0"
 dependencies = [
  "hex",
- "home-secret",
  "http",
  "reqwest",
  "rustls",

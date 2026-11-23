@@ -297,5 +297,32 @@ class AndroidDesignSystemTests(unittest.TestCase):
         self.assertEqual(problems, [], "inflate design-system components from layouts:\n" + "\n".join(problems))
 
 
+
+
+class KubernetesConfigMapSecretTests(unittest.TestCase):
+    KUBERNETES = ROOT / "projects/home/kubernetes"
+
+    def test_config_maps_do_not_carry_token_fields_or_values(self):
+        import re
+
+        key_pattern = re.compile(r"(token|secret|password|credential|private_key)", re.I)
+        problems = []
+        for path in self.KUBERNETES.rglob("*.yaml"):
+            try:
+                docs = [d for d in yaml.safe_load_all(path.read_text()) if d]
+            except yaml.YAMLError as error:
+                problems.append(f"{path}: YAML: {error}")
+                continue
+            for doc in docs:
+                if doc.get("kind") != "ConfigMap":
+                    continue
+                for key, value in (doc.get("data") or {}).items():
+                    if key_pattern.search(str(key)):
+                        problems.append(f"{path}: data.{key}")
+                    if isinstance(value, str) and key_pattern.search(value):
+                        problems.append(f"{path}: data.{key} value")
+        self.assertEqual(problems, [])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

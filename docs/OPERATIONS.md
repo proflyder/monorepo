@@ -50,10 +50,12 @@ App-токены (модули доступа) и service-token:
 ```bash
 # 1. до деплоя: создать service_token, если его ещё нет (идемпотентно, молча)
 mise run admin:service-token-init
+# до этого шага secrets:check/secrets:file остаются зелёными: каталог и fnox
+# читают legacy app-токен, а service_token появляется только здесь
 
 # 2. после деплоя: bootstrap owner; токен owner пишется в файл 0600
 mise run admin:app-token-bootstrap
-# путь к owner-токену печатается; stdout сам токен не содержит
+# путь (по умолчанию secrets/local/app-tokens/owner.token) печатается; stdout сам токен не содержит
 ```
 
 Bootstrap генерирует новый `service_token`, сохраняет старый как
@@ -76,9 +78,9 @@ legacy-значение. Аварийный обход — `--skip-preflight`.
 - HA `secrets.yaml` → `scheduler_bearer` (`rest_command.scheduler_rpc`);
 - Hermes/voice-proxy private values → `HERMES_SCHEDULER_TOKEN[_FILE]` из
   `scheduler-auth#service_token` (`runtime-values`/private Helm values);
-- локальные admin-файлы: `secrets/home/scheduler.token` (service-token),
-  `secrets/home/app.token` (legacy app-token для verify/ingress) и
-  `fnox`-профиль `ingress`;
+- локальные admin-файлы: `secrets/home/scheduler.token` и
+  `fnox`-профиль `ingress` (в них legacy app-токен «Мама»; `secrets:check`
+  остаётся зелёным до `admin:service-token-init`);
 - seed сценариев, `scheduler/deploy.sh` и разовые `SCHEDULER_TOKEN_FILE`
   на рабочей машине;
 - ручные e2e/отладочные окружения.

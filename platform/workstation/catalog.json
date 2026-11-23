@@ -662,12 +662,6 @@
   {
    "file": "home/scheduler.token",
    "path": "k8s/home-assistant/scheduler-auth",
-   "field": "service_token",
-   "encoding": "text+nl"
-  },
-  {
-   "file": "home/app.token",
-   "path": "k8s/home-assistant/scheduler-auth",
    "field": "token",
    "encoding": "text+nl"
   },

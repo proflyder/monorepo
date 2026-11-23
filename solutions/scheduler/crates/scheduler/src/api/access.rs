@@ -465,6 +465,11 @@ mod tests {
         assert!(token.starts_with("home_"));
         let snapshot = state.store.access_snapshot().expect("snapshot");
         assert!(snapshot.authenticate_token(&token).is_some());
+        let (status, listed) =
+            read_body(list(State(state.clone()), headers("owner-token")).await).await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(!listed.to_string().contains(&token));
+        assert!(listed["tokens"][1].get("sha256").is_none());
         assert!(
             !snapshot
                 .authenticate_token(&token)

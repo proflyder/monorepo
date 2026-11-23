@@ -1,6 +1,6 @@
 [package]
 name = "home-app-auth"
-description = "Named application bearer tokens with owner/member roles and a legacy member fallback"
+description = "Named application tokens with module scopes, access snapshots and the shared access client"
 version = "0.1.0"
 edition.workspace = true
 license.workspace = true
@@ -8,7 +8,6 @@ publish.workspace = true
 
 [dependencies]
 hex = { workspace = true }
-home-secret = { path = "../home-secret" }
 http = { workspace = true }
 reqwest = { workspace = true }
 serde = { workspace = true }

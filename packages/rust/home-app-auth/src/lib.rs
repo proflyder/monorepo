@@ -467,14 +467,15 @@ impl AccessClient {
     }
 
     pub async fn authenticate(&self, header: Option<&HeaderValue>) -> Option<Principal> {
-        if let Some(principal) = self.cache.authenticate(header) {
+        let header = header?;
+        if let Some(principal) = self.cache.authenticate(Some(header)) {
             return Some(principal);
         }
         if !self.gate.allow() {
             return None;
         }
         self.refresh().await.ok()?;
-        self.cache.authenticate(header)
+        self.cache.authenticate(Some(header))
     }
 
     pub async fn run(
@@ -534,7 +535,8 @@ where
     F: FnOnce() -> Fut,
     Fut: Future<Output = Result<AccessSnapshot, String>>,
 {
-    if let Some(principal) = cache.authenticate(header) {
+    let header = header?;
+    if let Some(principal) = cache.authenticate(Some(header)) {
         return Some(principal);
     }
     if !gate.allow() {
@@ -542,7 +544,7 @@ where
     }
     let snapshot = refresh().await.ok()?;
     cache.replace(snapshot);
-    cache.authenticate(header)
+    cache.authenticate(Some(header))
 }
 
 #[must_use]
@@ -641,6 +643,21 @@ mod tests {
                 .expect("ignored")
                 .is_empty()
         );
+    }
+
+    #[tokio::test]
+    async fn a_missing_header_never_refreshes() {
+        let cache = AccessCache::default();
+        let gate = RefreshGate::new(Duration::from_secs(5));
+        let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let counter = Arc::clone(&calls);
+        let result = authenticate_with_refresh(&cache, &gate, None, || {
+            counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            async { Err("must not refresh".to_owned()) }
+        })
+        .await;
+        assert!(result.is_none());
+        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 0);
     }
 
     #[tokio::test]

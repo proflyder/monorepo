@@ -16,7 +16,6 @@ DEPS = [
     "@crates//:tokio",
     "@crates//:tracing",
     "@crates//:tokio-util",
-    "//packages/rust/home-secret:home_secret",
 ]
 
 rust_library(

@@ -12,7 +12,7 @@ fi
 
 : "${HOME_DOMAIN:?Set HOME_DOMAIN}"
 NODE_IP="${NODE_IP:-192.0.2.27}"
-SCHEDULER_TOKEN_FILE="${SCHEDULER_TOKEN_FILE:-$ROOT/secrets/home/app.token}"
+SCHEDULER_TOKEN_FILE="${SCHEDULER_TOKEN_FILE:-$ROOT/secrets/home/scheduler.token}"
 HA_TOKEN_FILE="${HA_TOKEN_FILE:-$ROOT/secrets/home/ha.token}"
 INTERCOM_TOKEN_FILE="${INTERCOM_TOKEN_FILE:-$ROOT/secrets/home/intercom.token}"
 

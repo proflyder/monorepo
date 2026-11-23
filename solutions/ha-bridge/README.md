@@ -118,7 +118,7 @@ FIRE (например, после snooze re-fire) не останавливае
 | --- | --- | --- | --- |
 | `HA_URL` | да | — | База HA, `http(s)://host:port`, без credentials/query |
 | `SCHEDULER_ENDPOINT` | да | — | База scheduler; допускается суффикс `/home.v1.SchedulerService` |
-| `SCHEDULER_TOKEN` / `SCHEDULER_TOKEN_FILE` | да | — | Bearer для scheduler |
+| `SCHEDULER_SERVICE_TOKEN` / `SCHEDULER_SERVICE_TOKEN_FILE` | да | — | service-token для scheduler (без fallback) |
 | `HA_TOKEN` / `HA_TOKEN_FILE` | в execute | — | Bearer для HA; в dry-run опционален |
 | `BRIDGE_CONSUMER_ID` | да | — | Стабильный id `[A-Za-z0-9._-]{1,64}` |
 | `BRIDGE_QUEUE` | нет | `home` | Очередь; `tasks` запрещена |
@@ -146,7 +146,7 @@ FIRE (например, после snooze re-fire) не останавливае
 ```bash
 export HA_URL=http://192.0.2.28:8123
 export SCHEDULER_ENDPOINT=http://192.0.2.27:8098
-export SCHEDULER_TOKEN_FILE=/etc/ha-bridge/scheduler.token
+export SCHEDULER_SERVICE_TOKEN_FILE=/etc/ha-bridge/scheduler.token
 export HA_TOKEN_FILE=/etc/ha-bridge/ha.token
 export BRIDGE_CONSUMER_ID=ha-bridge-home
 ```
@@ -431,7 +431,7 @@ payload={"entry": "<id>", "action": "run|turn_on|turn_off|set|speak"})`. Исп�
 
 ### API и безопасность
 
-`GET /v1/catalog`, `Authorization: Bearer <CONTROL_TOKEN>` (константное время,
+`GET /v1/catalog`, `Authorization: Bearer <app-token>` с модулем `home` (AccessClient,
 пустой токен не авторизует никого). Ответ: `{"statesOk": bool, "entries": [{id,
 kind, title, room, icon, device_id, device, role, actions[], state("on"/"off",
 устройства и профиль; "0"–"100" у громкости), available, light, volume}]}`;
@@ -451,8 +451,8 @@ kind, title, room, icon, device_id, device, role, actions[], state("on"/"off",
 | Переменная | Обяз. | По умолчанию | Смысл |
 | --- | --- | --- | --- |
 | `HA_URL`, `HA_TOKEN[_FILE]`, `HA_CA_FILE` | да | — | Как у ha-bridge |
-| `SCHEDULER_ENDPOINT`, `SCHEDULER_TOKEN[_FILE]`, `SCHEDULER_CA_FILE` | да | — | Как у ha-bridge |
-| `CONTROL_TOKEN[_FILE]` | да | — | Bearer каталога |
+| `SCHEDULER_ENDPOINT`, `SCHEDULER_SERVICE_TOKEN[_FILE]`, `SCHEDULER_CA_FILE` | да | — | Как у ha-bridge |
+| `CONTROL_TOKEN[_FILE]` | да | — | legacy bearer каталога; авторизация `/v1/catalog` — app-токен с модулем `home` |
 | `CONTROL_CONSUMER_ID` | да | — | Стабильный id потребителя |
 | `CONTROL_SCENARIO_LABEL` | нет | `scenario` | HA label id роли «сценарий» (устаревшая `CONTROL_LABEL` при старте отклоняется) |
 | `CONTROL_PROFILE_LABEL` | нет | `voice_profile` | HA label id роли «профиль» (вид `profile` для `switch`) |

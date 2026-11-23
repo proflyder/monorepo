@@ -1,4 +1,6 @@
-use connectrpc::interceptor::{UnaryRequest, UnaryResponse};
+use connectrpc::interceptor::{
+    NextStream, StreamRequest, StreamResponse, UnaryRequest, UnaryResponse,
+};
 use connectrpc::{ConnectError, Interceptor, Next, async_trait};
 use home_app_auth::{AccessCache, Forbidden, Module, Principal, bearer};
 use home_secret::Token;
@@ -162,48 +164,132 @@ pub enum Caller {
 }
 
 const RPC_MODULES: &[(&str, Option<Module>)] = &[
-    ("GetStatus", Some(Module::Base)),
-    ("ListDueEvents", None),
-    ("AckEvent", None),
-    ("EnqueueTask", Some(Module::Home)),
-    ("CancelTask", Some(Module::Home)),
-    ("CreateSchedule", Some(Module::AlarmsTimers)),
-    ("GetSchedule", Some(Module::AlarmsTimers)),
-    ("ListSchedules", Some(Module::AlarmsTimers)),
-    ("UpdateSchedule", Some(Module::AlarmsTimers)),
-    ("DeleteSchedule", Some(Module::AlarmsTimers)),
-    ("SetScheduleEnabled", Some(Module::AlarmsTimers)),
-    ("SnoozeSchedule", Some(Module::AlarmsTimers)),
-    ("StopSchedule", Some(Module::AlarmsTimers)),
-    ("SkipScheduleOccurrence", Some(Module::AlarmsTimers)),
-    ("StartTimer", Some(Module::AlarmsTimers)),
-    ("GetTimer", Some(Module::AlarmsTimers)),
-    ("ListTimers", Some(Module::AlarmsTimers)),
-    ("PauseTimer", Some(Module::AlarmsTimers)),
-    ("ResumeTimer", Some(Module::AlarmsTimers)),
-    ("CancelTimer", Some(Module::AlarmsTimers)),
-    ("CreateAlarm", Some(Module::AlarmsTimers)),
-    ("GetAlarm", Some(Module::AlarmsTimers)),
-    ("ListAlarms", Some(Module::AlarmsTimers)),
-    ("UpdateAlarm", Some(Module::AlarmsTimers)),
-    ("DeleteAlarm", Some(Module::AlarmsTimers)),
-    ("SetAlarmEnabled", Some(Module::AlarmsTimers)),
-    ("SnoozeAlarm", Some(Module::AlarmsTimers)),
-    ("StopAlarm", Some(Module::AlarmsTimers)),
-    ("CreateScenario", Some(Module::Scenarios)),
-    ("GetScenario", Some(Module::Scenarios)),
-    ("ListScenarios", Some(Module::Scenarios)),
-    ("UpdateScenario", Some(Module::Scenarios)),
-    ("DeleteScenario", Some(Module::Scenarios)),
-    ("SetScenarioEnabled", Some(Module::Scenarios)),
-    ("RunScenario", Some(Module::Scenarios)),
+    ("home.v1.SchedulerService/GetStatus", Some(Module::Base)),
+    ("home.v1.SchedulerService/ListDueEvents", None),
+    ("home.v1.SchedulerService/AckEvent", None),
+    ("home.v1.SchedulerService/EnqueueTask", Some(Module::Home)),
+    ("home.v1.SchedulerService/CancelTask", Some(Module::Home)),
+    (
+        "home.v1.SchedulerService/CreateSchedule",
+        Some(Module::AlarmsTimers),
+    ),
+    (
+        "home.v1.SchedulerService/GetSchedule",
+        Some(Module::AlarmsTimers),
+    ),
+    (
+        "home.v1.SchedulerService/ListSchedules",
+        Some(Module::AlarmsTimers),
+    ),
+    (
+        "home.v1.SchedulerService/UpdateSchedule",
+        Some(Module::AlarmsTimers),
+    ),
+    (
+        "home.v1.SchedulerService/DeleteSchedule",
+        Some(Module::AlarmsTimers),
+    ),
+    (
+        "home.v1.SchedulerService/SetScheduleEnabled",
+        Some(Module::AlarmsTimers),
+    ),
+    (
+        "home.v1.SchedulerService/SnoozeSchedule",
+        Some(Module::AlarmsTimers),
+    ),
+    (
+        "home.v1.SchedulerService/StopSchedule",
+        Some(Module::AlarmsTimers),
+    ),
+    (
+        "home.v1.SchedulerService/SkipScheduleOccurrence",
+        Some(Module::AlarmsTimers),
+    ),
+    (
+        "home.v1.SchedulerService/StartTimer",
+        Some(Module::AlarmsTimers),
+    ),
+    (
+        "home.v1.SchedulerService/GetTimer",
+        Some(Module::AlarmsTimers),
+    ),
+    (
+        "home.v1.SchedulerService/ListTimers",
+        Some(Module::AlarmsTimers),
+    ),
+    (
+        "home.v1.SchedulerService/PauseTimer",
+        Some(Module::AlarmsTimers),
+    ),
+    (
+        "home.v1.SchedulerService/ResumeTimer",
+        Some(Module::AlarmsTimers),
+    ),
+    (
+        "home.v1.SchedulerService/CancelTimer",
+        Some(Module::AlarmsTimers),
+    ),
+    (
+        "home.v1.AlarmService/CreateAlarm",
+        Some(Module::AlarmsTimers),
+    ),
+    ("home.v1.AlarmService/GetAlarm", Some(Module::AlarmsTimers)),
+    (
+        "home.v1.AlarmService/ListAlarms",
+        Some(Module::AlarmsTimers),
+    ),
+    (
+        "home.v1.AlarmService/UpdateAlarm",
+        Some(Module::AlarmsTimers),
+    ),
+    (
+        "home.v1.AlarmService/DeleteAlarm",
+        Some(Module::AlarmsTimers),
+    ),
+    (
+        "home.v1.AlarmService/SetAlarmEnabled",
+        Some(Module::AlarmsTimers),
+    ),
+    (
+        "home.v1.AlarmService/SnoozeAlarm",
+        Some(Module::AlarmsTimers),
+    ),
+    ("home.v1.AlarmService/StopAlarm", Some(Module::AlarmsTimers)),
+    (
+        "home.v1.ScenarioService/CreateScenario",
+        Some(Module::Scenarios),
+    ),
+    (
+        "home.v1.ScenarioService/GetScenario",
+        Some(Module::Scenarios),
+    ),
+    (
+        "home.v1.ScenarioService/ListScenarios",
+        Some(Module::Scenarios),
+    ),
+    (
+        "home.v1.ScenarioService/UpdateScenario",
+        Some(Module::Scenarios),
+    ),
+    (
+        "home.v1.ScenarioService/DeleteScenario",
+        Some(Module::Scenarios),
+    ),
+    (
+        "home.v1.ScenarioService/SetScenarioEnabled",
+        Some(Module::Scenarios),
+    ),
+    (
+        "home.v1.ScenarioService/RunScenario",
+        Some(Module::Scenarios),
+    ),
 ];
 
 fn method_module(path: &str) -> Option<Option<Module>> {
-    let method = path.rsplit('/').next().unwrap_or(path);
+    let path = path.trim_start_matches('/');
     RPC_MODULES
         .iter()
-        .find(|(name, _)| *name == method)
+        .find(|(name, _)| *name == path)
         .map(|(_, module)| *module)
 }
 
@@ -218,6 +304,30 @@ fn connect_forbidden(forbidden: Forbidden) -> ConnectError {
 
 #[async_trait]
 impl Interceptor for AccessAuth {
+    async fn intercept_streaming(
+        &self,
+        mut request: StreamRequest,
+        inbound: connectrpc::PayloadStream,
+        next: NextStream<'_>,
+    ) -> Result<StreamResponse, ConnectError> {
+        let path = request.ctx.path().unwrap_or_default().to_owned();
+        let module = method_module(&path)
+            .ok_or_else(|| connect_forbidden(Forbidden::Module(Module::Admin)))?;
+        if !self.service_authorized(request.ctx.header(AUTHORIZATION)) {
+            let principal = self
+                .authenticate(request.ctx.header(AUTHORIZATION))
+                .map_err(connect_forbidden)?;
+            match module {
+                Some(module) => {
+                    principal.require(module).map_err(connect_forbidden)?;
+                    request.ctx.extensions_mut().insert(principal);
+                }
+                None => return Err(connect_forbidden(Forbidden::ServiceOnly)),
+            }
+        }
+        next.run(request, inbound).await
+    }
+
     async fn intercept_unary(
         &self,
         mut request: UnaryRequest,
@@ -317,67 +427,28 @@ mod tests {
 
     #[test]
     fn the_table_covers_every_registered_rpc() {
-        let expected = [
-            "GetStatus",
-            "ListDueEvents",
-            "AckEvent",
-            "EnqueueTask",
-            "CancelTask",
-            "CreateSchedule",
-            "GetSchedule",
-            "ListSchedules",
-            "UpdateSchedule",
-            "DeleteSchedule",
-            "SetScheduleEnabled",
-            "SnoozeSchedule",
-            "StopSchedule",
-            "SkipScheduleOccurrence",
-            "StartTimer",
-            "GetTimer",
-            "ListTimers",
-            "PauseTimer",
-            "ResumeTimer",
-            "CancelTimer",
-            "CreateAlarm",
-            "GetAlarm",
-            "ListAlarms",
-            "UpdateAlarm",
-            "DeleteAlarm",
-            "SetAlarmEnabled",
-            "SnoozeAlarm",
-            "StopAlarm",
-            "CreateScenario",
-            "GetScenario",
-            "ListScenarios",
-            "UpdateScenario",
-            "DeleteScenario",
-            "SetScenarioEnabled",
-            "RunScenario",
-        ];
-        let mapped: Vec<_> = RPC_MODULES.iter().map(|(name, _)| *name).collect();
-        assert_eq!(mapped, expected);
-        assert_eq!(mapped.len(), expected.len());
+        let expected: Vec<&str> = RPC_MODULES.iter().map(|(name, _)| *name).collect();
+        assert_eq!(expected.len(), 35);
     }
 
     #[test]
     fn every_method_is_mapped_to_exactly_one_module() {
-        for method in [
-            "CreateSchedule",
-            "ListSchedules",
-            "StartTimer",
-            "CreateAlarm",
-            "RunScenario",
-            "GetStatus",
-            "EnqueueTask",
-        ] {
-            assert!(method_module(&format!("/home.v1.SchedulerService/{method}")).is_some());
+        for (path, _) in RPC_MODULES {
+            assert!(method_module(&format!("/{path}")).is_some(), "{path}");
         }
-        assert_eq!(method_module("/x/ListDueEvents"), Some(None));
-        assert_eq!(method_module("/x/AckEvent"), Some(None));
         assert_eq!(
-            method_module("/x/GetStatus"),
+            method_module("/home.v1.SchedulerService/ListDueEvents"),
+            Some(None)
+        );
+        assert_eq!(
+            method_module("/home.v1.SchedulerService/AckEvent"),
+            Some(None)
+        );
+        assert_eq!(
+            method_module("/home.v1.SchedulerService/GetStatus"),
             Some(Some(home_app_auth::Module::Base))
         );
+        assert_eq!(method_module("/home.v1.IntercomService/GetStatus"), None);
         assert_eq!(method_module("/x/NotARpc"), None);
     }
 

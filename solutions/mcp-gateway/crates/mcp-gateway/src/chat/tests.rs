@@ -767,6 +767,20 @@ async fn alerts_become_cards_that_resolve_in_place_and_push_once() {
     let card = chat.store.get("m_0001").expect("get").expect("alert");
     golden("alert", &serde_json::to_value(&card).expect("json"));
     assert_eq!(chat.page(None, None).expect("page").messages.len(), 1);
+    assert_eq!(
+        chat.page_for(None, Some(1), false)
+            .expect("page without alerts")
+            .messages
+            .len(),
+        0
+    );
+    assert_eq!(
+        chat.page_for(None, Some(1), true)
+            .expect("page with alerts")
+            .messages
+            .len(),
+        1
+    );
 
     let app: Router = super::router(Arc::clone(&chat));
     let (_, sent) = call(

@@ -185,11 +185,16 @@ impl Store {
         self.with_tx(move |transaction| {
             let mut changed = false;
             for record in &snapshot.tokens {
+                let mut modules = Modules::parse(&record.modules)
+                    .map_err(|error| StoreError::invalid(error.to_string()))?;
+                if !record.owner {
+                    modules.remove(Module::Admin);
+                }
+                let modules_json = serde_json::to_string(&clean_modules(&modules, record.owner)?)
+                    .map_err(|error| StoreError::invalid(error.to_string()))?;
                 let existing = token(transaction, &record.id)?;
                 if let Some(existing) = existing {
                     if record.owner && existing.owner {
-                        let modules = serde_json::to_string(&record.modules)
-                            .map_err(|error| StoreError::invalid(error.to_string()))?;
                         let digest: String = transaction.query_row(
                             "SELECT sha256 FROM app_tokens WHERE id = ?1",
                             params![record.id],
@@ -198,7 +203,7 @@ impl Store {
                         if digest != record.sha256 {
                             transaction.execute(
                                 "UPDATE app_tokens SET sha256 = ?, modules_json = ?, name = ?, updated_unix = ? WHERE id = ?",
-                                params![record.sha256, modules, record.name, now_unix, record.id],
+                                params![record.sha256, modules_json, record.name, now_unix, record.id],
                             )?;
                             changed = true;
                         }
@@ -220,8 +225,7 @@ impl Store {
                         record.id,
                         record.name,
                         record.sha256,
-                        serde_json::to_string(&record.modules)
-                            .map_err(|error| StoreError::invalid(error.to_string()))?,
+                        modules_json,
                         i64::from(record.owner),
                         now_unix,
                         now_unix
@@ -603,5 +607,23 @@ mod tests {
         let snapshot = store.access_snapshot().expect("snapshot");
         assert!(snapshot.authenticate_token("second").is_some());
         assert!(snapshot.authenticate_token("first").is_none());
+    }
+    #[test]
+    fn a_non_owner_seed_cannot_gain_admin() {
+        let store = store();
+        let snapshot = AccessSnapshot {
+            revision: 1,
+            tokens: vec![TokenRecord {
+                id: "guest".to_owned(),
+                name: "guest".to_owned(),
+                sha256: sha256_hex("guest"),
+                owner: false,
+                modules: vec!["admin".to_owned(), "home".to_owned()],
+            }],
+        };
+        store.access_import_seed(&snapshot, 10).expect("seed");
+        let guest = store.access_token("guest").expect("guest");
+        assert!(!guest.modules.contains(Module::Admin));
+        assert!(guest.modules.contains(Module::Home));
     }
 }

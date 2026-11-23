@@ -39,7 +39,7 @@ KUBECONFIG = { provider = "infra_kubernetes", value = "admin/admin_kubeconfig", 
 [profiles.ingress.secrets]
 INGRESS_PRIVATE_ENV = { provider = "infra_kubernetes", value = "values-private/ingress_env", as_file = true }
 CLOUDFLARE_API_TOKEN_FILE = { provider = "infra_cloudflare", value = "vpn-dns/cloudflare_env", as_file = true }
-SCHEDULER_TOKEN_FILE = { provider = "k8s_home_assistant", value = "scheduler-auth/service_token", as_file = true }
+SCHEDULER_TOKEN_FILE = { provider = "k8s_home_assistant", value = "scheduler-auth/token", as_file = true }
 HA_TOKEN_FILE = { provider = "k8s_home_assistant", value = "ha-bridge-ha/token", as_file = true }
 KUBECONFIG = { provider = "infra_kubernetes", value = "admin/admin_kubeconfig", as_file = true }
 
