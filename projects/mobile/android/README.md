@@ -557,8 +557,12 @@ navigate by route string, not by an impl destination.
 
 Each `AppTheme` has an `activity-alias` `dev.proflyder.home.launcher.<Name>`
 targeting `MainActivity`, with its own adaptive icon
-(`app_ic_launcher_<theme>`: background, foreground and a shared monochrome
-layer; the system theme uses wallpaper colours on API 31+). Only the alias of
+(`app_ic_launcher_<theme>`), built by one rule for every theme from colour
+roles in `launcher_icon_colors.xml`: `background` = the theme's surface,
+`symbol` = its primary, `glow` = its primary container (a radial halo in the
+background), plus a shared monochrome layer. Roles reference the theme
+palette, so icons follow light/dark mode; the system theme maps the same roles
+to wallpaper colours on API 31+. Only the alias of
 `AppTheme.DEFAULT` is enabled in the manifest. `LauncherIcons`
 (`core/launchericon/api`) is implemented by `PackageManagerLauncherIcons`
 (`core/launchericon/impl`), which enables the target alias first, then

@@ -62,6 +62,14 @@ class LauncherAliasesTest {
         AppTheme.entries.forEach(::checkAndSaveIcon)
     }
 
+    @Test
+    @Config(qualifiers = "night-xxhdpi")
+    fun darkIconsUseTheDarkPalette() {
+        AppTheme.entries.forEach { theme ->
+            save(app.getDrawable(aliasInfo(theme).icon) as AdaptiveIconDrawable, "launcher-icon-${theme.key}-dark.png")
+        }
+    }
+
     private fun checkAndSaveIcon(theme: AppTheme) {
         val icon = app.getDrawable(aliasInfo(theme).icon) as AdaptiveIconDrawable
         val monochrome = requireNotNull(icon.monochrome)

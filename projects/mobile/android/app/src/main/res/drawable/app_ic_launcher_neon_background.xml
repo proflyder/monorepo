@@ -10,9 +10,9 @@
             <gradient
                 android:centerX="54"
                 android:centerY="56"
-                android:endColor="#0B0A1A"
-                android:gradientRadius="40"
-                android:startColor="#5A0F4A"
+                android:endColor="@color/app_launcher_neon_background"
+                android:gradientRadius="42"
+                android:startColor="@color/app_launcher_neon_glow"
                 android:type="radial" />
         </aapt:attr>
     </path>
