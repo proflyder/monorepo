@@ -81,6 +81,8 @@ class TimersViewModelTest {
         val loads = repository.listCalls
         clock.advanceMillis(61_000)
         advanceTimeBy(1_100)
+        viewModel.visibility.stopped()
+        runCurrent()
         assertTrue(repository.listCalls > loads)
     }
 
