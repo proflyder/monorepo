@@ -3,56 +3,33 @@ package dev.proflyder.home.tools.lintrunner
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.nio.file.Files
-import java.nio.file.Path
-import java.nio.file.Paths
-import java.nio.file.attribute.PosixFilePermission
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.JsonNull
 
 private const val MIN_SDK = "26"
 private const val TARGET_SDK = "36"
-private const val COMPILE_SDK = "36"
+private const val COMPILE_TARGET = "android-36"
 private const val VERSION_CODE = "1"
 private const val VERSION_NAME = "0.1.0"
+private const val VARIANT = "main"
+private const val ARTIFACT = "artifact"
+private const val ROOT_VARIABLE = "ROOT"
+private const val LINT_TOOLS = "cmdline-tools/23.0"
+private const val LINT_HEAP = "-Xmx2g"
+private const val REPORT_XML = "report.xml"
 
 private const val ANDROID_NS = "http://schemas.android.com/apk/res/android"
 
 private val PACKAGE_PATTERN = Regex("(?m)^package\\s+([\\w.]+)")
 
-interface Env {
-    fun get(key: String): String?
-    fun entries(): List<Pair<String, String>>
-}
-
-object SystemEnvironment : Env {
-    override fun get(key: String): String? = System.getenv(key)
-
-    override fun entries(): List<Pair<String, String>> = System.getenv().map { it.key to it.value }
-}
-
-class MapEnvironment : Env {
-    private val values = LinkedHashMap<String, String>()
-
-    fun set(key: String, value: String): MapEnvironment {
-        values[key] = value
-        return this
-    }
-
-    fun remove(key: String) {
-        values.remove(key)
-    }
-
-    override fun get(key: String): String? = values[key]
-
-    override fun entries(): List<Pair<String, String>> = values.map { it.key to it.value }
-}
+enum class Mode { ANALYZE, REPORT }
 
 data class LintModule(
     val label: String,
-    val name: String,
     val packageName: String,
     val android: Boolean,
     val app: Boolean,
@@ -60,18 +37,28 @@ data class LintModule(
     val generatedSrcs: List<String>,
     val resources: List<String>,
     val manifest: String?,
-    val deps: List<String>,
     val jars: List<String>,
+    val partial: String?,
+    val deps: List<String>,
 )
 
-private class Attribute(var name: String, var value: String)
+data class LintSpec(
+    val mode: Mode,
+    val sdk: String,
+    val config: String,
+    val module: LintModule,
+    val libraries: List<LintModule>,
+    val externalJars: List<String>,
+    val coordinates: Map<String, String>,
+)
 
 private class Element(val tag: String) {
-    val attrs = mutableListOf<Attribute>()
+    val attrs = mutableListOf<Pair<String, String>>()
     val children = mutableListOf<Element>()
 
-    fun attr(name: String, value: String) {
-        attrs.add(Attribute(name, value))
+    fun attr(name: String, value: String): Element {
+        attrs.add(name to value)
+        return this
     }
 
     fun child(tag: String): Element {
@@ -98,500 +85,427 @@ private fun escapeAttr(value: String): String {
     return builder.toString()
 }
 
-private fun splitQName(name: String): Pair<String, String> {
-    if (name.startsWith("{")) {
-        val end = name.indexOf('}')
-        if (end >= 0) {
-            return name.substring(1, end) to name.substring(end + 1)
-        }
-    }
-    return "" to name
-}
-
-private fun collectNamespaces(
-    element: Element,
-    prefixes: MutableMap<String, String>,
-    order: MutableList<String>,
-) {
-    for (attr in element.attrs) {
-        val uri = splitQName(attr.name).first
-        if (uri.isEmpty()) {
-            continue
-        }
-        if (!prefixes.containsKey(uri)) {
-            prefixes[uri] = "ns${order.size}"
-            order.add(uri)
-        }
-    }
-    for (child in element.children) {
-        collectNamespaces(child, prefixes, order)
-    }
-}
-
-private fun writeElement(
-    element: Element,
-    builder: StringBuilder,
-    prefixes: Map<String, String>,
-    order: List<String>,
-    isRoot: Boolean,
-) {
-    val (tagUri, tagLocal) = splitQName(element.tag)
-    val tag = if (tagUri.isNotEmpty()) "${prefixes.getValue(tagUri)}:$tagLocal" else tagLocal
-    builder.append("<")
-    builder.append(tag)
-    if (isRoot) {
-        for ((index, uri) in order.withIndex()) {
-            builder.append(" ")
-            builder.append("xmlns:ns$index")
-            builder.append("=\"")
-            builder.append(escapeAttr(uri))
-            builder.append("\"")
-        }
-    }
-    for (attr in element.attrs) {
-        val (attrUri, attrLocal) = splitQName(attr.name)
-        val name = if (attrUri.isNotEmpty()) "${prefixes.getValue(attrUri)}:$attrLocal" else attr.name
-        builder.append(" ")
-        builder.append(name)
-        builder.append("=\"")
-        builder.append(escapeAttr(attr.value))
-        builder.append("\"")
+private fun writeElement(element: Element, builder: StringBuilder, indent: String) {
+    builder.append(indent).append('<').append(element.tag)
+    for ((name, value) in element.attrs) {
+        builder.append(' ').append(name).append("=\"").append(escapeAttr(value)).append('"')
     }
     if (element.children.isEmpty()) {
-        builder.append(" />")
+        builder.append(" />\n")
         return
     }
-    builder.append(">")
+    builder.append(">\n")
     for (child in element.children) {
-        writeElement(child, builder, prefixes, order, false)
+        writeElement(child, builder, "$indent  ")
     }
-    builder.append("</")
-    builder.append(tag)
-    builder.append(">")
+    builder.append(indent).append("</").append(element.tag).append(">\n")
 }
 
-private fun writeDocument(path: String, root: Element) {
-    val prefixes = mutableMapOf<String, String>()
-    val order = mutableListOf<String>()
-    collectNamespaces(root, prefixes, order)
-
-    val builder = StringBuilder()
-    builder.append("<?xml version='1.0' encoding='utf-8'?>\n")
-    writeElement(root, builder, prefixes, order, true)
-    File(path).writeText(builder.toString(), Charsets.UTF_8)
-}
-
-private fun joinPath(base: String, name: String): String {
-    if (File(name).isAbsolute) {
-        return name
-    }
-    if (base.isEmpty()) {
-        return name
-    }
-    val separator = File.separator
-    return if (base.endsWith(separator)) base + name else base + separator + name
-}
-
-private fun runfilesRoot(env: Env): String {
-    val testSrcDir = env.get("TEST_SRCDIR")
-    val testWorkspace = env.get("TEST_WORKSPACE")
-    if (testSrcDir.isNullOrEmpty() || testWorkspace.isNullOrEmpty()) {
-        throw IllegalStateException("TEST_SRCDIR/TEST_WORKSPACE are not set; run through bazel test")
-    }
-    return joinPath(testSrcDir, testWorkspace)
-}
-
-private fun isExecutableFile(path: String): Boolean {
-    val file: Path = Paths.get(path)
-    if (!Files.exists(file) || Files.isDirectory(file)) {
-        return false
-    }
-    val permissions = try {
-        Files.getPosixFilePermissions(file)
-    } catch (_: UnsupportedOperationException) {
-        return Files.isExecutable(file)
-    }
-    return permissions.contains(PosixFilePermission.OWNER_EXECUTE) ||
-        permissions.contains(PosixFilePermission.GROUP_EXECUTE) ||
-        permissions.contains(PosixFilePermission.OTHERS_EXECUTE)
-}
-
-private fun sortedDescending(values: List<String>): List<String> {
-    val copy = values.toMutableList()
-    copy.sort()
-    copy.reverse()
-    return copy
-}
-
-fun findLint(env: Env): String {
-    val override = env.get("ANDROID_LINT")
-    if (!override.isNullOrEmpty()) {
-        return override
-    }
-    val homes = listOf(env.get("ANDROID_HOME"), env.get("ANDROID_SDK_ROOT"))
-    val candidates = mutableListOf<String>()
-    for (home in homes) {
-        if (home.isNullOrEmpty()) {
-            continue
-        }
-        candidates.add(joinPath(joinPath(joinPath(home, "cmdline-tools"), "23.0"), "bin/lint"))
-        candidates.add(joinPath(joinPath(joinPath(home, "cmdline-tools"), "latest"), "bin/lint"))
-        val cmdline = File(home, "cmdline-tools")
-        val names = cmdline.list()
-        if (names != null) {
-            for (name in sortedDescending(names.toList())) {
-                candidates.add(joinPath(joinPath(joinPath(cmdline.path, name), "bin"), "lint"))
-            }
-        }
-        candidates.add(joinPath(joinPath(joinPath(home, "tools"), "bin"), "lint"))
-    }
-    for (candidate in candidates) {
-        if (isExecutableFile(candidate)) {
-            return candidate
-        }
-    }
-    throw IllegalStateException(
-        "Android Lint was not found. Install the pinned SDK package " +
-            "`cmdline-tools;23.0` (sdkmanager --install \"cmdline-tools;23.0\") " +
-            "or set ANDROID_LINT to the lint executable.",
-    )
+private fun writeDocument(file: File, root: Element) {
+    val builder = StringBuilder("<?xml version='1.0' encoding='utf-8'?>\n")
+    writeElement(root, builder, "")
+    file.parentFile?.mkdirs()
+    file.writeText(builder.toString(), Charsets.UTF_8)
 }
 
 fun safeName(name: String): String {
     val builder = StringBuilder()
     for (ch in name) {
-        if (ch.isLetter() || ch.isDigit() || ch == '.' || ch == '_' || ch == '-') {
-            builder.append(ch)
-        } else {
-            builder.append('_')
+        builder.append(if (ch.isLetterOrDigit() || ch == '.' || ch == '_' || ch == '-') ch else '_')
+    }
+    return builder.toString().trim('_')
+}
+
+fun modulePath(label: String): String =
+    ":" + label.removePrefix("@").removePrefix("//").replace('/', ':').trim(':')
+
+fun libraryCoordinate(label: String): String = "bazel.module:${safeName(label)}:unspecified"
+
+fun jarCoordinate(path: String, coordinates: Map<String, String>): String =
+    coordinates[path] ?: "bazel.jar:${safeName(path)}:unspecified"
+
+fun sourceRoot(path: String, text: String): String {
+    val file = File(path)
+    val parent = file.parentFile?.path ?: "."
+    val packageName = PACKAGE_PATTERN.find(text)?.groupValues?.get(1) ?: return parent
+    val suffix = File.separator + packageName.replace('.', File.separatorChar)
+    return if (parent.endsWith(suffix)) parent.removeSuffix(suffix) else parent
+}
+
+fun minimalRoots(roots: Collection<String>): List<String> {
+    val sorted = roots.toSortedSet().toList()
+    val result = mutableListOf<String>()
+    for (root in sorted) {
+        if (result.none { root == it || root.startsWith(it + File.separator) }) {
+            result.add(root)
         }
     }
-    return builder.toString()
+    return result
 }
 
-fun stagedGeneratedSource(item: LintModule, path: String, workdir: String): String {
-    val payload = File(path).readBytes()
-    val match = PACKAGE_PATTERN.find(String(payload, Charsets.UTF_8)) ?: return path
-    val packageName = match.groupValues[1]
-    val parts = mutableListOf(workdir, "generated", safeName(item.name))
-    parts.addAll(packageName.split("."))
-    var directory = File(parts.first())
-    for (part in parts.drop(1)) {
-        directory = File(directory, part)
+fun resourceRoots(resources: List<String>): List<String> =
+    resources.mapNotNull { File(it).parentFile?.parentFile?.path }.toSortedSet().toList()
+
+private fun JsonObject.string(key: String): String? {
+    val value = this[key]
+    if (value == null || value is JsonNull) {
+        return null
     }
-    if (!directory.exists() && !directory.mkdirs()) {
-        throw IllegalStateException("cannot create ${directory.path}")
+    return (value as? JsonPrimitive)?.takeIf { it.isString }?.content
+}
+
+private fun JsonObject.flag(key: String): Boolean = (this[key] as? JsonPrimitive)?.content == "true"
+
+private fun JsonObject.strings(key: String): List<String> =
+    (this[key] as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.content }
+        ?: emptyList()
+
+private fun readModule(element: JsonElement): LintModule {
+    val record = element as? JsonObject ?: throw IllegalArgumentException("module record is not an object")
+    return LintModule(
+        label = record.string("label") ?: throw IllegalArgumentException("module without label"),
+        packageName = record.string("package") ?: "",
+        android = record.flag("android"),
+        app = record.flag("app"),
+        srcs = record.strings("srcs"),
+        generatedSrcs = record.strings("generated_srcs"),
+        resources = record.strings("resources"),
+        manifest = record.string("manifest"),
+        jars = record.strings("jars"),
+        partial = record.string("partial"),
+        deps = record.strings("deps"),
+    )
+}
+
+fun readSpec(text: String): LintSpec {
+    val root = Json.parseToJsonElement(text) as? JsonObject
+        ?: throw IllegalArgumentException("lint spec is not a JSON object")
+    val mode = when (root.string("mode")) {
+        "analyze" -> Mode.ANALYZE
+        "report" -> Mode.REPORT
+        else -> throw IllegalArgumentException("lint spec mode must be analyze or report")
     }
-    val dest = File(directory, File(path).name)
-    dest.writeBytes(payload)
-    return dest.path
+    return LintSpec(
+        mode = mode,
+        sdk = root.string("sdk") ?: "",
+        config = root.string("config") ?: throw IllegalArgumentException("lint spec without config"),
+        module = readModule(root["module"] ?: throw IllegalArgumentException("lint spec without module")),
+        libraries = (root["libraries"] as? JsonArray)?.map(::readModule) ?: emptyList(),
+        externalJars = root.strings("external_jars"),
+        coordinates = (root["coordinates"] as? JsonObject)
+            ?.mapNotNull { (key, value) -> (value as? JsonPrimitive)?.content?.let { key to it } }
+            ?.toMap()
+            ?: emptyMap(),
+    )
 }
 
-private fun mergedManifest(item: LintModule, workdir: String): String {
-    val manifest = Element("manifest")
-    manifest.attr("package", item.packageName)
-    val usesSdk = manifest.child("uses-sdk")
-    usesSdk.attr("{$ANDROID_NS}minSdkVersion", MIN_SDK)
-    usesSdk.attr("{$ANDROID_NS}targetSdkVersion", TARGET_SDK)
-    if (item.app) {
-        manifest.attr("{$ANDROID_NS}versionCode", VERSION_CODE)
-        manifest.attr("{$ANDROID_NS}versionName", VERSION_NAME)
-    }
+class ModelWriter(private val root: File, private val work: File) {
+    private fun abs(path: String): String = if (File(path).isAbsolute) path else File(root, path).path
 
-    val path = File(workdir, safeName(item.name) + "-merged-manifest.xml").path
-    writeDocument(path, manifest)
-    return path
-}
-
-private fun JsonObject.stringField(key: String): String {
-    val value = this[key] as? JsonPrimitive ?: return ""
-    return if (value.isString) value.content else ""
-}
-
-private fun JsonObject.listField(key: String): List<String> {
-    val array = this[key] as? JsonArray ?: return emptyList()
-    return array.mapNotNull { item ->
-        val primitive = item as? JsonPrimitive ?: return@mapNotNull null
-        if (primitive.isString) primitive.content else null
-    }
-}
-
-fun readModules(path: String): List<LintModule> {
-    val modules = mutableListOf<LintModule>()
-    for (line in File(path).readLines(Charsets.UTF_8)) {
-        if (line.trim().isEmpty()) {
-            continue
+    private fun mergedManifest(module: LintModule): File {
+        val file = File(work, "manifests/${safeName(module.label)}.xml")
+        file.parentFile.mkdirs()
+        if (module.app && module.manifest != null) {
+            file.writeText(appManifest(File(abs(module.manifest)).readText(Charsets.UTF_8)), Charsets.UTF_8)
+            return file
         }
-        val record = Json.parseToJsonElement(line) as? JsonObject
-            ?: throw IllegalArgumentException("module record is not a JSON object: $line")
-        val manifestElement = record["manifest"]
-        val manifest = if (manifestElement is JsonPrimitive && manifestElement !is JsonNull) {
-            record.stringField("manifest")
-        } else {
-            null
+        val manifest = Element("manifest")
+            .attr("xmlns:android", ANDROID_NS)
+            .attr("package", module.packageName)
+        manifest.child("uses-sdk")
+            .attr("android:minSdkVersion", MIN_SDK)
+            .attr("android:targetSdkVersion", TARGET_SDK)
+        writeDocument(file, manifest)
+        return file
+    }
+
+    private fun stagedGenerated(module: LintModule): String? {
+        if (module.generatedSrcs.isEmpty()) {
+            return null
         }
-        modules.add(
-            LintModule(
-                label = record.stringField("label"),
-                name = record.stringField("name"),
-                packageName = record.stringField("package"),
-                android = record["android"]?.let { it is JsonPrimitive && it.content == "true" } ?: false,
-                app = record["app"]?.let { it is JsonPrimitive && it.content == "true" } ?: false,
-                srcs = record.listField("srcs"),
-                generatedSrcs = record.listField("generated_srcs"),
-                resources = record.listField("resources"),
-                manifest = manifest,
-                deps = record.listField("deps"),
-                jars = record.listField("jars"),
-            ),
+        val base = File(work, "generated/${safeName(module.label)}")
+        for (path in module.generatedSrcs) {
+            val payload = File(abs(path)).readBytes()
+            val packageName = PACKAGE_PATTERN.find(String(payload, Charsets.UTF_8))?.groupValues?.get(1)
+            val directory = if (packageName == null) base else File(base, packageName.replace('.', File.separatorChar))
+            directory.mkdirs()
+            File(directory, File(path).name).writeBytes(payload)
+        }
+        return base.path
+    }
+
+    private fun library(module: LintModule): Element {
+        val element = Element("library")
+            .attr("name", libraryCoordinate(module.label))
+            .attr("jars", existing(module.jars).joinToString(File.pathSeparator))
+            .attr("resolved", libraryCoordinate(module.label))
+        if (module.android) {
+            val folder = File(work, "libraries/${safeName(module.label)}")
+            folder.mkdirs()
+            val resRoots = resourceRoots(module.resources)
+            if (resRoots.size > 1) {
+                throw IllegalStateException("${module.label} has several resource roots: $resRoots")
+            }
+            element.attr("folder", folder.path)
+            element.attr("resFolder", resRoots.firstOrNull()?.let(::abs) ?: File(folder, "res").path)
+            element.attr("assetsFolder", File(folder, "assets").path)
+            element.attr("lintJar", File(folder, "lint.jar").path)
+            element.attr("publicResources", File(folder, "public.txt").path)
+            element.attr("symbolFile", File(folder, "R.txt").path)
+            element.attr("manifest", mergedManifest(module).path)
+            element.attr("externalAnnotations", File(folder, "annotations.zip").path)
+            element.attr("proguardRules", File(folder, "proguard.txt").path)
+        }
+        return element
+    }
+
+    private fun moduleReference(module: LintModule): Element =
+        Element("library")
+            .attr("name", modulePath(module.label))
+            .attr("project", modulePath(module.label))
+
+    private fun existing(paths: List<String>): List<String> = paths.map(::abs).filter { File(it).exists() }
+
+    private fun externalLibraries(spec: LintSpec, taken: MutableSet<String>): List<Element> {
+        val result = mutableListOf<Element>()
+        val seenJars = mutableSetOf<String>()
+        for (jar in spec.externalJars) {
+            val path = abs(jar)
+            if (!File(path).exists() || !seenJars.add(path)) {
+                continue
+            }
+            var name = jarCoordinate(jar, spec.coordinates)
+            if (!taken.add(name)) {
+                name = "bazel.jar:${safeName(jar)}:unspecified"
+                taken.add(name)
+            }
+            result.add(Element("library").attr("name", name).attr("jars", path).attr("resolved", name))
+        }
+        return result
+    }
+
+    fun write(spec: LintSpec): List<File> {
+        val bootClassPath = File(abs(spec.sdk), "platforms/$COMPILE_TARGET/android.jar").path
+        if (spec.mode == Mode.ANALYZE) {
+            val libraries = spec.libraries.map(::library).toMutableList()
+            val taken = spec.libraries.map { libraryCoordinate(it.label) }.toMutableSet()
+            libraries.addAll(externalLibraries(spec, taken))
+            return listOf(writeModel(spec.module, libraries, bootClassPath))
+        }
+        val byLabel = spec.libraries.associateBy { it.label }
+        val models = mutableListOf<File>()
+        for (module in listOf(spec.module) + spec.libraries) {
+            val libraries = module.deps.mapNotNull { byLabel[it] }.map(::moduleReference).toMutableList()
+            if (module.app) {
+                val taken = libraries.map { it.attrs.first { (key, _) -> key == "name" }.second }.toMutableSet()
+                libraries.addAll(externalLibraries(spec, taken))
+            }
+            models.add(writeModel(module, libraries, bootClassPath))
+        }
+        return models
+    }
+
+    private fun writeModel(module: LintModule, libraryElements: List<Element>, bootClassPath: String): File {
+        val modelDir = File(work, "models/${safeName(module.label)}")
+        modelDir.mkdirs()
+        val moduleDir = File(work, "modules/${safeName(module.label)}")
+        moduleDir.mkdirs()
+        val type = when {
+            module.app -> "APP"
+            module.android -> "LIBRARY"
+            else -> "JAVA_LIBRARY"
+        }
+
+        val lintModule = Element("lint-module")
+            .attr("format", "1")
+            .attr("dir", moduleDir.path)
+            .attr("name", modulePath(module.label))
+            .attr("type", type)
+            .attr("maven", libraryCoordinate(module.label))
+            .attr("buildFolder", File(work, "build/${safeName(module.label)}").path)
+            .attr("bootClassPath", bootClassPath)
+            .attr("javaSourceLevel", "17")
+            .attr("compileTarget", COMPILE_TARGET)
+            .attr("neverShrinking", "true")
+        lintModule.child("lintOptions")
+            .attr("absolutePaths", "true")
+            .attr("checkDependencies", if (module.app) "true" else "false")
+            .attr("checkReleaseBuilds", "true")
+            .attr("checkGeneratedSources", "true")
+        lintModule.child("variant").attr("name", VARIANT)
+        writeDocument(File(modelDir, "module.xml"), lintModule)
+
+        val sourceRoots = minimalRoots(
+            module.srcs.filter { it !in module.generatedSrcs }.map {
+                abs(sourceRoot(it, File(abs(it)).readText(Charsets.UTF_8)))
+            },
+        )
+        val resRoots = resourceRoots(module.resources).map(::abs)
+        val declaresSdk = module.manifest != null &&
+            File(abs(module.manifest)).readText(Charsets.UTF_8).contains("<uses-sdk")
+        val variant = Element("variant").attr("name", VARIANT)
+        if (!declaresSdk) {
+            variant.attr("minSdkVersion", MIN_SDK)
+            variant.attr("targetSdkVersion", TARGET_SDK)
+        }
+        variant.attr("debuggable", "false")
+        variant.attr("mergedManifest", mergedManifest(module).path)
+        if (module.packageName.isNotEmpty()) {
+            variant.attr("package", module.packageName)
+        }
+        if (module.partial != null) {
+            variant.attr("partialResultsDir", abs(module.partial))
+        }
+        val provider = variant.child("sourceProviders").child("sourceProvider")
+        if (module.manifest != null) {
+            provider.attr("manifests", abs(module.manifest))
+        }
+        provider.attr("javaDirectories", sourceRoots.joinToString(File.pathSeparator))
+        provider.attr("resDirectories", resRoots.joinToString(File.pathSeparator))
+        variant.child("testSourceProviders")
+        variant.child("testFixturesSourceProviders")
+        variant.child("resValues")
+        variant.child("manifestPlaceholders")
+        variant.child("buildFeatures")
+            .attr("coreLibraryDesugaring", "false")
+            .attr("viewBinding", if (module.generatedSrcs.isEmpty()) "false" else "true")
+        val artifact = variant.child(ARTIFACT)
+            .attr("classOutputs", existing(module.jars).joinToString(File.pathSeparator))
+            .attr("type", "MAIN")
+            .attr("applicationId", module.packageName.ifEmpty { safeName(module.label) })
+        stagedGenerated(module)?.let { artifact.attr("generatedSourceFolders", it) }
+        writeDocument(File(modelDir, "$VARIANT.xml"), variant)
+
+        val libraries = Element("libraries")
+        libraries.children.addAll(libraryElements)
+        writeDocument(File(modelDir, "$VARIANT-$ARTIFACT-libraries.xml"), libraries)
+
+        val names = libraryElements.map { element -> element.attrs.first { it.first == "name" }.second }
+        val dependencies = Element("dependencies")
+        for (graph in listOf("compile", "package")) {
+            val element = dependencies.child(graph).attr("roots", names.joinToString(","))
+            for (name in names) {
+                element.child("dependency")
+                    .attr("name", name)
+                    .attr("simpleName", name.substringBeforeLast(':'))
+            }
+        }
+        writeDocument(File(modelDir, "$VARIANT-$ARTIFACT-dependencies.xml"), dependencies)
+        return modelDir
+    }
+}
+
+fun appManifest(text: String): String {
+    val open = Regex("<manifest\\b").find(text) ?: throw IllegalArgumentException("application manifest has no <manifest>")
+    val extra = StringBuilder()
+    if (!text.contains("android:versionCode")) {
+        extra.append(" android:versionCode=\"").append(VERSION_CODE).append('"')
+    }
+    if (!text.contains("android:versionName")) {
+        extra.append(" android:versionName=\"").append(VERSION_NAME).append('"')
+    }
+    val at = open.range.last + 1
+    return text.substring(0, at) + extra + text.substring(at)
+}
+
+fun countFindings(xml: String): Int =
+    Regex("<issue\\b[^>]*\\bseverity=\"(Warning|Error|Fatal)\"").findAll(xml).count()
+
+fun lintCommand(spec: LintSpec, root: File, models: List<File>, work: File, javaHome: String): List<String> {
+    val sdk = File(root, spec.sdk).absoluteFile
+    val tools = File(sdk, LINT_TOOLS)
+    val command = mutableListOf(
+        File(javaHome, "bin/java").path,
+        LINT_HEAP,
+        "-Duser.home=${work.path}",
+        "-Dcom.android.tools.lint.bindir=${tools.path}",
+        "-classpath",
+        File(tools, "lib/lint-classpath.jar").path,
+        "com.android.tools.lint.Main",
+        "--sdk-home", sdk.path,
+        "--config", File(root, spec.config).path,
+        "--path-variables", "$ROOT_VARIABLE=${root.path}",
+        "--cache-dir", File(work, "cache").path,
+    )
+    for (model in models) {
+        command.add("--lint-model")
+        command.add(model.path)
+    }
+    command.addAll(listOf("--variant", VARIANT, "--quiet"))
+    when (spec.mode) {
+        Mode.ANALYZE -> command.add("--analyze-only")
+        Mode.REPORT -> command.addAll(
+            listOf("--report-only", "-Werror", "--text", "stdout", "--xml", File(work, REPORT_XML).path),
         )
     }
-    return modules
-}
-
-private fun boolString(value: Boolean): String = if (value) "true" else "false"
-
-private fun buildProject(modules: List<LintModule>, root: String, workdir: String): Element {
-    val names = modules.map { it.name }.toSet()
-
-    val project = Element("project")
-    project.attr("android", "true")
-    project.attr("incomplete", "false")
-    project.child("root").attr("dir", root)
-
-    for (item in modules) {
-        val moduleElement = Element("module")
-        moduleElement.attr("name", item.name)
-        moduleElement.attr("android", boolString(item.android))
-        moduleElement.attr("compile-sdk-version", COMPILE_SDK)
-        moduleElement.attr("javaLanguage", "17")
-        moduleElement.attr("kotlinLanguage", "2.4")
-        if (item.android) {
-            moduleElement.attr("library", boolString(!item.app))
-        }
-
-        val generated = item.generatedSrcs.toSet()
-        for (src in item.srcs) {
-            val path = joinPath(root, src)
-            val srcElement = Element("src")
-            srcElement.attr("file", path)
-            if (generated.contains(src)) {
-                srcElement.attr("generated", "true")
-                val staged = stagedGeneratedSource(item, path, workdir)
-                srcElement.attrs[0].value = staged
-            }
-            moduleElement.children.add(srcElement)
-        }
-        for (resource in item.resources) {
-            moduleElement.child("resource").attr("file", joinPath(root, resource))
-        }
-        if (item.manifest != null) {
-            moduleElement.child("manifest").attr("file", joinPath(root, item.manifest))
-            moduleElement.child("merged-manifest").attr("file", mergedManifest(item, workdir))
-        }
-        for (jar in item.jars) {
-            val jarPath = joinPath(root, jar)
-            if (File(jarPath).exists()) {
-                moduleElement.child("classpath").attr("jar", jarPath)
-            }
-        }
-        for (dep in item.deps) {
-            if (names.contains(dep)) {
-                moduleElement.child("dep").attr("module", dep)
-            }
-        }
-        project.children.add(moduleElement)
-    }
-    return project
+    return command
 }
 
 private fun Appendable.line(text: String) {
-    append(text)
-    append('\n')
+    append(text).append('\n')
 }
 
-private class FlagError(message: String) : Exception(message)
-
-private fun positionalArgs(args: Array<String>): List<String> {
-    val positional = mutableListOf<String>()
-    for (arg in args) {
-        if (arg == "--") {
-            continue
-        }
-        if (arg.startsWith("-") && arg != "-") {
-            throw FlagError("flag provided but not defined: $arg")
-        }
-        positional.add(arg)
-    }
-    return positional
-}
-
-fun run(
-    args: Array<String>,
-    stdout: Appendable,
-    stderr: Appendable,
-    env: Env = SystemEnvironment,
-): Int {
-    val positional = try {
-        positionalArgs(args)
-    } catch (error: FlagError) {
-        stderr.line(error.message ?: error.toString())
+fun run(args: Array<String>, stdout: Appendable, stderr: Appendable): Int {
+    if (args.size != 1) {
+        stderr.line("usage: lint_runner <spec.json>")
         return 2
     }
-
-    val recordsPath = when {
-        positional.size >= 1 -> positional[0]
-        !env.get("LINT_MODULES").isNullOrEmpty() -> env.get("LINT_MODULES")!!
-        else -> {
-            stderr.line("usage: lint_runner <modules.jsonl> [lint.xml] (or set LINT_MODULES)")
-            return 1
-        }
-    }
-    var configPath = if (positional.size >= 2) positional[1] else ""
-
-    val root = try {
-        runfilesRoot(env)
+    val root = File("").absoluteFile
+    val spec = try {
+        readSpec(File(args[0]).readText(Charsets.UTF_8))
     } catch (error: Exception) {
         stderr.line(error.message ?: error.toString())
         return 1
     }
-    val resolvedRecords = if (File(recordsPath).isAbsolute) recordsPath else joinPath(root, recordsPath)
-
-    val modules = try {
-        readModules(resolvedRecords)
-    } catch (error: Exception) {
-        stderr.line(error.message ?: error.toString())
+    if (spec.sdk.isEmpty() || !File(root, "${spec.sdk}/$LINT_TOOLS/lib/lint-classpath.jar").exists()) {
+        stderr.line(
+            "Android Lint was not found. Install `cmdline-tools;23.0` and `platforms;android-36` " +
+                "into ANDROID_HOME (sdkmanager --install \"cmdline-tools;23.0\") and rerun bazel.",
+        )
         return 1
     }
-
-    val configuredTmp = env.get("TEST_TMPDIR")
-    val tmp = if (configuredTmp.isNullOrEmpty()) {
-        try {
-            Files.createTempDirectory("lint-").toString()
-        } catch (error: Exception) {
-            stderr.line(error.message ?: error.toString())
-            return 1
-        }
-    } else {
-        configuredTmp
-    }
+    val work = Files.createTempDirectory("android-lint-").toFile()
     try {
-        val directory = File(tmp)
-        if (!directory.exists() && !directory.mkdirs()) {
-            stderr.line("cannot create $tmp")
-            return 1
+        val models = ModelWriter(root, work).write(spec)
+        if (spec.mode == Mode.ANALYZE) {
+            spec.module.partial?.let { File(root, it).mkdirs() }
         }
-    } catch (error: Exception) {
-        stderr.line(error.message ?: error.toString())
-        return 1
-    }
-
-    val project = try {
-        buildProject(modules, root, tmp)
-    } catch (error: Exception) {
-        stderr.line(error.message ?: error.toString())
-        return 1
-    }
-    val projectPath = File(tmp, "project.xml").path
-    try {
-        writeDocument(projectPath, project)
-    } catch (error: Exception) {
-        stderr.line(error.message ?: error.toString())
-        return 1
-    }
-
-    if (configPath.isEmpty()) {
-        configPath = joinPath(root, "projects/mobile/android/lint.xml")
-    }
-    val lint = try {
-        findLint(env)
-    } catch (error: Exception) {
-        stderr.line(error.message ?: error.toString())
-        return 1
-    }
-
-    var sdkHome = env.get("ANDROID_HOME")
-    if (sdkHome.isNullOrEmpty()) {
-        sdkHome = env.get("ANDROID_SDK_ROOT")
-    }
-    val command = mutableListOf(
-        lint,
-        "--project", projectPath,
-        "--compile-sdk-version", COMPILE_SDK,
-    )
-    if (!sdkHome.isNullOrEmpty()) {
-        command.add("--sdk-home")
-        command.add(sdkHome)
-    }
-    command.addAll(
-        listOf(
-            "--config", configPath,
-            "--exitcode", "-Werror",
-            "--text", "stdout",
-            "--quiet",
-        ),
-    )
-
-    val inherited = env.entries()
-    val environment = LinkedHashMap<String, String>()
-    for ((key, value) in inherited) {
-        environment[key] = value
-    }
-    val extraOrder = mutableListOf<String>()
-    fun setDefault(key: String, value: String) {
-        if (environment.containsKey(key)) {
-            return
-        }
-        environment[key] = value
-        extraOrder.add(key)
-    }
-    setDefault("ANDROID_USER_HOME", joinPath(tmp, "android-user"))
-    setDefault("LINT_OPTS", "-Duser.home=$tmp")
-
-    val commandEnv = mutableListOf<Pair<String, String>>()
-    val seen = mutableSetOf<String>()
-    for ((key, _) in inherited) {
-        if (seen.add(key)) {
-            commandEnv.add(key to environment.getValue(key))
-        }
-    }
-    for (key in extraOrder) {
-        commandEnv.add(key to environment.getValue(key))
-    }
-
-    val process = try {
-        ProcessBuilder(command).apply {
-            environment().clear()
-            for ((key, value) in commandEnv) {
-                environment()[key] = value
-            }
-            redirectInput(ProcessBuilder.Redirect.INHERIT)
+        val command = lintCommand(spec, root, models, work, System.getProperty("java.home"))
+        val process = ProcessBuilder(command).apply {
+            environment()["ANDROID_USER_HOME"] = File(work, "android-user").path
+            environment().remove("ANDROID_LINT_JARS")
         }.start()
-    } catch (error: Exception) {
-        stderr.line(error.message ?: error.toString())
-        return 1
-    }
-
-    val outBuffer = ByteArrayOutputStream()
-    val errBuffer = ByteArrayOutputStream()
-    val outThread = Thread { process.inputStream.copyTo(outBuffer) }
-    val errThread = Thread { process.errorStream.copyTo(errBuffer) }
-    outThread.start()
-    errThread.start()
-    val exit = try {
-        process.waitFor()
+        val outBuffer = ByteArrayOutputStream()
+        val errBuffer = ByteArrayOutputStream()
+        val outThread = Thread { process.inputStream.copyTo(outBuffer) }
+        val errThread = Thread { process.errorStream.copyTo(errBuffer) }
+        outThread.start()
+        errThread.start()
+        val exit = process.waitFor()
         outThread.join()
         errThread.join()
-        process.exitValue()
-    } catch (error: InterruptedException) {
-        process.destroy()
-        Thread.currentThread().interrupt()
+        stdout.append(outBuffer.toString(Charsets.UTF_8.name()))
+        stderr.append(errBuffer.toString(Charsets.UTF_8.name()))
+        if (exit != 0 || spec.mode == Mode.ANALYZE) {
+            return exit
+        }
+        val report = File(work, REPORT_XML)
+        if (!report.exists()) {
+            stderr.line("Android Lint produced no report")
+            return 1
+        }
+        val errors = countFindings(report.readText(Charsets.UTF_8))
+        if (errors > 0) {
+            stderr.line("Android Lint found $errors finding(s); warnings fail like errors (-Werror)")
+            return 1
+        }
+        return 0
+    } catch (error: Exception) {
         stderr.line(error.message ?: error.toString())
         return 1
+    } finally {
+        work.deleteRecursively()
     }
-    stdout.append(outBuffer.toString(Charsets.UTF_8.name()))
-    stderr.append(errBuffer.toString(Charsets.UTF_8.name()))
-    return exit
 }
 
 fun main(args: Array<String>) {

@@ -5,6 +5,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.RectF
 import android.os.Looper
+import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.View
 import androidx.appcompat.view.ContextThemeWrapper
@@ -169,7 +170,7 @@ class AlarmItemLayoutTest {
         )
         assertTrue(
             "selection check touches the card edge: end gap ${cardWidth - indicatorLeft - indicator.width}",
-            cardWidth - indicatorLeft - indicator.width >= dp(indicator, R.dimen.alarms_card_ripple_gap),
+            cardWidth - indicatorLeft - indicator.width >= rippleGap(indicator),
         )
         when (pngName) {
             null -> Unit
@@ -198,7 +199,7 @@ class AlarmItemLayoutTest {
         )
         assertEquals("switch and delete gap is not 4dp", gap, delete.left - switch.right)
 
-        val margin = dp(delete, R.dimen.alarms_card_ripple_gap)
+        val margin = rippleGap(delete)
         val (deleteLeft, deleteTop) = offsetInRoot(binding.root, delete)
         val rippleLeft = deleteLeft - margin
         val rippleTop = deleteTop - margin
@@ -327,6 +328,9 @@ class AlarmItemLayoutTest {
 
     private fun dp(view: View, id: Int): Int = view.resources.getDimensionPixelSize(id)
 
+    private fun rippleGap(view: View): Int =
+        TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, RIPPLE_GAP_DP, view.resources.displayMetrics).toInt()
+
     private fun heightDp(view: View): Float = view.measuredHeight / view.resources.displayMetrics.density
 
     private fun cardWidth(root: View): Int {
@@ -352,3 +356,5 @@ class AlarmItemLayoutTest {
         const val RGB_MASK = 0x00FFFFFF
     }
 }
+
+private const val RIPPLE_GAP_DP = 8f

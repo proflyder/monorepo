@@ -39,7 +39,6 @@
     <string name="alarms_editor_days">Дни</string>
     <string name="alarms_editor_name">Название</string>
     <string name="alarms_editor_delete">Удалить будильник</string>
-    <string name="alarms_editor_hint">Домашний сервер хранит этот будильник и решает, когда его запускать. Телефон не планирует локальные будильники.</string>
     <string name="alarms_day_mon">Пн</string>
     <string name="alarms_day_tue">Вт</string>
     <string name="alarms_day_wed">Ср</string>
@@ -49,7 +48,6 @@
     <string name="alarms_day_sun">Вс</string>
     <string name="alarms_today">сегодня %1$s</string>
     <string name="alarms_tomorrow">завтра %1$s</string>
-    <string name="alarms_in_days">%1$s %2$s</string>
     <string name="alarms_saved">Будильник сохранён</string>
     <string name="alarms_deleted">Будильник удалён</string>
     <string name="alarms_upcoming_today">сегодня</string>

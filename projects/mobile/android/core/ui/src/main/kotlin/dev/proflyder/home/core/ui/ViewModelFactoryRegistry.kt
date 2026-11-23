@@ -51,7 +51,9 @@ class ViewModelFactoryRegistry(
         build(modelClass) { extras.createSavedStateHandle() }
 
     override fun <T : ViewModel> create(modelClass: Class<T>): T =
-        build(modelClass) { SavedStateHandle.createHandle(null, null) }
+        build(modelClass) {
+            error("${modelClass.name} keeps saved state and needs CreationExtras from a SavedStateRegistryOwner")
+        }
 
     private fun <T : ViewModel> build(modelClass: Class<T>, savedState: () -> SavedStateHandle): T {
         val key = modelClass.kotlin
