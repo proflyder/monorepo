@@ -1,27 +1,3 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="dev.proflyder.home.core.launchericon">
-
-    <application>
-        <activity
-            android:name="dev.proflyder.home.MainActivity"
-            android:exported="true" />
-        <activity-alias
-            android:name="dev.proflyder.home.launcher.Emerald"
-            android:exported="true"
-            android:icon="@android:drawable/ic_dialog_info"
-            android:targetActivity="dev.proflyder.home.MainActivity" />
-        <activity-alias
-            android:name="dev.proflyder.home.launcher.System"
-            android:enabled="false"
-            android:exported="true"
-            android:icon="@android:drawable/ic_dialog_alert"
-            android:targetActivity="dev.proflyder.home.MainActivity" />
-        <activity-alias
-            android:name="dev.proflyder.home.launcher.Neon"
-            android:enabled="false"
-            android:exported="true"
-            android:icon="@android:drawable/ic_dialog_email"
-            android:targetActivity="dev.proflyder.home.MainActivity" />
-    </application>
-</manifest>
+    package="dev.proflyder.home.core.launchericon" />

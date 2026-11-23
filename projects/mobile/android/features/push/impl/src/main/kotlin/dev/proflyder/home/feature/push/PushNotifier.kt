@@ -7,7 +7,7 @@ import android.content.Context
 import android.content.Intent
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
-import dev.proflyder.home.core.launchericon.ThemedNotifications
+import dev.proflyder.home.core.theme.NotificationAccent
 import dev.proflyder.home.core.ui.NotificationPermission
 import dev.proflyder.home.feature.push.impl.R
 import dev.zacsweers.metro.AppScope
@@ -18,16 +18,17 @@ import dev.zacsweers.metro.SingleIn
 @Inject
 internal class PushNotifier(
     private val context: Context,
-    private val themed: ThemedNotifications,
+    private val accent: NotificationAccent,
     private val permission: NotificationPermission,
 ) {
     fun notify(message: PushMessage.Notify) {
         val content = openAppIntent(message.deepLink)
-        val builder = NotificationCompat.Builder(context, PushChannels.NOTIFICATIONS)
+        val notification = NotificationCompat.Builder(context, PushChannels.NOTIFICATIONS)
             .setSmallIcon(R.drawable.push_ic_notification)
+            .setColor(accent.color())
             .setContentTitle(message.title)
             .setContentText(message.body)
-        val notification = themed.conversation(builder, message.title, message.body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(message.body))
             .setContentIntent(content)
             .setAutoCancel(true)
             .setCategory(NotificationCompat.CATEGORY_STATUS)
@@ -39,9 +40,9 @@ internal class PushNotifier(
     @Suppress("MissingPermission")
     fun ring(reason: String): Notification {
         val full = findScreenIntent()
-        val builder = NotificationCompat.Builder(context, PushChannels.FIND)
-        return themed.decorate(builder)
+        return NotificationCompat.Builder(context, PushChannels.FIND)
             .setSmallIcon(R.drawable.push_ic_notification)
+            .setColor(accent.color())
             .setContentTitle(context.getString(R.string.push_find_title))
             .setContentText(
                 reason.ifBlank { context.getString(R.string.push_find_default_reason) },

@@ -12,7 +12,7 @@ import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.lifecycleScope
 import dev.proflyder.home.core.runtime.appGraph
 import dev.zacsweers.metro.Inject
-import dev.proflyder.home.core.launchericon.ThemedNotifications
+import dev.proflyder.home.core.theme.NotificationAccent
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
@@ -22,8 +22,8 @@ class CallForegroundService : LifecycleService() {
     lateinit var controller: CallController
 
     @Inject
-    lateinit var themed: ThemedNotifications
-    private val notifications by lazy { CallNotifications(this, themed) }
+    lateinit var accent: NotificationAccent
+    private val notifications by lazy { CallNotifications(this, accent) }
     private var observation: Job? = null
 
     override fun onCreate() {

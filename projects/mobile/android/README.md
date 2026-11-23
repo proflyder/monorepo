@@ -583,17 +583,10 @@ notifications) keep working. A new `AppTheme` entry fails compilation in
 
 ## Notification icon per theme
 
-HyperOS draws the application icon (`<application android:icon>`, cached by
-SystemUI, never the enabled alias) at the left of every notification and
-ignores the small icon and colour in its own notification style. The only
-image it puts there instead is a conversation's: `ThemedNotifications`
-(`core/launchericon`) renders the current theme's launcher-alias icon and
-- `conversation(...)` (push notifications) adds `MessagingStyle` with a
-  `Person` carrying that icon and a long-lived dynamic shortcut
-  `home_notifications` (intent to `MainActivity`), so HyperOS shows the theme
-  icon large with the app icon as a badge;
-- `decorate(...)` (find phone, call, VPN) sets the theme colour and the theme
-  icon as `largeIcon`.
-`phone-push` sends notifications data-only, so the app, not the FCM SDK,
-builds them even in the background; the `default_notification_*` meta-data in
-the push manifest only covers messages still carrying a `notification` block.
+Every notification uses its monochrome small icon tinted with the current
+theme's primary (`NotificationAccent`). `phone-push` sends notifications
+data-only, so the app, not the FCM SDK, builds them even in the background;
+the `default_notification_*` meta-data in the push manifest only covers
+messages still carrying a `notification` block. HyperOS in its own
+notification style draws the cached application icon instead of the small
+icon; that is a system choice and the app does not work around it.

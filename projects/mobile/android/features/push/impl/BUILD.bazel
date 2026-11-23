@@ -11,7 +11,6 @@ metro_android_library(
     resource_files = glob(["src/main/res/**"]),
     view_binding = True,
     deps = [
-        "//projects/mobile/android/core/launchericon/api",
         "//projects/mobile/android/core/data",
         "//projects/mobile/android/core/runtime",
         "//projects/mobile/android/features/chat/api",
@@ -58,8 +57,6 @@ home_android_local_test(
         "dev.proflyder.home.feature.push.presentation.PushSettingsScreenshotTest",
     ],
     deps = [
-        "//projects/mobile/android/core/launchericon/api",
-        "//projects/mobile/android/core/launchericon/impl",
         "//projects/mobile/android/features/chat/api",
         "//projects/mobile/android/features/push/api",
         "@maven//:junit_junit",

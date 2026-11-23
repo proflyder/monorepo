@@ -6,7 +6,6 @@ import android.app.NotificationManager
 import androidx.core.app.NotificationManagerCompat
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import dev.proflyder.home.core.theme.AppTheme
-import dev.proflyder.home.core.launchericon.AliasThemedNotifications
 import dev.proflyder.home.core.theme.AppearanceController
 import dev.proflyder.home.core.theme.ThemedNotificationAccent
 import java.io.File
@@ -76,7 +75,7 @@ class PushChannelsTest {
         val context = RuntimeEnvironment.getApplication()
         PushChannels.ensure(context)
 
-        val notification = PushNotifier(context, themed(context), AndroidNotificationPermission(context)).ring("Рикардо")
+        val notification = PushNotifier(context, ThemedNotificationAccent(context, appearance(context)), AndroidNotificationPermission(context)).ring("Рикардо")
 
         assertEquals(PushChannels.FIND, notification.channelId)
         assertNull(notification.sound)
@@ -86,11 +85,6 @@ class PushChannelsTest {
         assertNull(notification.group)
         assertEquals(Notification.GROUP_ALERT_ALL, notification.groupAlertBehavior)
         assertEquals(AppTheme.EMERALD.palette.light.primary, notification.color)
-    }
-
-    private fun themed(context: android.content.Context): AliasThemedNotifications {
-        val appearance = appearance(context)
-        return AliasThemedNotifications(context, appearance, ThemedNotificationAccent(context, appearance))
     }
 
     private fun appearance(context: android.content.Context) = AppearanceController(
