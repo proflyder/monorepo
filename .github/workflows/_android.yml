@@ -216,10 +216,18 @@ jobs:
 
       - name: Stash the release APK
         if: inputs.unit == 'android-app'
+        env:
+          DEFINE_ARGS: ${{ steps.version.outputs.define_args }}
         run: |
           set -euo pipefail
+          read -r -a defines <<< "${DEFINE_ARGS:-}"
+          apk=$(bazel cquery --config=android "${defines[@]}" --output=files //projects/mobile/android:app 2>/dev/null | grep '/app\.apk$' | head -n 1)
+          if [[ -z "$apk" || ! -f "$apk" ]]; then
+            echo "::error::bazel cquery did not resolve the built app.apk"
+            exit 1
+          fi
           mkdir -p "$RUNNER_TEMP/android-release"
-          cp -L bazel-bin/projects/mobile/android/app/app.apk "$RUNNER_TEMP/android-release/app.apk"
+          cp -L "$apk" "$RUNNER_TEMP/android-release/app.apk"
 
       - name: Show APK ABIs
         if: inputs.unit == 'android-app'
