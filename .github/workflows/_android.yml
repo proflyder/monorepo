@@ -104,11 +104,9 @@ jobs:
       - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: ~/.cache/bazel-disk
-          key: bazel-android-${{ runner.os }}-${{ inputs.unit }}-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'projects/mobile/android/maven_install.json') }}
+          key: bazel-android-${{ runner.os }}-shared-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'projects/mobile/android/maven_install.json') }}
           restore-keys: |
-            bazel-android-${{ runner.os }}-${{ inputs.unit }}-
-            bazel-android-${{ runner.os }}-warm-
-            bazel-android-${{ runner.os }}-
+            bazel-android-${{ runner.os }}-shared-
 
       - name: Install Android SDK packages
         env:
@@ -257,12 +255,6 @@ jobs:
           path: ${{ inputs.artifact }}
           if-no-files-found: error
           retention-days: 14
-
-      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
-        if: inputs.save_cache && github.ref == 'refs/heads/develop'
-        with:
-          path: ~/.cache/bazel-disk
-          key: bazel-android-${{ runner.os }}-${{ inputs.unit }}-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'projects/mobile/android/maven_install.json') }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         if: >-

@@ -122,16 +122,18 @@ class AlarmRepeatSheetTest {
         val maximum = dp(binding.root, 44)
         val size = buttons.first().width
         assertTrue("day circle is ${dpDp(binding.root, size)}dp, expected 40..44dp", size in minimum..maximum)
-        buttons.forEach { button ->
-            assertEquals("day circle width differs", size, button.width)
-            assertEquals("day circle height differs", size, button.height)
-            assertEquals("day label is clipped or wrapped", 1, button.lineCount)
-            assertTrue(
-                "day label ${button.text} does not fit into the circle",
-                button.layout.getLineWidth(0) <= button.width,
-            )
-        }
+        buttons.forEach { button -> assertDayButton(button, size) }
         assertEvenlySpacedCentres(binding)
+    }
+
+    private fun assertDayButton(button: MaterialButton, size: Int) {
+        assertEquals("day circle width differs", size, button.width)
+        assertEquals("day circle height differs", size, button.height)
+        assertEquals("day label is clipped or wrapped", 1, button.lineCount)
+        assertTrue(
+            "day label ${button.text} does not fit into the circle",
+            button.layout.getLineWidth(0) <= button.width,
+        )
     }
 
     private fun assertEvenlySpacedCentres(binding: SheetAlarmRepeatBinding) {

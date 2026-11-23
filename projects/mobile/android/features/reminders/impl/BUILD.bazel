@@ -36,13 +36,15 @@ metro_android_library(
 )
 
 home_android_local_test(
-    name = "view_model_test",
+    name = "robolectric_test",
     srcs = glob(["src/test/kotlin/**/*.kt"]),
     associates = [":impl"],
     custom_package = "dev.proflyder.home.feature.reminders.impl",
     kotlinc_opts = "//platform/android:jvm17_options",
     manifest = "src/test/AndroidManifest.xml",
-    test_class = "dev.proflyder.home.feature.reminders.presentation.ReminderViewModelsTest",
+    test_classes = [
+        "dev.proflyder.home.feature.reminders.presentation.ReminderViewModelsTest",
+    ],
     deps = [
         "//projects/mobile/android/core/data",
         "//packages/kotlin/core",

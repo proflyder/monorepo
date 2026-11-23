@@ -1,4 +1,5 @@
 load("@rules_kotlin//kotlin:core.bzl", "define_kt_toolchain", "kt_compiler_plugin", "kt_kotlinc_options")
+load(":defs.bzl", "android_all_dir")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -59,7 +60,7 @@ genrule(
 )
 
 exports_files([
-    "robolectric-none.properties",
+    "robolectric-deps.properties",
     "defs.bzl",
     "detekt.bzl",
     "lint.bzl",
@@ -82,4 +83,10 @@ platform(
         "@platforms//os:android",
         "@platforms//cpu:arm64",
     ],
+)
+
+android_all_dir(
+    name = "robolectric_android_all_sdk35",
+    jar = "@maven//:org_robolectric_android_all_instrumented",
+    jar_name = "android-all-instrumented-15-robolectric-13954326-i7.jar",
 )

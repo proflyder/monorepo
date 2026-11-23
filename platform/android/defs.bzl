@@ -7,7 +7,6 @@ load(":detekt.bzl", _home_detekt = "home_detekt")
 METRO_COMPILER_PLUGIN = "//platform/android:metro_compiler_plugin"
 SERIALIZATION_COMPILER_PLUGIN = "//platform/android:serialization_compiler_plugin"
 JVM17_OPTIONS = "//platform/android:jvm17_options"
-ROBOLECTRIC_NO_ANDROID_ALL = "//platform/android:robolectric-none.properties"
 
 def metro_jvm_library(name, srcs, deps = [], plugins = [], **kwargs):
     kt_jvm_library(
@@ -159,9 +158,77 @@ def home_android_binary(
         **kwargs
     )
 
-def home_android_local_test(name, robolectric_properties_file = ROBOLECTRIC_NO_ANDROID_ALL, **kwargs):
+ROBOLECTRIC_ANDROID_ALL = "//platform/android:robolectric_android_all_sdk35"
+ROBOLECTRIC_DEPS_PROPERTIES = "//platform/android:robolectric-deps.properties"
+ROBOLECTRIC_JVM_FLAGS = [
+    "-XX:ReservedCodeCacheSize=512m",
+    "-Drobolectric.offline=true",
+    "--add-opens=java.base/java.lang=ALL-UNNAMED",
+    "--add-opens=java.base/java.io=ALL-UNNAMED",
+    "--add-opens=java.base/java.net=ALL-UNNAMED",
+    "--add-opens=java.base/java.security=ALL-UNNAMED",
+    "--add-opens=java.base/java.text=ALL-UNNAMED",
+    "--add-opens=java.base/java.util=ALL-UNNAMED",
+    "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
+    "--add-opens=java.base/jdk.internal.util=ALL-UNNAMED",
+]
+LOCAL_TEST_SUITE_CLASS = "ModuleLocalTestSuite"
+
+def _android_all_dir_impl(ctx):
+    out = ctx.actions.declare_directory(ctx.label.name)
+    ctx.actions.run_shell(
+        inputs = [ctx.file.jar],
+        outputs = [out],
+        arguments = [out.path, ctx.file.jar.path, ctx.attr.jar_name],
+        command = 'mkdir -p "$1" && cp "$2" "$1/$3"',
+        mnemonic = "RobolectricAndroidAll",
+        progress_message = "Staging Robolectric runtime %s" % ctx.attr.jar_name,
+    )
+    return [DefaultInfo(files = depset([out]), runfiles = ctx.runfiles(files = [out]))]
+
+android_all_dir = rule(
+    implementation = _android_all_dir_impl,
+    attrs = {
+        "jar": attr.label(allow_single_file = True, mandatory = True),
+        "jar_name": attr.string(mandatory = True),
+    },
+)
+
+def _local_test_suite_impl(ctx):
+    out = ctx.actions.declare_file("%s/%s.kt" % (ctx.label.name, LOCAL_TEST_SUITE_CLASS))
+    classes = "".join(["    %s::class,\n" % test_class for test_class in ctx.attr.test_classes])
+    ctx.actions.write(
+        out,
+        "package %s\n\n@org.junit.runner.RunWith(org.junit.runners.Suite::class)\n@org.junit.runners.Suite.SuiteClasses(\n%s)\nclass %s\n" % (
+            ctx.attr.package,
+            classes,
+            LOCAL_TEST_SUITE_CLASS,
+        ),
+    )
+    return [DefaultInfo(files = depset([out]))]
+
+local_test_suite = rule(
+    implementation = _local_test_suite_impl,
+    attrs = {
+        "package": attr.string(mandatory = True),
+        "test_classes": attr.string_list(mandatory = True),
+    },
+)
+
+def home_android_local_test(name, srcs, test_classes, custom_package, data = [], jvm_flags = [], deps = [], **kwargs):
+    local_test_suite(
+        name = name + "_suite",
+        package = custom_package,
+        test_classes = test_classes,
+    )
     kt_android_local_test(
         name = name,
-        robolectric_properties_file = robolectric_properties_file,
+        srcs = srcs + [":" + name + "_suite"],
+        custom_package = custom_package,
+        data = data + [ROBOLECTRIC_DEPS_PROPERTIES, ROBOLECTRIC_ANDROID_ALL],
+        jvm_flags = ROBOLECTRIC_JVM_FLAGS + jvm_flags,
+        robolectric_properties_file = ROBOLECTRIC_DEPS_PROPERTIES,
+        test_class = custom_package + "." + LOCAL_TEST_SUITE_CLASS,
+        deps = deps if "@maven//:junit_junit" in deps else deps + ["@maven//:junit_junit"],
         **kwargs
     )

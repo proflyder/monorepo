@@ -501,10 +501,7 @@ export const config = {
       paths: ["projects/mobile/android/**"],
       bazel: {
         roots: ["//projects/mobile/android"],
-        test_targets: [
-          "//projects/mobile/android:android_tests",
-          "//projects/mobile/android/app:main_activity_smoke_test",
-        ],
+        test_targets: ["//projects/mobile/android:android_tests"],
         build_targets: ["//projects/mobile/android:app"],
         release: true,
         sdk_packages: ["ndk;28.2.13676358"],

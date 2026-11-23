@@ -126,8 +126,7 @@ bazel build -c opt --platforms=//platform/bazel/zig:armhf_linux \
 
 ```bash
 export ANDROID_HOME="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
-bazel test --config=android //projects/mobile/android:android_tests \
-  //projects/mobile/android/app:main_activity_smoke_test
+bazel test --config=android //projects/mobile/android:android_tests
 bazel build --config=android //projects/mobile/android:app
 bazel test --config=android //projects/mobile/android:android_lint
 bazel test --config=android //projects/mobile/android:detekt
@@ -135,6 +134,13 @@ bazel test --config=android //platform/android/...
 ```
 
 - `--config=android` обязателен (решение 50).
+- Robolectric-тесты — один `robolectric_test` на модуль
+  (`home_android_local_test` с `test_classes`): макрос генерирует JUnit-suite,
+  android-all общий (`//platform/android:robolectric_android_all_sdk35`).
+  Чистые JVM-тесты остаются `kt_jvm_test`. `JavaDeployJar` помечен `no-cache`:
+  deploy-jar'ы (~240 МБ каждый) не попадают в disk cache, Android-кэш CI
+  пишет только `warm-android` (`bazel test` + GC до 4 ГБ) под ключом
+  `bazel-android-<os>-shared-*`.
 - Каждый `*_test` под `projects/mobile/android/**` входит в `android_tests`
   или `test_targets` юнита, иначе `mise run ci:units`
   (`androidSuiteCoverageProblems`) красный.
