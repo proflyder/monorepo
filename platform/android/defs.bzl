@@ -215,7 +215,10 @@ local_test_suite = rule(
     },
 )
 
-def home_android_local_test(name, srcs, test_classes, custom_package, data = [], jvm_flags = [], deps = [], **kwargs):
+ROBOLECTRIC_TEST_HEAP = "-Xmx1g"
+ROBOLECTRIC_TEST_MEMORY_MB = 1536
+
+def home_android_local_test(name, srcs, test_classes, custom_package, data = [], jvm_flags = [], deps = [], shard_count = 1, tags = [], **kwargs):
     local_test_suite(
         name = name + "_suite",
         package = custom_package,
@@ -226,7 +229,9 @@ def home_android_local_test(name, srcs, test_classes, custom_package, data = [],
         srcs = srcs + [":" + name + "_suite"],
         custom_package = custom_package,
         data = data + [ROBOLECTRIC_DEPS_PROPERTIES, ROBOLECTRIC_ANDROID_ALL],
-        jvm_flags = ROBOLECTRIC_JVM_FLAGS + jvm_flags,
+        jvm_flags = ROBOLECTRIC_JVM_FLAGS + [ROBOLECTRIC_TEST_HEAP] + jvm_flags,
+        shard_count = shard_count,
+        tags = tags + ["resources:memory:%d" % ROBOLECTRIC_TEST_MEMORY_MB],
         robolectric_properties_file = ROBOLECTRIC_DEPS_PROPERTIES,
         test_class = custom_package + "." + LOCAL_TEST_SUITE_CLASS,
         deps = deps if "@maven//:junit_junit" in deps else deps + ["@maven//:junit_junit"],
