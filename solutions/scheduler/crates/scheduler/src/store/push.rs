@@ -118,6 +118,12 @@ impl Store {
         let device_id = device.device_id.clone();
         self.call(move |connection| {
             connection.execute(
+                "DELETE FROM notifications WHERE device_id IN (
+                    SELECT device_id FROM push_devices WHERE token = ?1 AND device_id <> ?2
+                )",
+                params![device.token, device.device_id],
+            )?;
+            connection.execute(
                 "DELETE FROM push_devices WHERE token = ?1 AND device_id <> ?2",
                 params![device.token, device.device_id],
             )?;
@@ -217,8 +223,16 @@ impl Store {
     pub fn remove_push_device(&self, token: &str) -> Result<bool, StoreError> {
         let token = token.to_owned();
         self.call(move |connection| {
+            let transaction = connection.transaction()?;
+            transaction.execute(
+                "DELETE FROM notifications WHERE device_id IN (
+                    SELECT device_id FROM push_devices WHERE token = ?1
+                )",
+                params![token],
+            )?;
             let deleted =
-                connection.execute("DELETE FROM push_devices WHERE token = ?1", params![token])?;
+                transaction.execute("DELETE FROM push_devices WHERE token = ?1", params![token])?;
+            transaction.commit()?;
             Ok(deleted > 0)
         })
     }

@@ -41,13 +41,14 @@ pub async fn run() -> anyhow::Result<()> {
         config.allowed_consumers.clone(),
     )
     .with_scenario_execution(config.scenario_execution)
-    .with_sync(sync);
+    .with_sync(Arc::clone(&sync));
     let vpn_access = vpn_access(&config);
     let router = api::router(
         service.clone(),
         AlarmFacade::new(service),
         config.token.expose(),
         vpn_access,
+        sync,
     );
 
     let listener = TcpListener::bind(&config.listen)

@@ -1,6 +1,6 @@
 {
   "name": "get_status_shape",
-  "description": "GetStatus is an honest snapshot: version, schemaVersion, nowUnix, pending/leased counters, enabled schedules, running timers, consumers with alive, and the built-in home/tasks/scenario queues. scenarioExecutionSupported and other false/zero fields are omitted by protojson until they become true/non-zero; scenarioStoreSupported is true because v2 stores scenario definitions; schemaVersion is 6 because v6 adds the WireGuard peer registry.",
+  "description": "GetStatus is an honest snapshot: version, schemaVersion, nowUnix, pending/leased counters, enabled schedules, running timers, consumers with alive, and the built-in home/tasks/scenario queues. scenarioExecutionSupported and other false/zero fields are omitted by protojson until they become true/non-zero; scenarioStoreSupported is true because v2 stores scenario definitions; schemaVersion is 7 because v7 adds the per-device notification history.",
   "steps": [
     {
       "request": {
@@ -191,7 +191,7 @@
           "ready": true,
           "runningTimers": 1,
           "scenarioStoreSupported": true,
-          "schemaVersion": 6,
+          "schemaVersion": 7,
           "version": "test"
         }
       }

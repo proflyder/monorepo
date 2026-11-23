@@ -21,5 +21,9 @@ import org.junit.runners.Suite
     SheetsScreenshotTest::class,
     ScreenResultsTest::class,
     ScreenScopesTest::class,
+    UndoableRemovalTest::class,
+    PagingHandlerTest::class,
+    PagedStateViewModelTest::class,
+    PagedStateViewModelImmediateTest::class,
 )
 class AllPresentationTests

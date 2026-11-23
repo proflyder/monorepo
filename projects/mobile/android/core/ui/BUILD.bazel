@@ -8,6 +8,7 @@ metro_android_library(
     custom_package = "dev.proflyder.home.core.ui",
     manifest = "src/main/AndroidManifest.xml",
     resource_files = glob(["src/main/res/**"]),
+    view_binding = True,
     deps = [
         "//projects/mobile/android/core/runtime",
         "//projects/mobile/android/core/designsystem",

@@ -11,6 +11,7 @@ use serde_json::{Value, json};
 
 use crate::devices::Registry;
 use crate::fcm::{self, Message, Sender};
+use crate::history::{self, HistoryClient, HistoryEntry};
 
 pub const MAX_REASON_CHARS: usize = 200;
 pub const MAX_TITLE_CHARS: usize = 120;
@@ -21,6 +22,7 @@ pub const MAX_DEEP_LINK_CHARS: usize = 512;
 pub struct PushState {
     pub sender: Arc<Sender>,
     pub registry: Arc<Registry>,
+    pub history: Arc<HistoryClient>,
     pub token: Token,
 }
 
@@ -30,6 +32,7 @@ impl std::fmt::Debug for PushState {
             .debug_struct("PushState")
             .field("sender", &self.sender)
             .field("registry", &self.registry)
+            .field("history", &self.history)
             .finish_non_exhaustive()
     }
 }
@@ -65,17 +68,27 @@ pub struct SyncBody {
     pub id: String,
     #[serde(default)]
     pub origin_device_id: Option<String>,
+    #[serde(default)]
+    pub target_device_id: Option<String>,
 }
 
-pub const SYNC_ENTITIES: [&str; 4] = ["alarms", "reminders", "timers", "scenarios"];
+pub const SYNC_ENTITIES: [&str; 5] = [
+    "alarms",
+    "reminders",
+    "timers",
+    "scenarios",
+    "notifications",
+];
 pub const SYNC_OPS: [&str; 2] = ["upsert", "delete"];
 pub const MAX_SYNC_ID_CHARS: usize = 128;
+pub const MAX_DEVICE_ID_CHARS: usize = 128;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Audience<'a> {
     Everyone,
     Only(&'a str),
     AllBut(&'a str),
+    Nobody,
 }
 
 impl<'a> Audience<'a> {
@@ -93,6 +106,25 @@ impl<'a> Audience<'a> {
             .map(str::trim)
             .filter(|value| !value.is_empty())
             .map_or(Self::Everyone, Self::AllBut)
+    }
+
+    #[must_use]
+    pub fn of_sync(body: &'a SyncBody) -> Self {
+        let target = body
+            .target_device_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty());
+        let origin = body
+            .origin_device_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty());
+        match target {
+            Some(target) if Some(target) == origin => Self::Nobody,
+            Some(target) => Self::Only(target),
+            None => Self::all_but(origin),
+        }
     }
 }
 
@@ -134,6 +166,7 @@ pub async fn deliver(
     message: &Message,
     sender: &Sender,
     registry: &Registry,
+    history: &HistoryClient,
     now: i64,
     audience: Audience<'_>,
 ) -> Delivery {
@@ -152,9 +185,16 @@ pub async fn deliver(
     let total = devices.len();
     let mut sent = 0;
     let mut failed = 0;
+    let row = history_row(message);
     for device in devices {
-        match sender.send(&device.token, message, now).await {
-            Ok(()) => sent += 1,
+        let record_id = uuid::Uuid::new_v4().to_string();
+        match sender.send(&device.token, message, &record_id, now).await {
+            Ok(()) => {
+                sent += 1;
+                if let Some(row) = &row {
+                    remember(history, &device.device_id, &record_id, row).await;
+                }
+            }
             Err(fcm::Error::Unregistered) => {
                 if let Err(error) = registry.forget(&device.token).await {
                     tracing::warn!(error = %error, "could not forget an unregistered token");
@@ -201,6 +241,7 @@ async fn find(
             &message,
             &state.sender,
             &state.registry,
+            &state.history,
             now(),
             Audience::only(body.device_id.as_deref()),
         )
@@ -242,6 +283,7 @@ async fn notify(
             &message,
             &state.sender,
             &state.registry,
+            &state.history,
             now(),
             Audience::only(body.device_id.as_deref()),
         )
@@ -265,11 +307,66 @@ async fn sync(
             &message,
             &state.sender,
             &state.registry,
+            &state.history,
             now(),
-            Audience::all_but(body.origin_device_id.as_deref()),
+            Audience::of_sync(&body),
         )
         .await,
     )
+}
+
+struct HistoryRow {
+    kind: &'static str,
+    title: String,
+    body: String,
+    deep_link: Option<String>,
+}
+
+fn history_row(message: &Message) -> Option<HistoryRow> {
+    match message {
+        Message::Find { reason } => Some(HistoryRow {
+            kind: history::FIND_KIND,
+            title: String::new(),
+            body: reason.clone(),
+            deep_link: None,
+        }),
+        Message::Notification {
+            title,
+            body,
+            deep_link,
+        } => Some(HistoryRow {
+            kind: history::NOTIFY_KIND,
+            title: title.clone(),
+            body: body.clone(),
+            deep_link: deep_link.clone(),
+        }),
+        Message::Sync { .. } => None,
+    }
+}
+
+async fn remember(history: &HistoryClient, device_id: &str, id: &str, row: &HistoryRow) {
+    let entry = HistoryEntry {
+        device_id: device_id.to_owned(),
+        id: id.to_owned(),
+        kind: row.kind.to_owned(),
+        title: row.title.clone(),
+        body: row.body.clone(),
+        deep_link: row.deep_link.clone(),
+    };
+    if let Err(error) = history.record(&entry).await {
+        tracing::warn!(%error, "notification history write failed");
+    }
+}
+
+fn valid_target(raw: Option<&str>) -> bool {
+    raw.map(str::trim)
+        .filter(|value| !value.is_empty())
+        .is_none_or(|value| {
+            value.chars().count() <= MAX_DEVICE_ID_CHARS
+                && value.chars().all(|character| {
+                    character.is_ascii_alphanumeric() || "-_.:".contains(character)
+                })
+        })
 }
 
 fn sync_message(body: &SyncBody) -> Option<Message> {
@@ -278,7 +375,8 @@ fn sync_message(body: &SyncBody) -> Option<Message> {
     let id = body.id.trim();
     let valid = SYNC_ENTITIES.contains(&entity)
         && SYNC_OPS.contains(&op)
-        && id.chars().count() <= MAX_SYNC_ID_CHARS;
+        && id.chars().count() <= MAX_SYNC_ID_CHARS
+        && valid_target(body.target_device_id.as_deref());
     valid.then(|| Message::Sync {
         entity: entity.to_owned(),
         op: op.to_owned(),
@@ -319,6 +417,7 @@ fn select_devices(
             Audience::Everyone => true,
             Audience::Only(target) => device.device_id == target,
             Audience::AllBut(origin) => device.device_id != origin,
+            Audience::Nobody => false,
         })
         .collect()
 }
@@ -410,6 +509,45 @@ mod tests {
     }
 
     #[test]
+    fn a_targeted_sync_goes_only_to_the_owner() {
+        let body = SyncBody {
+            entity: "notifications".to_owned(),
+            op: "upsert".to_owned(),
+            id: "n-1".to_owned(),
+            origin_device_id: None,
+            target_device_id: Some("two".to_owned()),
+        };
+        let devices = vec![device("one"), device("two")];
+        let selected = select_devices(devices, Audience::of_sync(&body));
+        assert_eq!(selected.len(), 1);
+        assert_eq!(selected[0].device_id, "two");
+    }
+
+    #[test]
+    fn a_targeted_sync_is_not_sent_back_to_the_initiator() {
+        let body = SyncBody {
+            entity: "notifications".to_owned(),
+            op: "upsert".to_owned(),
+            id: "n-1".to_owned(),
+            origin_device_id: Some("two".to_owned()),
+            target_device_id: Some("two".to_owned()),
+        };
+        let devices = vec![device("one"), device("two")];
+        assert!(select_devices(devices, Audience::of_sync(&body)).is_empty());
+    }
+
+    #[test]
+    fn an_invalid_target_device_is_rejected() {
+        let mut body = sync_body("notifications", "upsert", "n-1");
+        body.target_device_id = Some("bad device".to_owned());
+        assert!(sync_message(&body).is_none());
+        body.target_device_id = Some("x".repeat(MAX_DEVICE_ID_CHARS + 1));
+        assert!(sync_message(&body).is_none());
+        body.target_device_id = Some("device-1".to_owned());
+        assert!(sync_message(&body).is_some());
+    }
+
+    #[test]
     fn a_sync_skips_the_device_that_made_the_change() {
         let devices = vec![device("one"), device("two")];
         let selected = select_devices(devices, Audience::all_but(Some("one")));
@@ -427,6 +565,7 @@ mod tests {
             op: op.to_owned(),
             id: id.to_owned(),
             origin_device_id: None,
+            target_device_id: None,
         }
     }
 

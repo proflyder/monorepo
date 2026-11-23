@@ -14,7 +14,11 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.getAndUpdate
 
-class UndoWindow<T : Any>(scope: CoroutineScope, private val duration: Duration = DEFAULT_UNDO_WINDOW) {
+class UndoWindow<T : Any>(
+    scope: CoroutineScope,
+    private val duration: Duration = DEFAULT_UNDO_WINDOW,
+    private val onExpire: ((T) -> Unit)? = null,
+) {
     private val held = MutableStateFlow<T?>(null)
     private val timer = LatestLauncher(scope)
 
@@ -25,6 +29,7 @@ class UndoWindow<T : Any>(scope: CoroutineScope, private val duration: Duration 
         timer.launch {
             delay(duration)
             held.value = null
+            onExpire?.invoke(value)
         }
     }
 

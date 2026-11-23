@@ -236,7 +236,9 @@ Schema version проверяется: БД новее бинарника отв
 created_unix, updated_unix)`, схема v3 — реестр `push_devices`, схема v4
 переключает его первичный ключ с FCM-токена на стабильный `device_id`
 (`push_devices(device_id PRIMARY KEY, token UNIQUE, platform, app_version,
-device_name, created_unix, updated_unix)`). База v1/v2/v3 мигрирует на месте при старте без
+device_name, created_unix, updated_unix)`), схема v6 — VPN-пиры, схема v7 —
+`notifications(id, device_id, type, title, body, deep_link, created_unix,
+read_unix)` с индексом `(device_id, created_unix DESC)`. База v1/v2/v3 мигрирует на месте при старте без
 изменения schedules, timers, events и idempotency. Записи v3, ключённые по
 токену, сохраняются с токеном в роли provisional `device_id`; первая
 регистрация обновлённого приложения присылает настоящий `device_id` и
@@ -259,6 +261,32 @@ Connect RPC: `POST /v1/push/devices` (upsert по стабильному `device
 того же `device_id`; токен уникален в реестре. Ответы содержат token (нужен
 реестру), но токен никогда не пишется в лог и не попадает в речь
 MCP-инструментов.
+
+### История уведомлений (`/v1/push/history`)
+
+История — per-device состояние scheduler'а, а не телефона. Телефон берётся из
+заголовка `Home-Device-Id` на каждом запросе; без него — `400`. Записи
+создаёт `phone-push` после успешной доставки (по одной на доставленный
+`deviceId`), поэтому телефон ничего не загружает в историю сам.
+
+- `GET /v1/push/history?cursor=&limit=20` — новые сверху, keyset-курсор
+  `created_unix:id`, `nextCursor` есть только у полной страницы; предел
+  `limit` — 50;
+- `GET /v1/push/history/unread-count` — `{"unread":n}` для бейджа;
+- `POST /v1/push/history/read` `{"id","read"}` — прочитано/не прочитано;
+- `POST /v1/push/history/read-all` — `{"updated":n}`;
+- `POST /v1/push/history/remove` `{"id"}` и `POST /v1/push/history/clear`;
+- `POST /v1/push/history` — внутренняя запись от `phone-push`
+  (`{"deviceId","id","type","title","body","deepLink"}`); явный `id` делает
+  повтор идемпотентным.
+
+`type` — `notify|find`; заголовок ≤120, текст ≤500, deep link ≤512 символов.
+На телефон хранится не больше 200 записей, старые вытесняются. Удаление
+`push_devices`-строки (включая схлопывание по токену) удаляет историю этого
+устройства. Каждое изменение истории публикует sync-пуш
+`entity=notifications` только владельцу истории (`targetDeviceId`); если
+изменение пришло с этого же телефона, пуш не отправляется, потому что у него
+уже есть оптимистичное обновление. Устройство берётся из `Home-Device-Id`.
 
 ### VPN-профили (`/v1/vpn/*`)
 
@@ -313,7 +341,9 @@ Sync-пуши: если задан `SCHEDULER_PUSH_URL`, после каждой
 напоминания, таймера и сценария (RPC и тик движка) scheduler фоном шлёт
 `POST {url}/v1/push/sync` `{entity, op, id, originDeviceId}` с тем же
 bearer-токеном. `entity` — `alarms|reminders|timers|scenarios` (по `kind`
-расписания), `op` — `upsert|delete`. `originDeviceId` берётся из заголовка
+расписания) и `notifications` (после изменения истории), `op` —
+`upsert|delete`. Необязательный `targetDeviceId` адресует пуш одному
+устройству (для истории); `originDeviceId` по-прежнему исключает инициатора. `originDeviceId` берётся из заголовка
 `Home-Device-Id` запроса; phone-push этому устройству пуш не шлёт. Ошибка
 доставки только логируется и не влияет на ответ RPC.
 

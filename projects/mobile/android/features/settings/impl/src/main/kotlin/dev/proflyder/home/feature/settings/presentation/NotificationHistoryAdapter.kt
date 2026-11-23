@@ -11,7 +11,7 @@ import dev.proflyder.home.core.ui.BaseListAdapter
 import dev.proflyder.home.core.ui.BaseViewHolder
 import dev.proflyder.home.core.ui.ViewBinding
 import dev.proflyder.home.core.ui.setVisible
-import dev.proflyder.home.feature.push.NotificationHistoryType
+import dev.proflyder.home.core.model.NotificationHistoryType
 import dev.proflyder.home.feature.settings.impl.R
 import dev.proflyder.home.feature.settings.impl.databinding.ItemHistoryDayBinding
 import dev.proflyder.home.feature.settings.impl.databinding.ItemNotificationHistoryBinding
@@ -65,9 +65,9 @@ internal class NotificationHistoryAdapter(
 
         override fun bind(item: HistoryRow) {
             val entry = (item as? HistoryRow.Item)?.entry ?: return
-            views.historyItemTitle.text = entry.title
+            views.historyItemTitle.text = entry.title.ifBlank { views.root.context.getString(fallbackTitle(entry.type)) }
             views.historyItemBody.text = entry.body
-            views.historyItemTime.text = HistoryFormat.relative(entry.receivedAtMillis)
+            views.historyItemTime.text = HistoryFormat.relative(entry.createdUnix * MILLIS_PER_SECOND)
             views.historyItemIcon.setImageResource(icon(entry.type))
             views.historyItemIcon.contentDescription = views.root.context.getString(label(entry.type))
             views.historyItemChevron.setVisible(entry.deepLink != null)
@@ -79,12 +79,18 @@ internal class NotificationHistoryAdapter(
     private companion object {
         const val DAY = 0
         const val ENTRY = 1
+        const val MILLIS_PER_SECOND = 1_000L
     }
 }
 
 internal fun icon(type: NotificationHistoryType): Int = when (type) {
     NotificationHistoryType.NOTIFY -> R.drawable.settings_ic_notify
     NotificationHistoryType.FIND -> R.drawable.settings_ic_find
+}
+
+internal fun fallbackTitle(type: NotificationHistoryType): Int = when (type) {
+    NotificationHistoryType.NOTIFY -> R.string.history_type_notify
+    NotificationHistoryType.FIND -> R.string.history_type_find
 }
 
 internal fun label(type: NotificationHistoryType): Int = when (type) {

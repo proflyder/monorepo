@@ -9,6 +9,7 @@ enum class SyncEntity(val wire: String) {
     REMINDERS("reminders"),
     TIMERS("timers"),
     SCENARIOS("scenarios"),
+    NOTIFICATIONS("notifications"),
     ;
 
     companion object {

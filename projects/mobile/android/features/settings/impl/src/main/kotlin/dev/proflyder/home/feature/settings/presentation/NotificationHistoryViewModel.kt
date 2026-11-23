@@ -2,14 +2,16 @@ package dev.proflyder.home.feature.settings.presentation
 
 import androidx.lifecycle.ViewModel
 import dev.proflyder.home.core.data.FeatureScope
+import dev.proflyder.home.core.data.PagedState
 import dev.proflyder.home.core.model.Clock
-import dev.proflyder.home.core.presentation.viewModel
+import dev.proflyder.home.core.model.NotificationHistory
+import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.navigation.Route
-import dev.proflyder.home.core.presentation.StateViewModel
-import dev.proflyder.home.feature.push.NotificationHistoryEntry
-import dev.proflyder.home.feature.push.NotificationHistoryRules
-import dev.proflyder.home.feature.push.NotificationHistoryStore
+import dev.proflyder.home.core.presentation.PagedScreenState
+import dev.proflyder.home.core.presentation.PagedStateViewModel
+import dev.proflyder.home.core.presentation.viewModel
 import dev.proflyder.home.core.ui.ViewModelSource
+import dev.proflyder.home.feature.push.NotificationHistoryRepository
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ClassKey
 import dev.zacsweers.metro.ContributesIntoMap
@@ -17,17 +19,18 @@ import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.binding
 import java.time.Instant
 import java.time.ZoneId
+import kotlinx.coroutines.CoroutineScope
 
 internal data class NotificationHistoryUiState(
-    val entries: List<NotificationHistoryEntry> = emptyList(),
+    override val pages: PagedState<NotificationHistory> = PagedState(),
+    override val pendingRemoval: NotificationHistory? = null,
     val rows: List<HistoryRow> = emptyList(),
-) {
-    val isEmpty: Boolean get() = entries.isEmpty()
-    val unread: Int get() = NotificationHistoryRules.unread(entries)
-}
+    val hasUnread: Boolean = false,
+) : PagedScreenState<NotificationHistory>
 
 internal sealed interface HistoryIntent {
-    data class Open(val entry: NotificationHistoryEntry) : HistoryIntent
+    data class Open(val entry: NotificationHistory) : HistoryIntent
+    data class ToggleRead(val key: String) : HistoryIntent
     data object ReadAll : HistoryIntent
     data object Clear : HistoryIntent
 }
@@ -35,38 +38,68 @@ internal sealed interface HistoryIntent {
 internal sealed interface HistoryEvent {
     data object Cleared : HistoryEvent
     data class OpenRoute(val route: Route) : HistoryEvent
+    data class Failure(val failure: RemoteFailure) : HistoryEvent
 }
 
 internal class NotificationHistoryViewModel(
-    private val store: NotificationHistoryStore,
+    private val repository: NotificationHistoryRepository,
     private val clock: Clock,
-) : StateViewModel<NotificationHistoryUiState, HistoryIntent, HistoryEvent>(NotificationHistoryUiState()) {
+    appScope: CoroutineScope,
+) : PagedStateViewModel<NotificationHistory, NotificationHistoryUiState, HistoryIntent, HistoryEvent>(
+    NotificationHistoryUiState(),
+    repository.paged,
+    appScope,
+    repository::remove,
+) {
     private val zone: ZoneId = ZoneId.systemDefault()
 
     init {
-        launch { store.entries.collect { stored -> updateState { copy(entries = stored, rows = rowsOf(stored)) } } }
+        startPaging()
     }
 
-    private fun rowsOf(entries: List<NotificationHistoryEntry>): List<HistoryRow> =
-        HistoryRows.of(entries, Instant.ofEpochMilli(clock.wallMillis()).atZone(zone).toLocalDate(), zone)
+    override fun copyPaging(pages: PagedState<NotificationHistory>, pendingRemoval: NotificationHistory?): NotificationHistoryUiState =
+        NotificationHistoryUiState(
+            pages = pages,
+            pendingRemoval = pendingRemoval,
+            rows = HistoryRows.of(pages.items, today(), zone),
+            hasUnread = pages.items.any { !it.read },
+        )
+
+    private fun today() = Instant.ofEpochMilli(clock.wallMillis()).atZone(zone).toLocalDate()
+
+    override fun pagingFailure(failure: RemoteFailure): HistoryEvent = HistoryEvent.Failure(failure)
 
     override fun handle(intent: HistoryIntent) {
         when (intent) {
             is HistoryIntent.Open -> open(intent.entry)
-            HistoryIntent.ReadAll -> launch { store.markAllRead() }
+            is HistoryIntent.ToggleRead -> toggleRead(intent.key)
+            HistoryIntent.ReadAll -> readAll()
             HistoryIntent.Clear -> clear()
         }
     }
 
-    private fun open(entry: NotificationHistoryEntry) {
-        if (!entry.read) launch { store.markRead(entry.id) }
+    private fun open(entry: NotificationHistory) {
+        if (!entry.read) setRead(entry, true)
         entry.deepLink?.let { emit(HistoryEvent.OpenRoute(Route.Link(it))) }
+    }
+
+    private fun toggleRead(key: String) {
+        val entry = currentState.pages.item(key) ?: return
+        setRead(entry, !entry.read)
+    }
+
+    private fun setRead(entry: NotificationHistory, read: Boolean) {
+        launch { repository.setRead(entry, read).failureOrNull()?.let { emit(HistoryEvent.Failure(it)) } }
+    }
+
+    private fun readAll() {
+        launch { repository.readAll().failureOrNull()?.let { emit(HistoryEvent.Failure(it)) } }
     }
 
     private fun clear() {
         launch {
-            store.clear()
-            emit(HistoryEvent.Cleared)
+            val failure = repository.clear().failureOrNull()
+            if (failure != null) emit(HistoryEvent.Failure(failure)) else emit(HistoryEvent.Cleared)
         }
     }
 }
@@ -75,8 +108,9 @@ internal class NotificationHistoryViewModel(
 @ClassKey(NotificationHistoryViewModel::class)
 @Inject
 class NotificationHistoryViewModelSource internal constructor(
-    private val history: FeatureScope<NotificationHistoryStore>,
+    private val history: FeatureScope<NotificationHistoryRepository>,
     private val clock: Clock,
+    private val appScope: CoroutineScope,
 ) : ViewModelSource {
-    override fun create(): ViewModel = history.viewModel { NotificationHistoryViewModel(it, clock) }
+    override fun create(): ViewModel = history.viewModel { NotificationHistoryViewModel(it, clock, appScope) }
 }

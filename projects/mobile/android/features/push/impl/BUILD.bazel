@@ -42,7 +42,6 @@ metro_android_library(
 home_android_local_test(
     name = "robolectric_test",
     shard_count = 2,
-    resources = glob(["src/test/resources/**"]),
     srcs = glob(["src/test/kotlin/**/*.kt"]),
     associates = [":impl"],
     custom_package = "dev.proflyder.home.feature.push.impl",
@@ -51,7 +50,7 @@ home_android_local_test(
         "dev.proflyder.home.feature.push.AllPushIdentityTests",
         "dev.proflyder.home.feature.push.FindPhoneAudioTest",
         "dev.proflyder.home.feature.push.HomePushRegistrarTest",
-        "dev.proflyder.home.feature.push.NotificationHistoryStoreTest",
+        "dev.proflyder.home.feature.push.SchedulerNotificationHistoryRepositoryTest",
         "dev.proflyder.home.feature.push.PushChannelsTest",
         "dev.proflyder.home.feature.push.PushPayloadsTest",
         "dev.proflyder.home.feature.push.PushRegistrationPolicyTest",

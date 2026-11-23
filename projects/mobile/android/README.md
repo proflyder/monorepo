@@ -238,7 +238,7 @@ projects/mobile/android/
   app/                    single Activity (chrome only), AppGraph, diagnostics
   core/
     model/                Android-free domain: Outcome/RemoteFailure, Clock, ServerClock, DeviceIdentity
-    data/                 EntityStore, EntitySource, FeatureScope (Android-free)
+    data/                 EntityStore, EntitySource, PagedList, FeatureScope (Android-free)
     runtime/              app scope, IoDispatcher, AppStartable, AppForeground, tickerFlow, Backoff
     config/ remoteconfig/ connection contract and its Firebase source
     settings/             DataStore + Keystore token
@@ -251,6 +251,53 @@ projects/mobile/android/
 packages/kotlin/core/     shared Kotlin utilities
 platform/android/         Bazel macros, Metro wiring, APK gate, signing, detekt rules
 ```
+
+### Paged lists
+
+Cursor lists are assembled from core pieces; a screen declares only its model,
+its source and its own actions.
+
+1. The model implements `Keyed` (`core/model`); no `keyOf` lambdas.
+2. The data source implements `PagedSource<T>` (`core/data`) and returns
+   `Page<T>(items, next)`; `PagedList` owns the only
+   `StateFlow<PagedState<T>>`. `PagingReducer` is pure: `Refresh`, `Reload`
+   (merge the first page into the loaded tail), `LoadMore`, `Retry`; transitions
+   and `LoadState` are tested without coroutines.
+3. The repository implements `PagedSource`, owns `PagedList`, and exposes domain
+   commands. Mutations are `ListEdit.Update` / `Remove` / `UpdateAll` committed
+   through `PagedList.commit`, which rolls back only the edited keys on failure.
+   `hide(key)` filters an item from the current state and from every incoming
+   page (pending delete); `reveal(key)` restores it. Sync signals dispatch
+   `PagingAction.Reload` or `hide`, never a full reset.
+4. The screen ViewModel extends `PagedStateViewModel<T, S, I, E>` where `S :
+   PagedScreenState<T>` (`pages`, `pendingRemoval`). The base owns
+   `UndoableRemoval` and a private `PagingHandler`, and exposes
+   `dispatch(PagingIntent)`, `dispatch(ListItemIntent)` and the normal
+   `dispatch(I)`; every action enters the ViewModel. The screen intent keeps
+   only its own actions (Open/ToggleRead/ReadAll/Clear). The base copies pages
+   and the pending removal into `S` via `copyPaging`; the screen also derives
+   rows/day sections and `hasUnread` there with its injected `Clock`, so the
+   fragment only renders slices. A failed removal commit (revealed item) maps
+   to `E` via `pagingFailure`.
+5. The fragment wires the list with one `PagingBinder` call (RecyclerView,
+   `ListStateViews`, content adapter, failure text, `PagingIntent` sink,
+   optional `SwipeRefreshLayout`) and renders with
+   `render(S::pages, binder::render)`; the binder has no flow subscription and
+   no second state channel. `UndoBinder` renders `pendingRemoval` through
+   `UndoNotice` and sends `ListItemIntent.Undo`. `PagingBinder` lives in
+   `core/presentation` next to the shared intents, because `core/ui` cannot
+   import them without a dependency cycle; it only uses core-ui views and the
+   footer adapter. It installs `ConcatAdapter(content, PagingFooterAdapter)`,
+   `loadMoreNearEnd`, retry and loading/empty/error rendering. Swipes are
+   declared with `SwipeAction(direction, SwipeStyle, onSwiped)`/
+   `swipeAction(...)` and `SwipeActions(left, right, itemAt)`;
+   `SwipeStyle.Delete`/`ToggleRead` keep icons and theme attrs in core/ui, and
+   each action calls `viewModel.dispatch` itself. The callback resets the
+   holder after every swipe and draws only the active action background, so no
+   plaque remains.
+
+The screen state keeps `PagedState<T>` as one field; day sections, counters and
+badges are selectors in `render`.
 
 ### Module rules
 
@@ -391,6 +438,9 @@ platform/android/         Bazel macros, Metro wiring, APK gate, signing, detekt 
   flight. Lists, editors and the home screen subscribe to the store; an editor
   closes itself when its entity disappears. `LatestLauncher` makes the last
   request win.
+- Long server lists use the reusable paging stack; see `Paged lists` below.
+  Notification history is owned by the scheduler and fetched this way; the app
+  has no local history copy.
 - Lists use `KeyedDiff`, which always returns a payload, so a partial change
   rebinds the same holder (`aspectPayload` per aspect) and never cross-fades.
 - Editors share `EditorDraftSession`: draft, the create idempotency key bound

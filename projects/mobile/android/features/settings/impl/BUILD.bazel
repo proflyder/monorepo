@@ -40,14 +40,20 @@ home_android_local_test(
     custom_package = "dev.proflyder.home.feature.settings.impl",
     manifest = "src/test/AndroidManifest.xml",
     test_classes = [
+        "dev.proflyder.home.feature.settings.presentation.HistorySwipeTest",
         "dev.proflyder.home.feature.settings.presentation.SettingsScreensScreenshotTest",
     ],
     deps = [
+        "//projects/mobile/android/core/data",
+        "//projects/mobile/android/core/model",
+        "//projects/mobile/android/core/testing",
         "//projects/mobile/android/features/push/api",
         "@maven//:androidx_appcompat_appcompat",
         "@maven//:androidx_recyclerview_recyclerview",
         "@maven//:com_google_android_material_material",
         "@maven//:junit_junit",
         "@maven//:org_robolectric_robolectric",
+        "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_android",
+        "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_test",
     ],
 )

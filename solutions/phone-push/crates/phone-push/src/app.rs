@@ -10,6 +10,7 @@ use crate::api::{self, PushState};
 use crate::config::Config;
 use crate::devices::Registry;
 use crate::fcm::Sender;
+use crate::history::HistoryClient;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -40,9 +41,19 @@ pub async fn run() -> anyhow::Result<()> {
         .map_err(anyhow::Error::msg)?,
     );
 
+    let history = Arc::new(
+        HistoryClient::new(
+            &config.scheduler_url,
+            config.scheduler_token.clone(),
+            config.timeout,
+        )
+        .map_err(anyhow::Error::msg)?,
+    );
+
     let router = api::router(PushState {
         sender,
         registry,
+        history,
         token: config.token.clone(),
     })
     .merge(crate::health::router());

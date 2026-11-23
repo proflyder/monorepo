@@ -6,6 +6,7 @@ pub enum SyncEntity {
     Reminders,
     Timers,
     Scenarios,
+    Notifications,
 }
 
 impl SyncEntity {
@@ -16,6 +17,7 @@ impl SyncEntity {
             Self::Reminders => "reminders",
             Self::Timers => "timers",
             Self::Scenarios => "scenarios",
+            Self::Notifications => "notifications",
         }
     }
 
@@ -67,6 +69,15 @@ impl SyncChange {
         Self {
             entity,
             op: SyncOp::Delete,
+            id: id.into(),
+        }
+    }
+
+    #[must_use]
+    pub fn notification(op: SyncOp, id: impl Into<String>) -> Self {
+        Self {
+            entity: SyncEntity::Notifications,
+            op,
             id: id.into(),
         }
     }

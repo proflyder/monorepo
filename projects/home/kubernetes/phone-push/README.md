@@ -69,11 +69,18 @@ curl -fsS -X POST "$PHONE_PUSH_URL/v1/push/find" \
 
 `POST /v1/push/sync` с телом `{"entity","op","id","originDeviceId"}` шлёт
 data-only FCM без уведомления: `{type:"sync", entity, op, id}`. `entity` —
-`alarms|reminders|timers|scenarios`, `op` — `upsert|delete`; содержимое
-сущности в пуш не попадает, приложение забирает его само. Устройство из
+`alarms|reminders|timers|scenarios|notifications`, `op` — `upsert|delete`;
+содержимое
+сущности в пуш не попадает, приложение забирает его само. Необязательный
+`targetDeviceId` адресует пуш ровно одному телефону (так scheduler обновляет
+историю её владельцу); если `targetDeviceId` совпадает с `originDeviceId`,
+пуш не отправляется. Устройство из
 `originDeviceId` (заголовок `Home-Device-Id` исходного запроса к scheduler)
 пуш не получает. Scheduler вызывает endpoint после своих мутаций и тиков
 движка, если задан `SCHEDULER_PUSH_URL`, с тем же токеном `scheduler-auth`.
+История уведомлений пишется в scheduler после каждой доставки (egress
+`phone-push → scheduler:8098` уже разрешён политикой), поэтому отдельного
+хранилища у сервиса нет.
 
 ## Секреты и сеть
 

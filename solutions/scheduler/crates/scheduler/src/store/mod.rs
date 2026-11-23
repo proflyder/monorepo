@@ -1,5 +1,6 @@
 mod event;
 mod migrate;
+mod notifications;
 mod push;
 mod scenario;
 mod schedule;
@@ -22,6 +23,10 @@ pub use crate::domain::{
     ScenarioStep, ScenarioTimeTrigger, ScenarioTrigger, Schedule, ScheduleKind, SourceKind, Timer,
     TimerState,
 };
+pub use notifications::{
+    DEFAULT_HISTORY_LIMIT, MAX_HISTORY_LIMIT, Notification, NotificationInput, NotificationKind,
+    NotificationPage,
+};
 pub use push::{PushDevice, PushDeviceInput};
 pub use status::{ConsumerStatus, QueueInfo, Status};
 pub use tick::TickStats;
@@ -29,7 +34,7 @@ pub use vpn::{VpnPeer, VpnPeerInput, VpnPool, is_wireguard_key as vpn_key_is_val
 
 use crate::domain::ScheduleKind as DomainScheduleKind;
 
-pub const SCHEMA_VERSION: i64 = 6;
+pub const SCHEMA_VERSION: i64 = 7;
 
 pub const QUEUE_HOME: &str = "home";
 pub const QUEUE_TASKS: &str = "tasks";
@@ -167,6 +172,20 @@ const V6: &[&str] = &["CREATE TABLE IF NOT EXISTS vpn_peers (
 			updated_unix INTEGER NOT NULL
 		)"];
 
+const V7: &[&str] = &[
+    "CREATE TABLE IF NOT EXISTS notifications (
+			id TEXT PRIMARY KEY,
+			device_id TEXT NOT NULL,
+			type TEXT NOT NULL,
+			title TEXT NOT NULL,
+			body TEXT NOT NULL,
+			deep_link TEXT,
+			created_unix INTEGER NOT NULL,
+			read_unix INTEGER NOT NULL DEFAULT 0
+		)",
+    "CREATE INDEX IF NOT EXISTS notifications_device ON notifications(device_id, created_unix DESC)",
+];
+
 pub const MIGRATIONS: &[Migration] = &[
     Migration {
         version: 1,
@@ -194,9 +213,14 @@ pub const MIGRATIONS: &[Migration] = &[
         statements: V5,
     },
     Migration {
-        version: SCHEMA_VERSION,
+        version: 6,
         description: "scheduler v6 WireGuard peers",
         statements: V6,
+    },
+    Migration {
+        version: SCHEMA_VERSION,
+        description: "scheduler v7 notification history",
+        statements: V7,
     },
 ];
 

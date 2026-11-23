@@ -4,9 +4,9 @@ import dev.proflyder.home.core.data.FeatureLifetime
 import dev.proflyder.home.core.data.FeatureScope
 import dev.proflyder.home.core.data.map
 import dev.proflyder.home.core.runtime.FeatureScopes
-import dev.proflyder.home.feature.push.DataStoreNotificationHistoryStore
-import dev.proflyder.home.feature.push.NotificationHistoryStore
+import dev.proflyder.home.feature.push.NotificationHistoryRepository
 import dev.proflyder.home.feature.push.PushHistoryScope
+import dev.proflyder.home.feature.push.SchedulerNotificationHistoryRepository
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.BindingContainer
 import dev.zacsweers.metro.Binds
@@ -18,7 +18,7 @@ import dev.zacsweers.metro.SingleIn
 
 @GraphExtension(PushHistoryScope::class)
 interface PushHistoryGraph {
-    val history: NotificationHistoryStore
+    val history: NotificationHistoryRepository
 
     @ContributesTo(AppScope::class)
     @GraphExtension.Factory
@@ -31,7 +31,7 @@ interface PushHistoryGraph {
 @BindingContainer
 abstract class PushHistoryBindings {
     @Binds
-    internal abstract fun history(impl: DataStoreNotificationHistoryStore): NotificationHistoryStore
+    internal abstract fun history(impl: SchedulerNotificationHistoryRepository): NotificationHistoryRepository
 }
 
 @SingleIn(AppScope::class)
@@ -46,5 +46,5 @@ class PushHistoryFeatureScope internal constructor(
 object PushHistoryExports {
     @Provides
     @SingleIn(AppScope::class)
-    fun historyScope(scope: PushHistoryFeatureScope): FeatureScope<NotificationHistoryStore> = scope.map { it.history }
+    fun historyScope(scope: PushHistoryFeatureScope): FeatureScope<NotificationHistoryRepository> = scope.map { it.history }
 }

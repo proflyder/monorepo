@@ -15,6 +15,7 @@ const MAX_ORIGIN_CHARS: usize = 128;
 pub struct Announcement {
     pub change: SyncChange,
     pub origin: Option<String>,
+    pub target: Option<String>,
 }
 
 pub trait SyncSink: Send + Sync + std::fmt::Debug {
@@ -130,6 +131,9 @@ pub fn body(announcement: &Announcement) -> serde_json::Value {
     if let Some(origin) = &announcement.origin {
         body["originDeviceId"] = json!(origin);
     }
+    if let Some(target) = &announcement.target {
+        body["targetDeviceId"] = json!(target);
+    }
     body
 }
 
@@ -149,17 +153,31 @@ mod tests {
     use tokio::sync::mpsc;
 
     use super::*;
-    use crate::domain::SyncEntity;
+    use crate::domain::{SyncEntity, SyncOp};
 
     #[test]
     fn the_body_names_the_change_and_its_origin_only() {
         let announcement = Announcement {
             change: SyncChange::delete(SyncEntity::Timers, "t-1"),
             origin: Some("phone-a".to_owned()),
+            target: None,
         };
         assert_eq!(
             body(&announcement),
             json!({"entity": "timers", "op": "delete", "id": "t-1", "originDeviceId": "phone-a"})
+        );
+    }
+
+    #[test]
+    fn the_body_carries_the_target_device_itself() {
+        let announcement = Announcement {
+            change: SyncChange::notification(SyncOp::Upsert, "n-1"),
+            origin: None,
+            target: Some("phone-a".to_owned()),
+        };
+        assert_eq!(
+            body(&announcement),
+            json!({"entity": "notifications", "op": "upsert", "id": "n-1", "targetDeviceId": "phone-a"})
         );
     }
 
@@ -186,6 +204,7 @@ mod tests {
         let announcement = Announcement {
             change: SyncChange::upsert(SyncEntity::Alarms, "a-1"),
             origin: None,
+            target: None,
         };
         sync.send(&announcement).await.expect("send");
         let (authorization, payload) = received.recv().await.expect("request");

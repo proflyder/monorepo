@@ -8,20 +8,16 @@ import dev.zacsweers.metro.ContributesIntoSet
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import dev.zacsweers.metro.binding
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.launch
 
 @SingleIn(AppScope::class)
 @ContributesIntoSet(AppScope::class, binding = binding<AppStartable>())
 @Inject
 class PushInbox internal constructor(
     private val context: Context,
-    private val scope: CoroutineScope,
     private val tokens: PushTokenSource,
     private val registrar: HomePushRegistrar,
     private val notifications: PushNotifier,
     private val findPhone: FindPhoneController,
-    private val history: NotificationHistoryRecorder,
     private val sync: SyncSignalSink,
 ) : AppStartable {
     override fun start() {
@@ -48,16 +44,10 @@ class PushInbox internal constructor(
 
     private fun ring(message: PushMessage.Find) {
         findPhone.start(message.reason)
-        remember(message)
     }
 
     private fun notify(message: PushMessage.Notify) {
         if (PushChatGate.shouldSkip(message)) return
         notifications.notify(message)
-        remember(message)
-    }
-
-    private fun remember(message: PushMessage.Shown) {
-        scope.launch { history.record(message) }
     }
 }

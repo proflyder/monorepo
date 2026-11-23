@@ -36,6 +36,7 @@ fn fixture() -> Fixture {
         AlarmFacade::new(service),
         TOKEN,
         VpnAccess::default(),
+        Arc::clone(&sync) as Arc<dyn crate::sync::SyncSink>,
     );
     Fixture { app, store, sync }
 }
@@ -81,10 +82,12 @@ async fn timer_mutations_announce_sync_changes_with_the_origin_device() {
             Announcement {
                 change: SyncChange::upsert(SyncEntity::Timers, &id),
                 origin: Some("phone-a".to_owned()),
+                target: None,
             },
             Announcement {
                 change: SyncChange::delete(SyncEntity::Timers, &id),
                 origin: None,
+                target: None,
             },
         ]
     );
@@ -123,6 +126,7 @@ async fn a_fired_timer_is_announced_by_the_engine_tick() {
         vec![Announcement {
             change: SyncChange::upsert(SyncEntity::Timers, &id),
             origin: None,
+            target: None,
         }]
     );
 }
