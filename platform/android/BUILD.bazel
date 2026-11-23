@@ -1,6 +1,13 @@
-load("@rules_kotlin//kotlin:core.bzl", "kt_compiler_plugin", "kt_kotlinc_options")
+load("@rules_kotlin//kotlin:core.bzl", "define_kt_toolchain", "kt_compiler_plugin", "kt_kotlinc_options")
 
 package(default_visibility = ["//visibility:public"])
+
+define_kt_toolchain(
+    name = "kotlin_toolchain",
+    experimental_remove_debug_info_in_abi_jars = True,
+    experimental_remove_private_classes_in_abi_jars = True,
+    experimental_use_abi_jars = True,
+)
 
 kt_kotlinc_options(
     name = "jvm17_options",
@@ -52,6 +59,7 @@ genrule(
 )
 
 exports_files([
+    "robolectric-none.properties",
     "defs.bzl",
     "detekt.bzl",
     "lint.bzl",

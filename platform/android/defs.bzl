@@ -1,4 +1,4 @@
-load("@rules_kotlin//kotlin:android.bzl", "kt_android_library")
+load("@rules_kotlin//kotlin:android.bzl", "kt_android_library", "kt_android_local_test")
 load("@rules_kotlin//kotlin:jvm.bzl", "kt_jvm_library", "kt_jvm_test")
 load("@rules_android//android:rules.bzl", "android_binary")
 load(":lint.bzl", _android_lint = "android_lint")
@@ -7,6 +7,7 @@ load(":detekt.bzl", _home_detekt = "home_detekt")
 METRO_COMPILER_PLUGIN = "//platform/android:metro_compiler_plugin"
 SERIALIZATION_COMPILER_PLUGIN = "//platform/android:serialization_compiler_plugin"
 JVM17_OPTIONS = "//platform/android:jvm17_options"
+ROBOLECTRIC_NO_ANDROID_ALL = "//platform/android:robolectric-none.properties"
 
 def metro_jvm_library(name, srcs, deps = [], plugins = [], **kwargs):
     kt_jvm_library(
@@ -155,5 +156,12 @@ def home_android_binary(
             "versionName": version_name,
         },
         deps = deps,
+        **kwargs
+    )
+
+def home_android_local_test(name, robolectric_properties_file = ROBOLECTRIC_NO_ANDROID_ALL, **kwargs):
+    kt_android_local_test(
+        name = name,
+        robolectric_properties_file = robolectric_properties_file,
         **kwargs
     )

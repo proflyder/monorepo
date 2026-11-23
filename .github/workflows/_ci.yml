@@ -151,6 +151,7 @@ jobs:
       sdk_packages: ${{ matrix.sdk_packages }}
       artifact: ${{ matrix.artifact }}
       artifact_name: ${{ matrix.artifact_name }}
+      release_version: ${{ inputs.distribution && needs.changes.outputs.android_distribute == 'true' }}
       save_cache: ${{ inputs.mode != 'pull_request' }}
     secrets:
       NEXUS_CI_PASSWORD: ${{ secrets.NEXUS_CI_PASSWORD }}
