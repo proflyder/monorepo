@@ -7,6 +7,6 @@
         <ignore regexp="features/vpn/impl/src/main/res/layout/vpn_route_banner\.xml" />
     </issue>
     <issue id="UnusedResources">
-        <ignore regexp="projects/mobile/android/app/res/values/google_services\.xml" />
+        <ignore regexp="app/res/values/google_services\.xml" />
     </issue>
 </lint>
