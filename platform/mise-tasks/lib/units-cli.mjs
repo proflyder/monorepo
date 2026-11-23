@@ -353,9 +353,9 @@ export function isTargetPattern(label) {
   return TARGET_PATTERN.test(label);
 }
 
-export function buildOnlyQuery(patterns) {
-  const set = `set(${patterns.join(" ")})`;
-  return `${set} except tests(${set})`;
+export function foreignTestsQuery(patterns, tests) {
+  const under = `tests(set(${patterns.join(" ")}))`;
+  return tests.length ? `${under} except set(${tests.join(" ")})` : under;
 }
 
 export function ciPlan(unit) {
@@ -379,38 +379,47 @@ export function ciPlan(unit) {
   };
 }
 
-export function ciCommand(plan, buildLabels, patternFile) {
+export function ciCommand(plan, foreignTests, patternFile) {
   const args = [plan.command, ...plan.config, ...bazelExtraArgs(), "--keep_going"];
   if (plan.command === "test") {
     args.push("--test_output=errors");
   }
-  const labels = [...new Set([...plan.tests, ...plan.explicitBuilds, ...buildLabels])];
-  fs.writeFileSync(patternFile, `${labels.join("\n")}\n`, "utf8");
+  const patterns = [
+    ...new Set([...plan.tests, ...plan.explicitBuilds, ...plan.patternBuilds]),
+    ...[...new Set(foreignTests)].map((label) => `-${label}`),
+  ];
+  fs.writeFileSync(patternFile, `${patterns.join("\n")}\n`, "utf8");
   args.push(`--target_pattern_file=${patternFile}`);
-  return { command: "bazel", args, cwd: ROOT, labels };
+  return { command: "bazel", args, cwd: ROOT, patterns };
 }
 
 export function runCi(unit, { spawn = spawnSync, log = process.stderr } = {}) {
   const plan = ciPlan(unit);
-  let buildLabels = [];
+  let foreignTests = [];
   if (plan.patternBuilds.length) {
     const query = spawn(
       "bazel",
-      ["query", "--output=label", buildOnlyQuery(plan.patternBuilds)],
-      { cwd: ROOT, encoding: "utf8", maxBuffer: 64 * 1024 * 1024, stdio: ["ignore", "pipe", "inherit"] },
+      ["query", "--output=label", foreignTestsQuery(plan.patternBuilds, plan.tests)],
+      {
+        cwd: ROOT,
+        encoding: "utf8",
+        maxBuffer: 64 * 1024 * 1024,
+        stdio: ["ignore", "pipe", "inherit"],
+      },
     );
     if (query.error || query.status !== 0) {
-      log.write(`bazel query for the build targets of '${unit.id}' failed\n`);
+      log.write(`bazel query for the tests under the build targets of '${unit.id}' failed\n`);
       return query.status || 1;
     }
-    buildLabels = String(query.stdout).split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    foreignTests = String(query.stdout).split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   }
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "units-ci-"));
   try {
-    const command = ciCommand(plan, buildLabels, path.join(directory, "targets.txt"));
+    const command = ciCommand(plan, foreignTests, path.join(directory, "targets.txt"));
     log.write(
-      `bazel ${plan.command} ${unit.id}: ${plan.tests.length} test target(s), ` +
-        `${command.labels.length - plan.tests.length} build-only target(s)\n`,
+      `bazel ${plan.command} ${unit.id}: tests ${plan.tests.join(" ") || "(none)"}; ` +
+        `build ${[...plan.explicitBuilds, ...plan.patternBuilds].join(" ") || "(none)"}; ` +
+        `${foreignTests.length} test(s) under the build patterns are built, not run\n`,
     );
     return runCommands([command], { spawn, log });
   } finally {
@@ -463,7 +472,7 @@ const USAGE = `Usage: units-cli.mjs <command>
   build [unit]   bazel build //..., or one unit's Bazel targets
   test [unit]    hermetic suite or one unit's CI test commands
   ci <unit>      one keep-going Bazel call: the unit's tests plus its build
-                 targets (patterns expand without their tests)
+                 targets (tests under build patterns are built, not run)
 
 Android units (and the whole-workspace build) pass --config=android, which
 activates platform/android/android.bazelrc.

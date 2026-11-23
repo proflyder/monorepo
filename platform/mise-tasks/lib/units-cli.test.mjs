@@ -14,7 +14,7 @@ import {
   formatTable,
   isDeployable,
   runCommands,
-  buildOnlyQuery,
+  foreignTestsQuery,
   ciPlan,
   isTargetPattern,
   runCi,
@@ -344,11 +344,12 @@ test("isTargetPattern tells patterns from labels", () => {
   assert.equal(isTargetPattern("//apps/one:app"), false);
 });
 
-test("buildOnlyQuery keeps the tests under a build pattern out of the run", () => {
+test("foreignTestsQuery finds the tests under build patterns the unit does not run", () => {
   assert.equal(
-    buildOnlyQuery(["//a/...", "//b/..."]),
-    "set(//a/... //b/...) except tests(set(//a/... //b/...))",
+    foreignTestsQuery(["//a/...", "//b/..."], ["//a:t", "//c/..."]),
+    "tests(set(//a/... //b/...)) except set(//a:t //c/...)",
   );
+  assert.equal(foreignTestsQuery(["//a/..."], []), "tests(set(//a/...))");
 });
 
 test("ciPlan splits tests, explicit build labels and build patterns", () => {
@@ -364,13 +365,13 @@ test("ciPlan splits tests, explicit build labels and build patterns", () => {
   assert.throws(() => ciPlan(byId("ha-voice")), /Bazel units only/);
 });
 
-test("runCi runs one keep-going bazel test over tests and build-only labels", () => {
+test("runCi keeps build patterns and only builds the foreign tests under them", () => {
   const calls = [];
   let targets = "";
   const spawn = (command, args) => {
     calls.push([command, ...args]);
     if (args[0] === "query") {
-      return { status: 0, stdout: "//packages/proto:home_proto\n//packages/proto:lib\n" };
+      return { status: 0, stdout: "//packages/proto:proto_test\n" };
     }
     const file = args.find((arg) => arg.startsWith("--target_pattern_file=")).split("=")[1];
     targets = fs.readFileSync(file, "utf8");
@@ -392,7 +393,7 @@ test("runCi runs one keep-going bazel test over tests and build-only labels", ()
     "bazel",
     "query",
     "--output=label",
-    "set(//packages/proto/...) except tests(set(//packages/proto/...))",
+    "tests(set(//packages/proto/...)) except set(//packages/rust/home-proto:unit_tests)",
   ]);
   assert.deepEqual(calls[1].slice(0, 4), [
     "bazel",
@@ -402,7 +403,7 @@ test("runCi runs one keep-going bazel test over tests and build-only labels", ()
   ]);
   assert.equal(
     targets,
-    "//packages/rust/home-proto:unit_tests\n//packages/proto:home_proto\n//packages/proto:lib\n",
+    "//packages/rust/home-proto:unit_tests\n//packages/proto/...\n-//packages/proto:proto_test\n",
   );
 });
 
