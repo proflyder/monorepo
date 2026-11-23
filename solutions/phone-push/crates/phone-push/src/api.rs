@@ -68,6 +68,8 @@ pub struct SyncBody {
     pub id: String,
     #[serde(default)]
     pub origin_device_id: Option<String>,
+    #[serde(default)]
+    pub target_device_id: Option<String>,
 }
 
 pub const SYNC_ENTITIES: [&str; 5] = [
@@ -79,12 +81,14 @@ pub const SYNC_ENTITIES: [&str; 5] = [
 ];
 pub const SYNC_OPS: [&str; 2] = ["upsert", "delete"];
 pub const MAX_SYNC_ID_CHARS: usize = 128;
+pub const MAX_DEVICE_ID_CHARS: usize = 128;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Audience<'a> {
     Everyone,
     Only(&'a str),
     AllBut(&'a str),
+    Nobody,
 }
 
 impl<'a> Audience<'a> {
@@ -102,6 +106,25 @@ impl<'a> Audience<'a> {
             .map(str::trim)
             .filter(|value| !value.is_empty())
             .map_or(Self::Everyone, Self::AllBut)
+    }
+
+    #[must_use]
+    pub fn of_sync(body: &'a SyncBody) -> Self {
+        let target = body
+            .target_device_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty());
+        let origin = body
+            .origin_device_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty());
+        match target {
+            Some(target) if Some(target) == origin => Self::Nobody,
+            Some(target) => Self::Only(target),
+            None => Self::all_but(origin),
+        }
     }
 }
 
@@ -286,7 +309,7 @@ async fn sync(
             &state.registry,
             &state.history,
             now(),
-            Audience::all_but(body.origin_device_id.as_deref()),
+            Audience::of_sync(&body),
         )
         .await,
     )
@@ -335,13 +358,25 @@ async fn remember(history: &HistoryClient, device_id: &str, id: &str, row: &Hist
     }
 }
 
+fn valid_target(raw: Option<&str>) -> bool {
+    raw.map(str::trim)
+        .filter(|value| !value.is_empty())
+        .is_none_or(|value| {
+            value.chars().count() <= MAX_DEVICE_ID_CHARS
+                && value.chars().all(|character| {
+                    character.is_ascii_alphanumeric() || "-_.:".contains(character)
+                })
+        })
+}
+
 fn sync_message(body: &SyncBody) -> Option<Message> {
     let entity = body.entity.trim();
     let op = body.op.trim();
     let id = body.id.trim();
     let valid = SYNC_ENTITIES.contains(&entity)
         && SYNC_OPS.contains(&op)
-        && id.chars().count() <= MAX_SYNC_ID_CHARS;
+        && id.chars().count() <= MAX_SYNC_ID_CHARS
+        && valid_target(body.target_device_id.as_deref());
     valid.then(|| Message::Sync {
         entity: entity.to_owned(),
         op: op.to_owned(),
@@ -382,6 +417,7 @@ fn select_devices(
             Audience::Everyone => true,
             Audience::Only(target) => device.device_id == target,
             Audience::AllBut(origin) => device.device_id != origin,
+            Audience::Nobody => false,
         })
         .collect()
 }
@@ -473,6 +509,45 @@ mod tests {
     }
 
     #[test]
+    fn a_targeted_sync_goes_only_to_the_owner() {
+        let body = SyncBody {
+            entity: "notifications".to_owned(),
+            op: "upsert".to_owned(),
+            id: "n-1".to_owned(),
+            origin_device_id: None,
+            target_device_id: Some("two".to_owned()),
+        };
+        let devices = vec![device("one"), device("two")];
+        let selected = select_devices(devices, Audience::of_sync(&body));
+        assert_eq!(selected.len(), 1);
+        assert_eq!(selected[0].device_id, "two");
+    }
+
+    #[test]
+    fn a_targeted_sync_is_not_sent_back_to_the_initiator() {
+        let body = SyncBody {
+            entity: "notifications".to_owned(),
+            op: "upsert".to_owned(),
+            id: "n-1".to_owned(),
+            origin_device_id: Some("two".to_owned()),
+            target_device_id: Some("two".to_owned()),
+        };
+        let devices = vec![device("one"), device("two")];
+        assert!(select_devices(devices, Audience::of_sync(&body)).is_empty());
+    }
+
+    #[test]
+    fn an_invalid_target_device_is_rejected() {
+        let mut body = sync_body("notifications", "upsert", "n-1");
+        body.target_device_id = Some("bad device".to_owned());
+        assert!(sync_message(&body).is_none());
+        body.target_device_id = Some("x".repeat(MAX_DEVICE_ID_CHARS + 1));
+        assert!(sync_message(&body).is_none());
+        body.target_device_id = Some("device-1".to_owned());
+        assert!(sync_message(&body).is_some());
+    }
+
+    #[test]
     fn a_sync_skips_the_device_that_made_the_change() {
         let devices = vec![device("one"), device("two")];
         let selected = select_devices(devices, Audience::all_but(Some("one")));
@@ -490,6 +565,7 @@ mod tests {
             op: op.to_owned(),
             id: id.to_owned(),
             origin_device_id: None,
+            target_device_id: None,
         }
     }
 

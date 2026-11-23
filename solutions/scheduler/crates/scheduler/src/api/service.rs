@@ -90,7 +90,11 @@ impl Service {
             ctx.header(sync::ORIGIN_HEADER)
                 .and_then(|value| value.to_str().ok()),
         );
-        self.sync.publish(Announcement { change, origin });
+        self.sync.publish(Announcement {
+            change,
+            origin,
+            target: None,
+        });
     }
 
     pub async fn delete_schedule_synced(

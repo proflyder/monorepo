@@ -19,6 +19,7 @@ import org.junit.runners.Suite
     SystemDashboardClientTest::class,
     ChatClientTest::class,
     VpnProfileClientTest::class,
+    NotificationHistoryClientTest::class,
     ConnectionHealthTest::class,
     RouteGateTest::class,
 )

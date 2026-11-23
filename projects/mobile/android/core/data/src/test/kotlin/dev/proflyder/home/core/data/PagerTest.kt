@@ -2,9 +2,12 @@ package dev.proflyder.home.core.data
 
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RemoteFailure
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -16,9 +19,7 @@ import org.junit.Test
 class PagerTest {
     @Test
     fun theFirstPageAsksForTwentyItemsAndKeepsTheCursor() = runTest {
-        val source = FakeSource(
-            Outcome.Success(Page(items("a", "b"), "next")),
-        )
+        val source = FakeSource(Outcome.Success(Page(items("a", "b"), "next")))
         val pager = pager(source)
 
         pager.refresh(RefreshMode.HARD)
@@ -110,49 +111,114 @@ class PagerTest {
     }
 
     @Test
-    fun anOptimisticUpdateRollsBackWhenTheRequestFails() = runTest {
-        val source = FakeSource(Outcome.Success(Page(items("a"), null)))
+    fun anOptimisticUpdateRollsBackOnlyItsOwnItem() = runTest {
+        val source = FakeSource(Outcome.Success(Page(items("a", "c"), null)))
         val pager = pager(source)
         pager.refresh(RefreshMode.HARD)
         advanceUntilIdle()
+        val gate = CompletableDeferred<Outcome<Unit>>()
 
-        val result = pager.optimistic(
-            { items -> items.map { it.copy(read = true) } },
-            { Outcome.Failure(RemoteFailure.Offline("offline")) },
-        )
+        val failing = async {
+            pager.optimisticUpdate("a", { it.copy(read = true) }, { gate.await() })
+        }
+        runCurrent()
+        val passing = pager.optimisticUpdate("c", { it.copy(read = true) }, { Outcome.Success(Unit) })
+        gate.complete(Outcome.Failure(RemoteFailure.Offline("offline")))
+        val failed = failing.await()
 
-        assertTrue(result is Outcome.Failure)
-        assertEquals(false, pager.state.value.items.single().read)
+        assertTrue(passing is Outcome.Success)
+        assertTrue(failed is Outcome.Failure)
+        assertEquals(false, pager.state.value.items.first { it.id == "a" }.read)
+        assertEquals(true, pager.state.value.items.first { it.id == "c" }.read)
     }
 
     @Test
-    fun anOptimisticUpdateKeepsTheChangeWhenTheRequestSucceeds() = runTest {
-        val source = FakeSource(Outcome.Success(Page(items("a"), null)))
+    fun anOptimisticFailureDoesNotDropAPageLoadedInTheMeantime() = runTest {
+        val source = FakeSource(
+            Outcome.Success(Page(items("a"), "next")),
+            Outcome.Success(Page(items("b"), null)),
+        )
         val pager = pager(source)
         pager.refresh(RefreshMode.HARD)
         advanceUntilIdle()
+        val gate = CompletableDeferred<Outcome<Unit>>()
 
-        val result = pager.optimistic(
-            { items -> items.map { it.copy(read = true) } },
-            { Outcome.Success(Unit) },
-        )
+        val failing = async {
+            pager.optimisticUpdate("a", { it.copy(read = true) }, { gate.await() })
+        }
+        runCurrent()
+        pager.loadMore()
+        advanceUntilIdle()
+        gate.complete(Outcome.Failure(RemoteFailure.Offline("offline")))
+        failing.await()
 
-        assertTrue(result is Outcome.Success)
-        assertEquals(true, pager.state.value.items.single().read)
+        assertEquals(listOf("a", "b"), pager.state.value.items.map { it.id })
+        assertEquals(false, pager.state.value.items.first { it.id == "a" }.read)
     }
 
     @Test
-    fun aRemovedEntryReturnsToItsPlace() = runTest {
+    fun anOptimisticRemoveRollsBackOnlyTheRemovedItem() = runTest {
         val source = FakeSource(Outcome.Success(Page(items("a", "b", "c"), null)))
         val pager = pager(source)
         pager.refresh(RefreshMode.HARD)
         advanceUntilIdle()
 
-        val removal = checkNotNull(pager.removeLocal("b"))
-        assertEquals(listOf("a", "c"), pager.state.value.items.map { it.id })
-        pager.restoreLocal(removal)
+        pager.optimisticUpdate("a", { it.copy(read = true) }, { Outcome.Success(Unit) })
+        val result = pager.optimisticRemove("b", { Outcome.Failure(RemoteFailure.Offline("offline")) })
 
+        assertTrue(result is Outcome.Failure)
         assertEquals(listOf("a", "b", "c"), pager.state.value.items.map { it.id })
+        assertEquals(true, pager.state.value.items.first { it.id == "a" }.read)
+    }
+
+    @Test
+    fun aReadAllRollsBackEveryKnownItemButNotANewerPage() = runTest {
+        val source = FakeSource(
+            Outcome.Success(Page(items("a", "b"), "next")),
+            Outcome.Success(Page(items("c"), null)),
+        )
+        val pager = pager(source)
+        pager.refresh(RefreshMode.HARD)
+        advanceUntilIdle()
+        val gate = CompletableDeferred<Outcome<Unit>>()
+
+        val failing = async {
+            pager.optimisticEach({ it.copy(read = true) }, { gate.await() })
+        }
+        runCurrent()
+        pager.loadMore()
+        advanceUntilIdle()
+        gate.complete(Outcome.Failure(RemoteFailure.Offline("offline")))
+        failing.await()
+
+        assertEquals(false, pager.state.value.items.first { it.id == "a" }.read)
+        assertEquals(false, pager.state.value.items.first { it.id == "c" }.read)
+    }
+
+    @Test
+    fun reloadMergesTheFirstPageIntoTheLoadedTail() = runTest {
+        val first = (1..20).map { Row("n-$it") }
+        val second = (21..40).map { Row("n-$it") }
+        val source = FakeSource(
+            Outcome.Success(Page(first, "20")),
+            Outcome.Success(Page(second, null)),
+            Outcome.Success(Page(listOf(Row("fresh")) + first.map { it.copy(read = true) }, null)),
+        )
+        val pager = pager(source)
+        pager.refresh(RefreshMode.HARD)
+        advanceUntilIdle()
+        pager.loadMore()
+        advanceUntilIdle()
+        assertEquals(40, pager.state.value.items.size)
+
+        pager.reload()
+        advanceUntilIdle()
+
+        val items = pager.state.value.items
+        assertEquals(41, items.size)
+        assertEquals("fresh", items.first().id)
+        assertTrue(items.first { it.id == "n-1" }.read)
+        assertEquals("n-40", items.last().id)
     }
 
     private fun TestScope.pager(source: PageSource<Row>): Pager<Row> = Pager(this, source, Row::id)

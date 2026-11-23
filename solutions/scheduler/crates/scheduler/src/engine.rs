@@ -97,6 +97,7 @@ impl Engine {
                     self.sync.publish(Announcement {
                         change: change.clone(),
                         origin: None,
+                        target: None,
                     });
                 }
                 if stats.fired > 0

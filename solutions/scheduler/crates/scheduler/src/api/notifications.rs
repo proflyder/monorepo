@@ -157,7 +157,13 @@ pub async fn record(
     .await;
     match result {
         Ok(entry) => {
-            announce(&state, SyncOp::Upsert, entry.id.clone());
+            announce(
+                &state,
+                SyncOp::Upsert,
+                entry.id.clone(),
+                Some(entry.device_id.clone()),
+                None,
+            );
             Json(EntryResponse {
                 entry: EntryView::from(&entry),
             })
@@ -232,7 +238,13 @@ pub async fn set_read(
     .await;
     match result {
         Ok(entry) => {
-            announce(&state, SyncOp::Upsert, entry.id.clone());
+            announce(
+                &state,
+                SyncOp::Upsert,
+                entry.id.clone(),
+                Some(entry.device_id.clone()),
+                Some(entry.device_id.clone()),
+            );
             Json(EntryResponse {
                 entry: EntryView::from(&entry),
             })
@@ -250,6 +262,7 @@ pub async fn read_all(State(state): State<NotificationState>, headers: HeaderMap
         return error(StatusCode::BAD_REQUEST, "Home-Device-Id is required");
     };
     let now = now_unix();
+    let target = device_id.clone();
     match blocking(Arc::clone(&state.store), move |store| {
         store.mark_notifications_read(&device_id, now)
     })
@@ -257,7 +270,13 @@ pub async fn read_all(State(state): State<NotificationState>, headers: HeaderMap
     {
         Ok(updated) => {
             if updated > 0 {
-                announce(&state, SyncOp::Upsert, String::new());
+                announce(
+                    &state,
+                    SyncOp::Upsert,
+                    String::new(),
+                    Some(target.clone()),
+                    Some(target),
+                );
             }
             Json(UpdatedResponse { updated }).into_response()
         }
@@ -278,6 +297,7 @@ pub async fn remove(
     };
     let id = body.id;
     let key = id.clone();
+    let target = device_id.clone();
     match blocking(Arc::clone(&state.store), move |store| {
         store.remove_notification(&device_id, &key)
     })
@@ -285,7 +305,13 @@ pub async fn remove(
     {
         Ok(removed) => {
             if removed {
-                announce(&state, SyncOp::Delete, id);
+                announce(
+                    &state,
+                    SyncOp::Delete,
+                    id,
+                    Some(target.clone()),
+                    Some(target),
+                );
             }
             Json(RemovedResponse { removed }).into_response()
         }
@@ -300,6 +326,7 @@ pub async fn clear(State(state): State<NotificationState>, headers: HeaderMap) -
     let Some(device_id) = header_device(&headers) else {
         return error(StatusCode::BAD_REQUEST, "Home-Device-Id is required");
     };
+    let target = device_id.clone();
     match blocking(Arc::clone(&state.store), move |store| {
         store.clear_notifications(&device_id)
     })
@@ -307,7 +334,13 @@ pub async fn clear(State(state): State<NotificationState>, headers: HeaderMap) -
     {
         Ok(removed) => {
             if removed > 0 {
-                announce(&state, SyncOp::Delete, String::new());
+                announce(
+                    &state,
+                    SyncOp::Delete,
+                    String::new(),
+                    Some(target.clone()),
+                    Some(target),
+                );
             }
             Json(RemovedCountResponse { removed }).into_response()
         }
@@ -332,10 +365,17 @@ fn header_device(headers: &HeaderMap) -> Option<String> {
     valid.then(|| value.to_owned())
 }
 
-fn announce(state: &NotificationState, op: SyncOp, id: String) {
+fn announce(
+    state: &NotificationState,
+    op: SyncOp,
+    id: String,
+    target: Option<String>,
+    origin: Option<String>,
+) {
     state.sync.publish(Announcement {
         change: SyncChange::notification(op, id),
-        origin: None,
+        origin,
+        target,
     });
 }
 
@@ -630,6 +670,10 @@ mod tests {
                 .all(|it| it.change.entity == crate::domain::SyncEntity::Notifications)
         );
         assert_eq!(announcements[0].change.op, SyncOp::Upsert);
+        assert_eq!(announcements[0].target.as_deref(), Some(DEVICE));
+        assert_eq!(announcements[0].origin, None);
+        assert_eq!(announcements[1].target.as_deref(), Some(DEVICE));
+        assert_eq!(announcements[1].origin.as_deref(), Some(DEVICE));
         assert_eq!(announcements[2].change.op, SyncOp::Delete);
     }
 }

@@ -58,18 +58,19 @@ class Pager<T : Any>(
         start(reset = true, next = null)
     }
 
+    fun reload() {
+        if (mutable.value.loading) return
+        mutable.update { it.copy(refreshing = true, failure = null, appendFailure = null) }
+        started = true
+        job?.cancel()
+        job = scope.launch { mutex.withLock { loadFirstPage() } }
+    }
+
     fun loadMore() {
         val current = mutable.value
         if (!canLoadMore(current)) return
         mutable.update { it.copy(appending = true, appendFailure = null) }
         start(reset = false, next = cursor)
-    }
-
-    private fun canLoadMore(current: PagingState<T>): Boolean {
-        if (!started) return false
-        if (current.loading) return false
-        if (current.endReached) return false
-        return current.items.isNotEmpty()
     }
 
     fun itemsSnapshot(): List<T> = mutable.value.items
@@ -91,23 +92,75 @@ class Pager<T : Any>(
     }
 
     fun restoreLocal(removal: PagerRemoval<T>) {
+        if (mutable.value.items.any { keyOf(it) == keyOf(removal.item) }) return
         val items = mutable.value.items.toMutableList()
         items.add(removal.index.coerceIn(0, items.size), removal.item)
         replaceLocal(items)
     }
 
-    suspend fun <R> optimistic(
-        change: (List<T>) -> List<T>,
+    suspend fun <R> optimisticUpdate(
+        key: String,
+        transform: (T) -> T,
         request: suspend () -> Outcome<R>,
     ): Outcome<R> {
-        val before = mutable.value.items
-        replaceLocal(change(before))
+        val previous = mutable.value.items.firstOrNull { keyOf(it) == key }
+        val optimistic = previous?.let(transform)
+        if (optimistic != null) updateLocal(key, transform)
         val result = runCatching { request() }.getOrElse { failure ->
-            replaceLocal(before)
+            rollbackUpdate(key, previous, optimistic)
             throw failure
         }
-        if (result is Outcome.Failure) replaceLocal(before)
+        if (result is Outcome.Failure) rollbackUpdate(key, previous, optimistic)
         return result
+    }
+
+    suspend fun <R> optimisticRemove(
+        key: String,
+        request: suspend () -> Outcome<R>,
+    ): Outcome<R> {
+        val removal = removeLocal(key)
+        val result = runCatching { request() }.getOrElse { failure ->
+            rollbackRemoval(removal)
+            throw failure
+        }
+        if (result is Outcome.Failure) rollbackRemoval(removal)
+        return result
+    }
+
+    suspend fun <R> optimisticEach(
+        transform: (T) -> T,
+        request: suspend () -> Outcome<R>,
+    ): Outcome<R> {
+        val before = mutable.value.items.associateBy(keyOf)
+        replaceLocal(mutable.value.items.map(transform))
+        val result = runCatching { request() }.getOrElse { failure ->
+            restoreKeys(before)
+            throw failure
+        }
+        if (result is Outcome.Failure) restoreKeys(before)
+        return result
+    }
+
+    private fun rollbackUpdate(key: String, previous: T?, optimistic: T?) {
+        if (previous == null || optimistic == null) return
+        replaceLocal(mutable.value.items.map { if (keyOf(it) == key && it == optimistic) previous else it })
+    }
+
+    private fun rollbackRemoval(removal: PagerRemoval<T>?) {
+        if (removal == null) return
+        if (mutable.value.items.any { keyOf(it) == keyOf(removal.item) }) return
+        restoreLocal(removal)
+    }
+
+    private fun restoreKeys(before: Map<String, T>) {
+        replaceLocal(mutable.value.items.map { before[keyOf(it)] ?: it })
+    }
+
+    private fun canLoadMore(current: PagingState<T>): Boolean {
+        if (!started) return false
+        if (current.loading) return false
+        if (current.endReached) return false
+        return current.items.isNotEmpty()
     }
 
     private fun start(reset: Boolean, next: String?) {
@@ -122,6 +175,13 @@ class Pager<T : Any>(
         }
     }
 
+    private suspend fun loadFirstPage() {
+        when (val result = source.load(null, pageSize)) {
+            is Outcome.Success -> mergeFirstPage(result.value)
+            is Outcome.Failure -> fail(result.failure, reset = true)
+        }
+    }
+
     private fun applyPage(page: Page<T>, reset: Boolean) {
         val existing = if (reset) emptyList() else mutable.value.items
         val merged = (existing + page.items).distinctBy(keyOf)
@@ -130,7 +190,20 @@ class Pager<T : Any>(
             items = merged,
             refreshing = false,
             appending = false,
-            endReached = page.nextCursor == null || page.items.isEmpty(),
+            endReached = page.nextCursor == null,
+        )
+    }
+
+    private fun mergeFirstPage(page: Page<T>) {
+        val incoming = page.items.distinctBy(keyOf)
+        val keys = incoming.mapTo(HashSet(), keyOf)
+        val older = mutable.value.items.filterNot { keyOf(it) in keys }
+        cursor = page.nextCursor ?: cursor
+        mutable.value = PagingState(
+            items = incoming + older,
+            refreshing = false,
+            appending = false,
+            endReached = page.nextCursor == null,
         )
     }
 

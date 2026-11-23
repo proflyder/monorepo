@@ -33,7 +33,7 @@ internal class HistorySwipe(
         val entry = actions.entryAt(position) ?: return
         when (direction) {
             ItemTouchHelper.LEFT -> actions.onDelete(entry)
-            else -> toggle(viewHolder, position, entry)
+            else -> actions.onToggleRead(entry)
         }
     }
 
@@ -49,11 +49,6 @@ internal class HistorySwipe(
         val entry = actions.entryAt(viewHolder.bindingAdapterPosition)
         if (entry != null) background.draw(canvas, viewHolder.itemView, dX, entry.read)
         super.onChildDraw(canvas, recyclerView, viewHolder, dX, dY, actionState, isCurrentlyActive)
-    }
-
-    private fun toggle(viewHolder: RecyclerView.ViewHolder, position: Int, entry: NotificationHistoryEntry) {
-        actions.onToggleRead(entry)
-        viewHolder.bindingAdapter?.notifyItemChanged(position)
     }
 
     private companion object {
