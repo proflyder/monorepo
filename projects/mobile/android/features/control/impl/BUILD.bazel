@@ -1,5 +1,4 @@
-load("@rules_kotlin//kotlin:android.bzl", "kt_android_local_test")
-load("//platform/android:defs.bzl", "metro_android_library")
+load("//platform/android:defs.bzl", "home_android_local_test", "metro_android_library")
 load(":robolectric_android_all.bzl", "android_all_dir")
 
 package(default_visibility = ["//visibility:public"])
@@ -47,7 +46,7 @@ android_all_dir(
     jar_name = "android-all-instrumented-15-robolectric-13954326-i7.jar",
 )
 
-kt_android_local_test(
+home_android_local_test(
     name = "control_rows_test",
     srcs = ["src/test/kotlin/dev/proflyder/home/feature/control/presentation/ControlRowsTest.kt"],
     associates = [":impl"],
@@ -84,7 +83,7 @@ kt_android_local_test(
     ],
 )
 
-kt_android_local_test(
+home_android_local_test(
     name = "device_state_screenshot_test",
     srcs = ["src/test/kotlin/dev/proflyder/home/feature/control/presentation/DeviceStateScreenshotTest.kt"],
     associates = [":impl"],
@@ -121,7 +120,7 @@ kt_android_local_test(
     ],
 )
 
-kt_android_local_test(
+home_android_local_test(
     name = "control_logic_test",
     srcs = glob(
         ["src/test/kotlin/**/*.kt"],
@@ -152,7 +151,7 @@ kt_android_local_test(
     ],
 )
 
-kt_android_local_test(
+home_android_local_test(
     name = "task_payloads_test",
     srcs = ["src/test/kotlin/dev/proflyder/home/feature/control/data/ControlTaskPayloadsTest.kt"],
     associates = [":impl"],

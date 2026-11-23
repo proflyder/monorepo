@@ -31,6 +31,14 @@ on:
         required: false
         default: ""
         type: string
+      release_version:
+        description: >-
+          Stamp android-app with a unique timestamp versionCode and upload the
+          release APK for distribution. Off for plain CI, where the default
+          versionCode keeps the APK and its tests cacheable.
+        required: false
+        default: false
+        type: boolean
       save_cache:
         description: >-
           Write the Bazel caches after the run. The caller states it (not a PR
@@ -76,6 +84,12 @@ jobs:
           repository-cache: false
           cache-save: ${{ inputs.save_cache }}
 
+      - uses: ./.github/actions/bazel-repository-cache
+        id: bazel-repo
+        with:
+          key: bazel-repo-android-${{ runner.os }}-${{ hashFiles('MODULE.bazel', 'MODULE.bazel.lock', '.bazelversion', 'projects/mobile/android/maven_install.json') }}
+          restore-prefix: bazel-repo-android-${{ runner.os }}-
+
       - uses: ./.github/actions/nexus-cache
         with:
           host: ${{ vars.NEXUS_HOST }}
@@ -120,7 +134,7 @@ jobs:
 
       - name: Release version
         id: version
-        if: inputs.unit == 'android-app'
+        if: inputs.unit == 'android-app' && inputs.release_version
         run: |
           set -euo pipefail
           version_code="$(date -u +%s)"
@@ -213,7 +227,7 @@ jobs:
         run: mise run test ${{ inputs.unit }}
 
       - name: Describe the release APK
-        if: inputs.unit == 'android-app' && steps.firebase.outputs.enabled == 'true'
+        if: inputs.unit == 'android-app' && inputs.release_version && steps.firebase.outputs.enabled == 'true'
         run: |
           set -euo pipefail
           python3 projects/mobile/android/release_info.py write \
@@ -226,7 +240,7 @@ jobs:
             --output "$RUNNER_TEMP/android-release/release-info.json"
 
       - name: Upload the release APK (unsigned)
-        if: inputs.unit == 'android-app' && steps.firebase.outputs.enabled == 'true'
+        if: inputs.unit == 'android-app' && inputs.release_version && steps.firebase.outputs.enabled == 'true'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: android-app-apk
@@ -249,6 +263,15 @@ jobs:
         with:
           path: ~/.cache/bazel-disk
           key: bazel-android-${{ runner.os }}-${{ inputs.unit }}-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'projects/mobile/android/maven_install.json') }}-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        if: >-
+          inputs.save_cache &&
+          github.ref == 'refs/heads/develop' &&
+          steps.bazel-repo.outputs.cache-hit != 'true'
+        with:
+          path: ~/.cache/bazel-repo/content_addressable
+          key: bazel-repo-android-${{ runner.os }}-${{ hashFiles('MODULE.bazel', 'MODULE.bazel.lock', '.bazelversion', 'projects/mobile/android/maven_install.json') }}
 
       - name: Remove google-services.json
         if: always() && inputs.unit == 'android-app'

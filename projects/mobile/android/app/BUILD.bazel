@@ -1,6 +1,5 @@
-load("@rules_kotlin//kotlin:android.bzl", "kt_android_local_test")
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
-load("//platform/android:defs.bzl", "home_android_binary", "home_google_services_resources", "metro_android_library")
+load("//platform/android:defs.bzl", "home_android_binary", "home_android_local_test", "home_google_services_resources", "metro_android_library")
 load(":robolectric_android_all.bzl", "android_all_dir")
 
 package(default_visibility = ["//visibility:public"])
@@ -129,7 +128,7 @@ android_all_dir(
     jar_name = "android-all-instrumented-15-robolectric-13954326-i7.jar",
 )
 
-kt_android_local_test(
+home_android_local_test(
     name = "home_fab_test",
     srcs = ["src/test/kotlin/dev/proflyder/home/HomeFabActivityTest.kt"],
     associates = [":app_lib"],
@@ -166,7 +165,7 @@ kt_android_local_test(
     ],
 )
 
-kt_android_local_test(
+home_android_local_test(
     name = "main_activity_smoke_test",
     srcs = [
         "src/test/kotlin/dev/proflyder/home/AppGraphBindingsTest.kt",
@@ -224,7 +223,7 @@ kt_android_local_test(
     ],
 )
 
-kt_android_local_test(
+home_android_local_test(
     name = "notice_swipe_test",
     srcs = ["src/test/kotlin/dev/proflyder/home/NoticeSwipeActivityTest.kt"],
     associates = [":app_lib"],
@@ -259,7 +258,7 @@ kt_android_local_test(
     ],
 )
 
-kt_android_local_test(
+home_android_local_test(
     name = "toolbar_menu_screenshot_test",
     srcs = ["src/test/kotlin/dev/proflyder/home/ToolbarMenuScreenshotTest.kt"],
     associates = [":app_lib"],
@@ -302,7 +301,7 @@ kt_android_local_test(
     ],
 )
 
-kt_android_local_test(
+home_android_local_test(
     name = "theme_screenshot_test",
     srcs = ["src/test/kotlin/dev/proflyder/home/ThemeScreenshotTest.kt"],
     associates = [":app_lib"],
@@ -342,7 +341,7 @@ kt_android_local_test(
     ],
 )
 
-kt_android_local_test(
+home_android_local_test(
     name = "key_screens_screenshot_test",
     srcs = ["src/test/kotlin/dev/proflyder/home/KeyScreensScreenshotTest.kt"],
     associates = [":app_lib"],
@@ -384,7 +383,7 @@ kt_android_local_test(
     ],
 )
 
-kt_android_local_test(
+home_android_local_test(
     name = "narrow_screens_test",
     srcs = ["src/test/kotlin/dev/proflyder/home/NarrowScreensTest.kt"],
     associates = [":app_lib"],
@@ -428,7 +427,7 @@ kt_android_local_test(
     ],
 )
 
-kt_android_local_test(
+home_android_local_test(
     name = "chat_attach_menu_test",
     srcs = ["src/test/kotlin/dev/proflyder/home/ChatAttachMenuTest.kt"],
     associates = [":app_lib"],
@@ -472,7 +471,7 @@ kt_android_local_test(
     ],
 )
 
-kt_android_local_test(
+home_android_local_test(
     name = "window_insets_screenshot_test",
     srcs = ["src/test/kotlin/dev/proflyder/home/WindowInsetsScreenshotTest.kt"],
     associates = [":app_lib"],
@@ -525,7 +524,7 @@ kt_android_local_test(
     ],
 )
 
-kt_android_local_test(
+home_android_local_test(
     name = "fab_style_screenshot_test",
     srcs = ["src/test/kotlin/dev/proflyder/home/FabStyleScreenshotTest.kt"],
     associates = [":app_lib"],

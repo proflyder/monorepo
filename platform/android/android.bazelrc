@@ -69,3 +69,6 @@ build:android --@rules_android//flags:desugar_java8_libs=false
 # Report every failing Android target in one run instead of stopping at the
 # first broken module (CI rounds are expensive; the result is unchanged).
 build:android --keep_going
+
+build:android --extra_toolchains=//platform/android:kotlin_toolchain
+build:android --@rules_jvm_external//settings:stamp_manifest=false

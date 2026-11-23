@@ -64,6 +64,7 @@ jobs:
       test_targets: ${{ needs.plan.outputs.test_targets }}
       build_targets: ${{ needs.plan.outputs.build_targets }}
       sdk_packages: ${{ needs.plan.outputs.sdk_packages }}
+      release_version: true
       save_cache: true
     secrets:
       NEXUS_CI_PASSWORD: ${{ secrets.NEXUS_CI_PASSWORD }}

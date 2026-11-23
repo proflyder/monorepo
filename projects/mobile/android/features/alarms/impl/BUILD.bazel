@@ -1,5 +1,4 @@
-load("@rules_kotlin//kotlin:android.bzl", "kt_android_local_test")
-load("//platform/android:defs.bzl", "metro_android_library")
+load("//platform/android:defs.bzl", "home_android_local_test", "metro_android_library")
 load(":robolectric_android_all.bzl", "android_all_dir")
 
 package(default_visibility = ["//visibility:public"])
@@ -35,7 +34,7 @@ metro_android_library(
     ],
 )
 
-kt_android_local_test(
+home_android_local_test(
     name = "selection_animation_test",
     srcs = [
         "src/test/kotlin/dev/proflyder/home/feature/alarms/domain/SaveAlarmLabelTest.kt",
@@ -75,7 +74,7 @@ android_all_dir(
     jar_name = "android-all-instrumented-15-robolectric-13954326-i7.jar",
 )
 
-kt_android_local_test(
+home_android_local_test(
     name = "item_layout_test",
     srcs = ["src/test/kotlin/dev/proflyder/home/feature/alarms/presentation/AlarmItemLayoutTest.kt"],
     associates = [":impl"],
@@ -109,7 +108,7 @@ kt_android_local_test(
     ],
 )
 
-kt_android_local_test(
+home_android_local_test(
     name = "adapter_payload_test",
     srcs = ["src/test/kotlin/dev/proflyder/home/feature/alarms/presentation/AlarmAdapterPayloadTest.kt"],
     associates = [":impl"],
@@ -145,7 +144,7 @@ kt_android_local_test(
     ],
 )
 
-kt_android_local_test(
+home_android_local_test(
     name = "selection_bar_test",
     srcs = ["src/test/kotlin/dev/proflyder/home/feature/alarms/presentation/AlarmSelectionBarTest.kt"],
     associates = [":impl"],
@@ -178,7 +177,7 @@ kt_android_local_test(
     ],
 )
 
-kt_android_local_test(
+home_android_local_test(
     name = "repeat_sheet_test",
     srcs = ["src/test/kotlin/dev/proflyder/home/feature/alarms/presentation/AlarmRepeatSheetTest.kt"],
     associates = [":impl"],
@@ -214,7 +213,7 @@ kt_android_local_test(
     ],
 )
 
-kt_android_local_test(
+home_android_local_test(
     name = "editor_screenshot_test",
     srcs = ["src/test/kotlin/dev/proflyder/home/feature/alarms/presentation/AlarmEditorScreenshotTest.kt"],
     associates = [":impl"],
