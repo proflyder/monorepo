@@ -51,6 +51,16 @@ pub trait PushApi: Send + Sync {
         deep_link: Option<&'a str>,
         device_id: Option<&'a str>,
     ) -> BoxFuture<'a, Result<Delivery, String>>;
+
+    fn notify_alerts<'a>(
+        &'a self,
+        title: &'a str,
+        body: &'a str,
+        deep_link: Option<&'a str>,
+        device_id: Option<&'a str>,
+    ) -> BoxFuture<'a, Result<Delivery, String>> {
+        self.notify(title, body, deep_link, device_id)
+    }
 }
 
 #[derive(Clone)]
@@ -145,6 +155,25 @@ impl PushApi for Client {
                 json!({"reason": reason, "deviceId": device_id.unwrap_or_default()}),
             )
             .await
+        })
+    }
+
+    fn notify_alerts<'a>(
+        &'a self,
+        title: &'a str,
+        body: &'a str,
+        deep_link: Option<&'a str>,
+        device_id: Option<&'a str>,
+    ) -> BoxFuture<'a, Result<Delivery, String>> {
+        Box::pin(async move {
+            let mut payload = json!({"title": title, "body": body, "module": "alerts"});
+            if let Some(link) = deep_link {
+                payload["deepLink"] = json!(link);
+            }
+            if let Some(id) = device_id {
+                payload["deviceId"] = json!(id);
+            }
+            self.post("/v1/push/notify", payload).await
         })
     }
 

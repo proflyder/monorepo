@@ -8,9 +8,14 @@ DEPS = [
     "@crates//:http",
     "@crates//:serde",
     "@crates//:serde_json",
+    "@crates//:rustls",
     "@crates//:sha2",
     "@crates//:subtle",
     "@crates//:thiserror",
+    "@crates//:reqwest",
+    "@crates//:tokio",
+    "@crates//:tracing",
+    "@crates//:tokio-util",
     "//packages/rust/home-secret:home_secret",
 ]
 
@@ -28,7 +33,7 @@ rust_test(
     crate = ":home_app_auth",
     edition = "2024",
     lint_config = ":workspace_lints",
-    deps = DEPS + ["@crates//:tokio"],
+    deps = DEPS,
 )
 
 extract_cargo_lints(

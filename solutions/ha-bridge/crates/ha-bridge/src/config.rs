@@ -237,27 +237,7 @@ pub(crate) fn service_token(
     getenv: &dyn Fn(&str) -> Option<String>,
     read_file: &dyn Fn(&str) -> std::io::Result<Vec<u8>>,
 ) -> Result<Option<Token>, ConfigError> {
-    let file_key = "SCHEDULER_SERVICE_TOKEN_FILE";
-    if let Some(path) = non_empty(getenv(file_key)) {
-        return match read_file(&path) {
-            Ok(data) => {
-                let value = String::from_utf8_lossy(&data);
-                let value = value.trim();
-                if value.is_empty() {
-                    return Err(ConfigError::EmptyTokenFile { name: file_key });
-                }
-                Ok(Some(Token::new(value)))
-            }
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                token(getenv, read_file, "SCHEDULER_TOKEN")
-            }
-            Err(_) => Err(ConfigError::TokenFile { name: file_key }),
-        };
-    }
-    if let Some(value) = non_empty(getenv("SCHEDULER_SERVICE_TOKEN")) {
-        return Ok(Some(Token::new(value)));
-    }
-    token(getenv, read_file, "SCHEDULER_TOKEN")
+    token(getenv, read_file, "SCHEDULER_SERVICE_TOKEN")
 }
 
 pub(crate) fn token(
@@ -426,7 +406,7 @@ mod tests {
         vec![
             ("HA_URL", "http://ha.example:8123"),
             ("SCHEDULER_ENDPOINT", "http://scheduler.example:8098"),
-            ("SCHEDULER_TOKEN", "scheduler-secret"),
+            ("SCHEDULER_SERVICE_TOKEN", "scheduler-secret"),
             ("BRIDGE_CONSUMER_ID", "ha-bridge-home"),
         ]
     }

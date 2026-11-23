@@ -121,7 +121,7 @@ mod tests {
                 "HA_URL" => Some("http://ha.example:8123".to_owned()),
                 "HA_TOKEN" => Some("ha".to_owned()),
                 "SCHEDULER_ENDPOINT" => Some("http://scheduler.example:8098".to_owned()),
-                "SCHEDULER_TOKEN" => Some("scheduler".to_owned()),
+                "SCHEDULER_SERVICE_TOKEN" => Some("scheduler".to_owned()),
                 "CONTROL_TOKEN" => Some("control".to_owned()),
                 "CONTROL_CONSUMER_ID" => Some("ha-control-home".to_owned()),
                 _ => None,

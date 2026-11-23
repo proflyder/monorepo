@@ -69,12 +69,10 @@ pub struct Config {
     pub app_token: String,
 
     pub scheduler_url: String,
-    pub scheduler_token_file: String,
     pub scheduler_service_token_file: String,
     pub scheduler_token: String,
 
     pub push_url: String,
-    pub push_token_file: String,
     pub push_service_token_file: String,
     pub push_token: String,
 
@@ -141,11 +139,9 @@ impl Config {
             app_token_file: trimmed(getenv, "MCP_APP_TOKEN_FILE"),
             app_token: String::new(),
             scheduler_url: trimmed(getenv, "MCP_SCHEDULER_URL"),
-            scheduler_token_file: trimmed(getenv, "MCP_SCHEDULER_TOKEN_FILE"),
             scheduler_service_token_file: trimmed(getenv, "MCP_SCHEDULER_SERVICE_TOKEN_FILE"),
             scheduler_token: String::new(),
             push_url: trimmed(getenv, "MCP_PUSH_URL"),
-            push_token_file: trimmed(getenv, "MCP_PUSH_TOKEN_FILE"),
             push_service_token_file: trimmed(getenv, "MCP_PUSH_SERVICE_TOKEN_FILE"),
             push_token: String::new(),
             chat_db: value_or(getenv, "MCP_CHAT_DB", DEFAULT_CHAT_DB),
@@ -372,13 +368,12 @@ fn load_push_files(cfg: &mut Config, read_file: &ReadFile<'_>) -> Result<(), Str
     if !cfg.groups.iter().any(|name| name == "phone") {
         return Ok(());
     }
-    if cfg.push_url.is_empty() || cfg.push_token_file.is_empty() {
-        return Err("group phone requires MCP_PUSH_URL and MCP_PUSH_TOKEN_FILE".to_owned());
+    if cfg.push_url.is_empty() || cfg.push_service_token_file.is_empty() {
+        return Err("group phone requires MCP_PUSH_URL and MCP_PUSH_SERVICE_TOKEN_FILE".to_owned());
     }
-    cfg.push_token = read_service_secret(
+    cfg.push_token = read_secret(
         read_file,
         &cfg.push_service_token_file,
-        &cfg.push_token_file,
         "MCP_PUSH_SERVICE_TOKEN_FILE",
     )?;
     Ok(())
@@ -388,15 +383,14 @@ fn load_scheduler_files(cfg: &mut Config, read_file: &ReadFile<'_>) -> Result<()
     if !cfg.groups.iter().any(|name| name == "time") && cfg.app_token_file.is_empty() {
         return Ok(());
     }
-    if cfg.scheduler_url.is_empty() || cfg.scheduler_token_file.is_empty() {
+    if cfg.scheduler_url.is_empty() || cfg.scheduler_service_token_file.is_empty() {
         return Err(
-            "group time requires MCP_SCHEDULER_URL and MCP_SCHEDULER_TOKEN_FILE".to_owned(),
+            "group time requires MCP_SCHEDULER_URL and MCP_SCHEDULER_SERVICE_TOKEN_FILE".to_owned(),
         );
     }
-    cfg.scheduler_token = read_service_secret(
+    cfg.scheduler_token = read_secret(
         read_file,
         &cfg.scheduler_service_token_file,
-        &cfg.scheduler_token_file,
         "MCP_SCHEDULER_SERVICE_TOKEN_FILE",
     )?;
     Ok(())
@@ -465,31 +459,6 @@ fn load_telegram_files(
     cfg.telegram_token = token;
     cfg.telegram_chat_id = chat;
     Ok(())
-}
-
-fn read_service_secret(
-    read_file: &ReadFile<'_>,
-    service_file: &str,
-    legacy_file: &str,
-    name: &str,
-) -> Result<String, String> {
-    if service_file.is_empty() {
-        return read_secret(read_file, legacy_file, name);
-    }
-    match read_file(service_file) {
-        Ok(data) => {
-            let value = String::from_utf8_lossy(&data);
-            let value = value.trim();
-            if value.is_empty() {
-                return Err(format!("{name} is empty"));
-            }
-            Ok(value.to_owned())
-        }
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            read_secret(read_file, legacy_file, name)
-        }
-        Err(_) => Err(format!("{name}: cannot read file")),
-    }
 }
 
 fn read_secret(read_file: &ReadFile<'_>, path: &str, variable: &str) -> Result<String, String> {
@@ -606,7 +575,7 @@ mod tests {
             ("MCP_AUTH_TOKEN_FILE", "/token"),
             ("MCP_GROUPS", "time"),
             ("MCP_SCHEDULER_URL", "http://scheduler:8098"),
-            ("MCP_SCHEDULER_TOKEN_FILE", "/scheduler-token"),
+            ("MCP_SCHEDULER_SERVICE_TOKEN_FILE", "/scheduler-token"),
         ];
         let config = Config::load_from(&env(&pairs), &read).expect("config");
         assert_eq!(config.scheduler_token, "secret");
@@ -624,7 +593,7 @@ mod tests {
             ("MCP_AUTH_TOKEN_FILE", "/token"),
             ("MCP_GROUPS", "phone"),
             ("MCP_PUSH_URL", "http://phone-push:8095"),
-            ("MCP_PUSH_TOKEN_FILE", "/push-token"),
+            ("MCP_PUSH_SERVICE_TOKEN_FILE", "/push-token"),
         ];
         let config = Config::load_from(&env(&pairs), &read).expect("config");
         assert_eq!(config.push_token, "secret");
@@ -638,7 +607,7 @@ mod tests {
             ("MCP_INFRA_CATALOG_FILE", "/c"),
             ("MCP_APP_TOKEN_FILE", "/app"),
             ("MCP_SCHEDULER_URL", "http://scheduler:8098"),
-            ("MCP_SCHEDULER_TOKEN_FILE", "/scheduler"),
+            ("MCP_SCHEDULER_SERVICE_TOKEN_FILE", "/scheduler"),
         ];
         let read = |path: &str| {
             Ok(if path == "/app" {
@@ -669,7 +638,7 @@ mod tests {
             ("MCP_INFRA_CATALOG_FILE", "/c"),
             ("MCP_APP_TOKEN_FILE", "/app"),
             ("MCP_SCHEDULER_URL", "http://scheduler:8098"),
-            ("MCP_SCHEDULER_TOKEN_FILE", "/scheduler"),
+            ("MCP_SCHEDULER_SERVICE_TOKEN_FILE", "/scheduler"),
             ("MCP_CHAT_HERMES_URL", "http://relay:8644"),
             ("MCP_CHAT_HERMES_TOKEN_FILE", "/relay"),
             ("MCP_CHAT_PROMPT_FILE", "/prompt"),

@@ -241,7 +241,7 @@ impl Chat {
         }
         let link = format!("home://chat/message/{id}");
         tokio::spawn(async move {
-            if let Err(error) = push.notify(&title, &body, Some(&link), None).await {
+            if let Err(error) = push.notify_alerts(&title, &body, Some(&link), None).await {
                 tracing::warn!(%error, "chat: push failed");
             }
         });
@@ -313,9 +313,21 @@ impl Chat {
     }
 
     pub fn page(&self, before: Option<i64>, limit: Option<usize>) -> Result<Page, ErrorKey> {
+        self.page_for(before, limit, true)
+    }
+
+    pub fn page_for(
+        &self,
+        before: Option<i64>,
+        limit: Option<usize>,
+        include_alerts: bool,
+    ) -> Result<Page, ErrorKey> {
         let limit = limit.unwrap_or(DEFAULT_PAGE).clamp(1, MAX_PAGE);
         let cursor = self.store.cursor().map_err(storage_key)?;
-        let (messages, has_more) = self.store.page_before(before, limit).map_err(storage_key)?;
+        let (messages, has_more) = self
+            .store
+            .page_before(before, limit, include_alerts)
+            .map_err(storage_key)?;
         Ok(Page {
             messages: messages
                 .into_iter()
@@ -327,9 +339,13 @@ impl Chat {
     }
 
     pub fn snapshot(&self, after: i64) -> Result<Vec<Message>, ErrorKey> {
+        self.snapshot_for(after, true)
+    }
+
+    pub fn snapshot_for(&self, after: i64, include_alerts: bool) -> Result<Vec<Message>, ErrorKey> {
         let changed = self
             .store
-            .changed_after(after, SNAPSHOT_LIMIT)
+            .changed_after(after, SNAPSHOT_LIMIT, include_alerts)
             .map_err(storage_key)?;
         Ok(changed
             .into_iter()
@@ -655,12 +671,7 @@ async fn list(
     principal: Option<Extension<Principal>>,
 ) -> Response<Body> {
     let alerts = alerts_allowed(principal.as_ref());
-    respond(chat.page(query.before, query.limit).map(|mut page| {
-        if !alerts {
-            page.messages.retain(|message| message.kind != Kind::Alert);
-        }
-        page
-    }))
+    respond(chat.page_for(query.before, query.limit, alerts))
 }
 
 async fn send(State(chat): State<Arc<Chat>>, body: axum::body::Bytes) -> Response<Body> {
@@ -681,14 +692,13 @@ async fn events(
 ) -> Response<Body> {
     let alerts = alerts_allowed(principal.as_ref());
     let receiver = chat.subscribe();
-    let snapshot = match chat.snapshot(query.after.unwrap_or(0)) {
+    let snapshot = match chat.snapshot_for(query.after.unwrap_or(0), alerts) {
         Ok(snapshot) => snapshot,
         Err(key) => return error_response(key),
     };
     let initial = stream::iter(
         snapshot
             .into_iter()
-            .filter(move |message| alerts || message.kind != Kind::Alert)
             .map(|message| Ok(message_event(&message))),
     );
     Sse::new(initial.chain(live_events(receiver, alerts)))
@@ -697,7 +707,9 @@ async fn events(
 }
 
 fn alerts_allowed(principal: Option<&Extension<Principal>>) -> bool {
-    principal.is_none_or(|principal| principal.0.allows(Module::Alerts))
+    principal
+        .as_ref()
+        .is_some_and(|principal| principal.0.allows(Module::Alerts))
 }
 
 fn live_events(

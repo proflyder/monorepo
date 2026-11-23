@@ -117,12 +117,21 @@ impl Modules {
         MODULES.iter().copied().collect()
     }
 
+    #[must_use]
+    pub fn all_but_admin() -> Self {
+        MODULES
+            .iter()
+            .copied()
+            .filter(|module| *module != Module::Admin)
+            .collect()
+    }
+
     pub fn parse(values: &[String]) -> Result<Self, Error> {
         let mut modules = BTreeSet::new();
         for value in values {
-            let module =
-                Module::from_id(value).ok_or_else(|| Error::UnknownModule(value.clone()))?;
-            modules.insert(module);
+            if let Some(module) = Module::from_id(value) {
+                modules.insert(module);
+            }
         }
         Ok(Self { granted: modules })
     }
@@ -145,6 +154,16 @@ impl Modules {
         let mut modules = self.granted.clone();
         modules.insert(Module::Base);
         modules
+    }
+
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.granted.is_empty()
+    }
+
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.granted.len()
     }
 
     #[must_use]
@@ -281,7 +300,10 @@ impl AccessCache {
     }
 
     pub fn replace(&self, snapshot: AccessSnapshot) {
-        *self.write() = snapshot;
+        let mut current = self.write();
+        if snapshot.revision > current.revision {
+            *current = snapshot;
+        }
     }
 
     #[must_use]
@@ -295,6 +317,18 @@ impl AccessCache {
 
     pub fn authenticate_token(&self, token: &str) -> Option<Principal> {
         self.read().authenticate_token(token)
+    }
+
+    pub fn token_ids_with(&self, module: Module) -> Vec<String> {
+        self.read()
+            .tokens
+            .iter()
+            .filter(|token| {
+                token.owner
+                    || Modules::parse(&token.modules).is_ok_and(|modules| modules.contains(module))
+            })
+            .map(|token| token.id.clone())
+            .collect()
     }
 
     fn read(&self) -> RwLockReadGuard<'_, AccessSnapshot> {
@@ -314,6 +348,8 @@ pub enum Error {
     Json(String),
     #[error("unknown module: {0}")]
     UnknownModule(String),
+    #[error("access client: {0}")]
+    Client(String),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -345,6 +381,118 @@ impl Principal {
             Ok(())
         } else {
             Err(Forbidden::Module(module))
+        }
+    }
+}
+
+const ACCESS_BODY_LIMIT: usize = 1 << 20;
+const ACCESS_TIMEOUT: Duration = Duration::from_secs(5);
+
+pub struct AccessClient {
+    cache: AccessCache,
+    gate: RefreshGate,
+    client: reqwest::Client,
+    url: String,
+    token: String,
+}
+
+impl fmt::Debug for AccessClient {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("AccessClient")
+            .field("url", &self.url)
+            .field("revision", &self.cache.revision())
+            .finish_non_exhaustive()
+    }
+}
+
+impl AccessClient {
+    pub fn new(url: impl Into<String>, token: impl Into<String>) -> Result<Arc<Self>, Error> {
+        let url = url.into();
+        let token = token.into();
+        if url.trim().is_empty() || token.trim().is_empty() {
+            return Err(Error::Client(
+                "access URL and service token are required".into(),
+            ));
+        }
+        let _already_installed = rustls::crypto::ring::default_provider().install_default();
+        let client = reqwest::Client::builder()
+            .timeout(ACCESS_TIMEOUT)
+            .build()
+            .map_err(|error| Error::Client(error.to_string()))?;
+        Ok(Arc::new(Self {
+            cache: AccessCache::default(),
+            gate: RefreshGate::new(Duration::from_secs(5)),
+            client,
+            url,
+            token,
+        }))
+    }
+
+    #[must_use]
+    pub fn cache(&self) -> &AccessCache {
+        &self.cache
+    }
+
+    pub async fn refresh(&self) -> Result<(), Error> {
+        let response = self
+            .client
+            .get(&self.url)
+            .bearer_auth(&self.token)
+            .send()
+            .await
+            .map_err(|_| Error::Client("access request failed".into()))?;
+        if !response.status().is_success() {
+            return Err(Error::Client(format!(
+                "access returned HTTP {}",
+                response.status().as_u16()
+            )));
+        }
+        if response
+            .content_length()
+            .is_some_and(|length| length > ACCESS_BODY_LIMIT as u64)
+        {
+            return Err(Error::Client("access response is too large".into()));
+        }
+        let body = response
+            .bytes()
+            .await
+            .map_err(|_| Error::Client("access body".into()))?;
+        if body.len() > ACCESS_BODY_LIMIT {
+            return Err(Error::Client("access response is too large".into()));
+        }
+        let snapshot = AccessSnapshot::parse(&body)?;
+        self.cache.replace(snapshot);
+        Ok(())
+    }
+
+    pub async fn authenticate(&self, header: Option<&HeaderValue>) -> Option<Principal> {
+        if let Some(principal) = self.cache.authenticate(header) {
+            return Some(principal);
+        }
+        if !self.gate.allow() {
+            return None;
+        }
+        self.refresh().await.ok()?;
+        self.cache.authenticate(header)
+    }
+
+    pub async fn run(
+        self: Arc<Self>,
+        cancel: tokio_util::sync::CancellationToken,
+        interval: Duration,
+    ) {
+        let mut tick = tokio::time::interval(interval);
+        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        loop {
+            tokio::select! {
+                () = cancel.cancelled() => break,
+                _ = tick.tick() => {
+                    if let Err(error) = self.refresh().await {
+                        tracing::warn!(%error, "access refresh failed");
+                    }
+                }
+            }
         }
     }
 }
@@ -477,17 +625,21 @@ mod tests {
 
     #[test]
     fn unknown_and_malformed_snapshots_are_rejected() {
-        assert_eq!(
-            AccessSnapshot::parse(
-                br#"{"revision":1,"tokens":[{"id":"a","name":"a","sha256":"x","modules":["nope"]}]}"#
-            ),
-            Err(Error::UnknownModule("nope".to_owned()))
+        let parsed = AccessSnapshot::parse(
+            br#"{"revision":1,"tokens":[{"id":"a","name":"a","sha256":"x","modules":["nope"]}]}"#,
+        )
+        .expect("unknown modules are ignored");
+        assert!(
+            Modules::parse(&parsed.tokens[0].modules)
+                .expect("ignored")
+                .is_empty()
         );
         assert!(AccessSnapshot::parse(b"{}").is_ok());
         assert!(AccessSnapshot::parse(b"not-json").is_err());
-        assert_eq!(
-            Modules::parse(&["nope".to_owned()]),
-            Err(Error::UnknownModule("nope".to_owned()))
+        assert!(
+            Modules::parse(&["nope".to_owned()])
+                .expect("ignored")
+                .is_empty()
         );
     }
 
@@ -522,6 +674,28 @@ mod tests {
             1,
             "refresh must be rate limited"
         );
+    }
+
+    #[test]
+    fn module_queries_return_only_tokens_with_the_module() {
+        let cache = AccessCache::new(snapshot());
+        let alerts = cache.token_ids_with(Module::Alerts);
+        assert!(alerts.contains(&"owner-id".to_owned()));
+        assert!(!alerts.contains(&"mama-id".to_owned()));
+        assert_eq!(alerts.len(), 1);
+    }
+
+    #[test]
+    fn the_cache_only_accepts_a_larger_revision() {
+        let cache = AccessCache::new(snapshot());
+        let mut older = snapshot();
+        older.revision = 2;
+        cache.replace(older);
+        assert_eq!(cache.revision(), 3);
+        let mut newer = snapshot();
+        newer.revision = 4;
+        cache.replace(newer);
+        assert_eq!(cache.revision(), 4);
     }
 
     #[test]

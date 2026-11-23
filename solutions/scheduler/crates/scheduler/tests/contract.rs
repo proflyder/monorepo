@@ -94,7 +94,7 @@ fn new_router(scenario: &str) -> axum::Router {
     let cache = home_app_auth::AccessCache::new(snapshot);
     let auth = Arc::new(api::AccessAuth::new(
         cache.clone(),
-        home_secret::Token::new(TOKEN),
+        home_secret::Token::new("contract-service-token"),
     ));
     api::router(
         service.clone(),

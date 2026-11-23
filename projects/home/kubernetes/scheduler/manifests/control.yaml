@@ -65,15 +65,17 @@ spec:
               containerPort: 8099
               protocol: TCP
           readinessProbe:
-            exec:
-              command: ["/usr/local/bin/ha-control", "-healthcheck"]
+            httpGet:
+              path: /healthz
+              port: catalog
             initialDelaySeconds: 3
             periodSeconds: 15
             timeoutSeconds: 7
             failureThreshold: 3
           livenessProbe:
-            exec:
-              command: ["/usr/local/bin/ha-control", "-healthcheck"]
+            httpGet:
+              path: /healthz
+              port: catalog
             initialDelaySeconds: 30
             periodSeconds: 60
             timeoutSeconds: 7

@@ -1,9 +1,10 @@
 use std::sync::Arc;
 
 use axum::Json;
-use axum::extract::State;
+use axum::extract::{Query, State};
 use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{IntoResponse, Response};
+use home_app_auth::AccessCache;
 use serde::{Deserialize, Serialize};
 
 use crate::store::{DeviceScope, PushDevice, PushDeviceInput, Store, StoreError};
@@ -14,6 +15,13 @@ use super::auth::{AccessAuth, Caller, error_response};
 pub struct PushState {
     pub store: Arc<Store>,
     pub auth: Arc<AccessAuth>,
+    pub cache: AccessCache,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ListQuery {
+    #[serde(default)]
+    pub module: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -139,9 +147,9 @@ pub async fn register(
         app_version: body.app_version,
         device_name: body.device_name,
     };
-    let now = now_unix();
+    let now = super::now_unix();
     let result = blocking(Arc::clone(&state.store), move |store| {
-        store.register_push_device_for(&input, &principal.id, now)
+        store.register_push_device_for(&input, &principal.id, principal.owner, now)
     })
     .await;
     match result {
@@ -162,7 +170,7 @@ pub async fn rename(
         Ok(caller) => caller,
         Err(response) => return *response,
     };
-    let now = now_unix();
+    let now = super::now_unix();
     let scope = scope(&caller);
     let result = blocking(Arc::clone(&state.store), move |store| {
         store.rename_push_device_for(&body.device_id, &body.device_name, scope, now)
@@ -177,19 +185,36 @@ pub async fn rename(
     }
 }
 
-pub async fn list(State(state): State<PushState>, headers: HeaderMap) -> Response {
+pub async fn list(
+    State(state): State<PushState>,
+    headers: HeaderMap,
+    Query(query): Query<ListQuery>,
+) -> Response {
     let caller = match caller(&state.auth, &headers, home_app_auth::Module::Notifications) {
         Ok(caller) => caller,
         Err(response) => return *response,
     };
     let scope = scope(&caller);
+    let module = query
+        .module
+        .as_deref()
+        .and_then(home_app_auth::Module::from_id);
+    let allowed = module.map(|module| state.cache.token_ids_with(module));
     match blocking(Arc::clone(&state.store), move |store| {
         store.list_push_devices_for(scope)
     })
     .await
     {
         Ok(devices) => Json(DevicesResponse {
-            devices: devices.iter().map(DeviceView::from).collect(),
+            devices: devices
+                .iter()
+                .filter(|device| {
+                    allowed
+                        .as_ref()
+                        .is_none_or(|ids| ids.iter().any(|id| id == &device.token_id))
+                })
+                .map(DeviceView::from)
+                .collect(),
         })
         .into_response(),
         Err(response) => *response,
@@ -232,14 +257,6 @@ where
     }
 }
 
-fn now_unix() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |elapsed| {
-            i64::try_from(elapsed.as_secs()).unwrap_or(i64::MAX)
-        })
-}
-
 fn store_error(failure: &StoreError) -> Response {
     match failure.kind() {
         Some(crate::domain::ErrorKind::InvalidArgument) => {
@@ -249,6 +266,7 @@ fn store_error(failure: &StoreError) -> Response {
             error(StatusCode::TOO_MANY_REQUESTS, "limit exceeded")
         }
         Some(crate::domain::ErrorKind::NotFound) => error(StatusCode::NOT_FOUND, "not found"),
+        Some(crate::domain::ErrorKind::Precondition) => error(StatusCode::CONFLICT, "conflict"),
         _ => error(StatusCode::INTERNAL_SERVER_ERROR, "internal error"),
     }
 }
@@ -277,6 +295,7 @@ mod tests {
         let state = PushState {
             store: Arc::clone(&store),
             auth: Arc::new(AccessAuth::for_tests(TOKEN)),
+            cache: AccessCache::default(),
         };
         let router = Router::new()
             .route("/v1/push/devices", get(list).post(register))

@@ -28,7 +28,7 @@ Hermes ──MCP── mcp-gateway ──phone_find / phone_notify──▶ phon
 
 ## Контракт
 
-Bearer — service-token (`PUSH_SERVICE_TOKEN_FILE`, fallback `PUSH_TOKEN_FILE`), сравнение в постоянное время. App-токены здесь не принимаются. Токены устройств
+Bearer — service-token (`PUSH_SERVICE_TOKEN_FILE`, обязателен, без fallback), сравнение в постоянное время. App-токены здесь не принимаются. Токены устройств
 никогда не возвращаются и не логируются: ответы содержат только счётчики.
 
 | Метод | Назначение |
@@ -75,10 +75,9 @@ Bearer — service-token (`PUSH_SERVICE_TOKEN_FILE`, fallback `PUSH_TOKEN_FILE`)
 | Переменная | Обязательна | По умолчанию | Назначение |
 |---|---|---|---|
 | `PUSH_LISTEN` | нет | `0.0.0.0:8095` | адрес HTTP |
-| `PUSH_TOKEN_FILE` | да | — | legacy/service bearer для `/v1/push/*` |
-| `PUSH_SERVICE_TOKEN_FILE` | нет | — | предпочтительный service-token (fallback на `PUSH_TOKEN_FILE`) |
+| `PUSH_SERVICE_TOKEN_FILE` | да | — | service-token для `/v1/push/*` |
 | `PUSH_SCHEDULER_URL` | да | — | база scheduler'а (реестр устройств) |
-| `PUSH_SCHEDULER_TOKEN_FILE` | да | — | bearer scheduler'а (`scheduler-auth#token`) |
+| `PUSH_SCHEDULER_SERVICE_TOKEN_FILE` | да | — | service-token scheduler'а (`scheduler-auth#service_token`) |
 | `PUSH_FCM_SERVICE_ACCOUNT_FILE` | да | — | JSON сервис-аккаунта FCM |
 | `PUSH_TOKEN_URL` | нет | `https://oauth2.googleapis.com/token` | OAuth endpoint (тесты) |
 | `PUSH_FCM_URL` | нет | `https://fcm.googleapis.com` | база FCM API (тесты) |

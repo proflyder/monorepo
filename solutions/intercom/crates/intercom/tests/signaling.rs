@@ -41,7 +41,8 @@ async fn spawn() -> Server {
         Vec::new(),
         Arc::new(SystemClock),
     ));
-    let access = home_app_auth::AccessCache::new(home_app_auth::AccessSnapshot {
+    let access = home_app_auth::AccessClient::new("http://test", "test").expect("client");
+    access.cache().replace(home_app_auth::AccessSnapshot {
         revision: 1,
         tokens: vec![home_app_auth::TokenRecord {
             id: "phone".to_owned(),
@@ -60,8 +61,6 @@ async fn spawn() -> Server {
         &phone.id,
         home_secret::Token::new(STATION),
         &station.id,
-        "",
-        "",
     );
     let api = Api::new(intercom, "test");
     let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");

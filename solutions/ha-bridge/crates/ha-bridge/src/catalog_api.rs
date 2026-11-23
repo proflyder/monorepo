@@ -6,7 +6,7 @@ use axum::extract::State;
 use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
-use home_app_auth::{AccessCache, AccessSnapshot, Forbidden, Module, RefreshGate};
+use home_app_auth::{AccessClient, Forbidden, Module};
 use serde::Serialize;
 
 use crate::catalog::{Catalog, Entry, Light, Volume};
@@ -93,25 +93,11 @@ struct CatalogResponse {
 #[derive(Clone)]
 struct AppState {
     source: Arc<dyn CatalogSource>,
-    access: AccessCache,
-    access_url: String,
-    service_token: String,
-    gate: Arc<RefreshGate>,
+    access: Arc<AccessClient>,
 }
 
-pub fn router(
-    source: Arc<dyn CatalogSource>,
-    access: AccessCache,
-    access_url: String,
-    service_token: String,
-) -> Router {
-    let state = AppState {
-        source,
-        access,
-        access_url,
-        service_token,
-        gate: Arc::new(RefreshGate::new(std::time::Duration::from_secs(5))),
-    };
+pub fn router(source: Arc<dyn CatalogSource>, access: Arc<AccessClient>) -> Router {
+    let state = AppState { source, access };
     Router::new()
         .route("/v1/catalog", get(catalog))
         .route("/healthz", get(healthz))
@@ -124,21 +110,10 @@ async fn healthz() -> StatusCode {
 }
 
 async fn catalog(State(state): State<AppState>, headers: HeaderMap) -> Response {
-    let url = state.access_url.clone();
-    let token = state.service_token.clone();
-    let header = headers.get(header::AUTHORIZATION).cloned();
-    let principal = home_app_auth::authenticate_with_refresh(
-        &state.access,
-        &state.gate,
-        header.as_ref(),
-        || async move {
-            if url.is_empty() {
-                return Err("access refresh is not configured".to_owned());
-            }
-            fetch_access(&url, &token).await
-        },
-    )
-    .await;
+    let principal = state
+        .access
+        .authenticate(headers.get(header::AUTHORIZATION))
+        .await;
     let Some(principal) = principal else {
         return unauthorized();
     };
@@ -266,31 +241,7 @@ fn text(status: StatusCode, body: &'static str) -> Response {
         .into_response()
 }
 
-pub async fn fetch_access(url: &str, token: &str) -> Result<AccessSnapshot, String> {
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(5))
-        .build()
-        .map_err(|error| format!("access client: {error}"))?;
-    let response = client
-        .get(url)
-        .bearer_auth(token)
-        .send()
-        .await
-        .map_err(|_| "access request failed".to_owned())?;
-    if !response.status().is_success() {
-        return Err(format!(
-            "access returned HTTP {}",
-            response.status().as_u16()
-        ));
-    }
-    let body = response
-        .bytes()
-        .await
-        .map_err(|_| "access body".to_owned())?;
-    AccessSnapshot::parse(&body).map_err(|error| error.to_string())
-}
-
-fn unauthorized() -> Response {
+pub fn unauthorized() -> Response {
     let mut response = text(StatusCode::UNAUTHORIZED, "unauthorized\n");
     response
         .headers_mut()
@@ -314,7 +265,7 @@ mod tests {
     use super::*;
     use crate::catalog::{LightInput, Raw, Rules, build};
     use crate::discovery::{DiscoveryError, Snapshot};
-    use home_app_auth::{Modules, TokenRecord, sha256_hex};
+    use home_app_auth::{AccessSnapshot, Modules, TokenRecord, sha256_hex};
 
     struct Source {
         snapshot: Result<Snapshot, DiscoveryError>,
@@ -401,15 +352,16 @@ mod tests {
                 },
             ],
         };
-        let access = AccessCache::new(snapshot);
-        let owner = access.authenticate_token("owner").expect("owner");
+        let access = AccessClient::new("http://test", "test").expect("client");
+        access.cache().replace(snapshot);
+        let owner = access.cache().authenticate_token("owner").expect("owner");
         assert!(owner.require(Module::Home).is_ok());
-        let chat = access.authenticate_token("chat").expect("chat");
+        let chat = access.cache().authenticate_token("chat").expect("chat");
         assert_eq!(
             chat.require(Module::Home),
             Err(Forbidden::Module(Module::Home))
         );
-        assert!(access.authenticate_token("wrong").is_none());
+        assert!(access.cache().authenticate_token("wrong").is_none());
     }
 
     #[test]

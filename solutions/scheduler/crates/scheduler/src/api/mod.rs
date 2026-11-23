@@ -35,6 +35,11 @@ use auth::BearerAuth;
 
 pub const MAX_BODY_BYTES: usize = 1 << 20;
 
+#[must_use]
+pub fn now_unix() -> i64 {
+    jiff::Timestamp::now().as_second()
+}
+
 #[derive(Clone)]
 struct ConnectFallback {
     methods: Arc<HashSet<String>>,
@@ -146,6 +151,7 @@ pub fn router(
     let push = push::PushState {
         store: Arc::clone(&store),
         auth: Arc::clone(&auth),
+        cache: cache.clone(),
     };
     let access = AccessState {
         store,

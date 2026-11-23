@@ -430,17 +430,11 @@ class ManifestTests(unittest.TestCase):
             env["MCP_SCHEDULER_URL"], "http://scheduler.home-assistant.svc.cluster.local:8098"
         )
         self.assertEqual(
-            env["MCP_SCHEDULER_TOKEN_FILE"], "/run/secrets/mcp-gateway-scheduler/token"
-        )
-        self.assertEqual(
             env["MCP_SCHEDULER_SERVICE_TOKEN_FILE"],
             "/run/secrets/mcp-gateway-scheduler/service_token",
         )
         self.assertEqual(
             env["MCP_PUSH_URL"], "http://phone-push.home-assistant.svc.cluster.local:8095"
-        )
-        self.assertEqual(
-            env["MCP_PUSH_TOKEN_FILE"], "/run/secrets/mcp-gateway-scheduler/token"
         )
         self.assertEqual(
             env["MCP_PUSH_SERVICE_TOKEN_FILE"],
@@ -613,10 +607,13 @@ class ManifestTests(unittest.TestCase):
         )
         scheduler = by_name["mcp-gateway-scheduler"]["spec"]
         self.assertEqual(
-            scheduler["dataFrom"],
-            [{"extract": {"key": "k8s/home-assistant/scheduler-auth"}}],
+            {entry["secretKey"] for entry in scheduler["data"]},
+            {"token", "service_token"},
         )
-        self.assertNotIn("data", scheduler)
+        for entry in scheduler["data"]:
+            self.assertEqual(
+                entry["remoteRef"]["key"], "k8s/home-assistant/scheduler-auth"
+            )
         for doc in docs:
             self.assertEqual(doc["spec"]["target"]["creationPolicy"], "Owner")
             self.assertEqual(doc["spec"]["target"]["deletionPolicy"], "Retain")

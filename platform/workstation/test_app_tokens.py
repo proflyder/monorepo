@@ -29,6 +29,17 @@ class FakeBao:
         raise AssertionError((method, path))
 
 
+class ModuleCatalogTests(unittest.TestCase):
+    def test_python_and_rust_module_lists_match(self):
+        import pathlib
+        import re
+
+        root = pathlib.Path(__file__).resolve().parents[2]
+        rust = (root / "packages/rust/home-app-auth/src/lib.rs").read_text()
+        modules = set(re.findall(r'Self::\w+ => "([a-z_]+)"', rust))
+        self.assertEqual(modules, set(app_tokens.MODULES))
+
+
 class PreflightTests(unittest.TestCase):
     def test_legacy_value_is_found_everywhere_except_scheduler_auth(self):
         import base64
@@ -86,7 +97,7 @@ class PreflightTests(unittest.TestCase):
 
 class IssueTests(unittest.TestCase):
     def test_issue_stores_only_the_hash_and_keeps_the_other_fields(self):
-        bao = FakeBao({"token": "mama", "vpn.json": "{}"})
+        bao = FakeBao({"token": "mama", "service_token": "old", "vpn.json": "{}"})
         values = app_tokens.issue(bao, app_tokens.PATH, "owner", "home_secret")
         self.assertEqual(values["token"], "mama")
         self.assertEqual(values["vpn.json"], "{}")
@@ -97,7 +108,7 @@ class IssueTests(unittest.TestCase):
         self.assertTrue(entry["owner"])
         self.assertIn("admin", entry["modules"])
         self.assertNotEqual(values["service_token"], "mama")
-        self.assertEqual(values["service_token_previous"], "mama")
+        self.assertEqual(values["service_token_previous"], "old")
         self.assertEqual(bao.calls[0][0], "GET")
         self.assertEqual(bao.calls[1][0], "POST")
 
@@ -107,6 +118,15 @@ class IssueTests(unittest.TestCase):
         self.assertEqual(len(second["tokens"]), 1)
         self.assertEqual(second["tokens"][0]["sha256"], app_tokens.digest("two"))
 
+    def test_init_creates_the_service_token_once_and_never_prints(self):
+        bao = FakeBao({"token": "mama"})
+        self.assertTrue(app_tokens.init_service_token(bao, app_tokens.PATH))
+        created = bao.values["service_token"]
+        self.assertTrue(created)
+        self.assertEqual(bao.values["service_token_previous"], "")
+        self.assertFalse(app_tokens.init_service_token(bao, app_tokens.PATH))
+        self.assertEqual(bao.values["service_token"], created)
+
     def test_finalize_removes_the_previous_service_token(self):
         bao = FakeBao({"token": "mama", "service_token": "new", "service_token_previous": "old"})
         values = app_tokens.finalize(bao, app_tokens.PATH)
@@ -115,7 +135,7 @@ class IssueTests(unittest.TestCase):
         self.assertEqual(bao.calls[1][2]["options"]["cas"], 7)
 
     def test_dry_run_never_writes_or_prints_a_token(self):
-        bao = FakeBao({"token": "mama"})
+        bao = FakeBao({"token": "mama", "service_token": "previous-service-token"})
         app_tokens.issue(bao, app_tokens.PATH, "owner", "hidden", dry_run=True)
         self.assertEqual([call[0] for call in bao.calls], ["GET"])
         with mock.patch.object(ws, "operator", return_value=bao), mock.patch.object(
@@ -123,26 +143,34 @@ class IssueTests(unittest.TestCase):
         ):
             output = io.StringIO()
             with redirect_stdout(output):
-                app_tokens.main(["--dry-run"])
+                app_tokens.main(["--dry-run", "--token-file", "/dev/null"])
         self.assertNotIn("hidden", output.getvalue())
         self.assertIn("dry run", output.getvalue())
 
-    def test_main_prints_the_token_once_and_never_the_service_token(self):
-        bao = FakeBao({"token": "mama"})
-        with mock.patch.object(ws, "operator", return_value=bao), mock.patch.object(
-            app_tokens, "preflight", return_value=[]
-        ):
-            output = io.StringIO()
-            with redirect_stdout(output):
-                app_tokens.main([])
-        text = output.getvalue()
-        tokens = [line for line in text.splitlines() if line.startswith("home_")]
-        self.assertEqual(len(tokens), 1)
-        seed = json.loads(bao.values["app_tokens"])
-        self.assertEqual(seed["tokens"][0]["sha256"], app_tokens.digest(tokens[0]))
-        self.assertNotIn(bao.values["service_token"], text)
-        self.assertNotIn(bao.values["service_token_previous"], text)
-        self.assertNotIn("mama", text)
+    def test_main_writes_the_owner_token_to_a_private_file_once(self):
+        import pathlib
+        import stat
+        import tempfile
+
+        bao = FakeBao({"token": "mama", "service_token": "previous-service-token"})
+        with tempfile.TemporaryDirectory() as directory:
+            token_file = pathlib.Path(directory) / "owner.token"
+            with mock.patch.object(ws, "operator", return_value=bao), mock.patch.object(
+                app_tokens, "preflight", return_value=[]
+            ):
+                output = io.StringIO()
+                with redirect_stdout(output):
+                    app_tokens.main(["--token-file", str(token_file)])
+            text = output.getvalue()
+            token = token_file.read_text().strip()
+            self.assertTrue(token.startswith("home_"))
+            self.assertEqual(stat.S_IMODE(token_file.stat().st_mode), 0o600)
+            seed = json.loads(bao.values["app_tokens"])
+            self.assertEqual(seed["tokens"][0]["sha256"], app_tokens.digest(token))
+            self.assertNotIn(token, text)
+            self.assertNotIn(bao.values["service_token"], text)
+            self.assertNotIn(bao.values["service_token_previous"], text)
+            self.assertIn(str(token_file), text)
 
 
 if __name__ == "__main__":

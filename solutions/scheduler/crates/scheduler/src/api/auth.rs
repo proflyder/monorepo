@@ -161,39 +161,50 @@ pub enum Caller {
     App(Principal),
 }
 
-fn method_module(path: &str) -> Option<Module> {
+const RPC_MODULES: &[(&str, Option<Module>)] = &[
+    ("GetStatus", Some(Module::Base)),
+    ("ListDueEvents", None),
+    ("AckEvent", None),
+    ("EnqueueTask", Some(Module::Home)),
+    ("CancelTask", Some(Module::Home)),
+    ("CreateSchedule", Some(Module::AlarmsTimers)),
+    ("GetSchedule", Some(Module::AlarmsTimers)),
+    ("ListSchedules", Some(Module::AlarmsTimers)),
+    ("UpdateSchedule", Some(Module::AlarmsTimers)),
+    ("DeleteSchedule", Some(Module::AlarmsTimers)),
+    ("SetScheduleEnabled", Some(Module::AlarmsTimers)),
+    ("SnoozeSchedule", Some(Module::AlarmsTimers)),
+    ("StopSchedule", Some(Module::AlarmsTimers)),
+    ("SkipScheduleOccurrence", Some(Module::AlarmsTimers)),
+    ("StartTimer", Some(Module::AlarmsTimers)),
+    ("GetTimer", Some(Module::AlarmsTimers)),
+    ("ListTimers", Some(Module::AlarmsTimers)),
+    ("PauseTimer", Some(Module::AlarmsTimers)),
+    ("ResumeTimer", Some(Module::AlarmsTimers)),
+    ("CancelTimer", Some(Module::AlarmsTimers)),
+    ("CreateAlarm", Some(Module::AlarmsTimers)),
+    ("GetAlarm", Some(Module::AlarmsTimers)),
+    ("ListAlarms", Some(Module::AlarmsTimers)),
+    ("UpdateAlarm", Some(Module::AlarmsTimers)),
+    ("DeleteAlarm", Some(Module::AlarmsTimers)),
+    ("SetAlarmEnabled", Some(Module::AlarmsTimers)),
+    ("SnoozeAlarm", Some(Module::AlarmsTimers)),
+    ("StopAlarm", Some(Module::AlarmsTimers)),
+    ("CreateScenario", Some(Module::Scenarios)),
+    ("GetScenario", Some(Module::Scenarios)),
+    ("ListScenarios", Some(Module::Scenarios)),
+    ("UpdateScenario", Some(Module::Scenarios)),
+    ("DeleteScenario", Some(Module::Scenarios)),
+    ("SetScenarioEnabled", Some(Module::Scenarios)),
+    ("RunScenario", Some(Module::Scenarios)),
+];
+
+fn method_module(path: &str) -> Option<Option<Module>> {
     let method = path.rsplit('/').next().unwrap_or(path);
-    match method {
-        "GetStatus" => Some(Module::Base),
-        "ListDueEvents" | "AckEvent" => None,
-        "EnqueueTask" | "CancelTask" => Some(Module::Home),
-        "CreateSchedule"
-        | "GetSchedule"
-        | "ListSchedules"
-        | "UpdateSchedule"
-        | "DeleteSchedule"
-        | "SetScheduleEnabled"
-        | "SnoozeSchedule"
-        | "StopSchedule"
-        | "SkipScheduleOccurrence"
-        | "StartTimer"
-        | "GetTimer"
-        | "ListTimers"
-        | "PauseTimer"
-        | "ResumeTimer"
-        | "CancelTimer"
-        | "CreateAlarm"
-        | "GetAlarm"
-        | "ListAlarms"
-        | "UpdateAlarm"
-        | "DeleteAlarm"
-        | "SetAlarmEnabled"
-        | "SnoozeAlarm"
-        | "StopAlarm" => Some(Module::AlarmsTimers),
-        "CreateScenario" | "GetScenario" | "ListScenarios" | "UpdateScenario"
-        | "DeleteScenario" | "SetScenarioEnabled" | "RunScenario" => Some(Module::Scenarios),
-        _ => Some(Module::Admin),
-    }
+    RPC_MODULES
+        .iter()
+        .find(|(name, _)| *name == method)
+        .map(|(_, module)| *module)
 }
 
 fn connect_forbidden(forbidden: Forbidden) -> ConnectError {
@@ -223,7 +234,7 @@ impl Interceptor for AccessAuth {
             };
         match (&caller, module) {
             (Caller::Service, _) => {}
-            (Caller::App(principal), Some(module)) => {
+            (Caller::App(principal), Some(Some(module))) => {
                 principal.require(module).map_err(connect_forbidden)?;
                 tracing::debug!(
                     token = principal.name.as_str(),
@@ -233,13 +244,16 @@ impl Interceptor for AccessAuth {
                 );
                 request.ctx.extensions_mut().insert(principal.clone());
             }
-            (Caller::App(principal), None) => {
+            (Caller::App(principal), Some(None)) => {
                 tracing::warn!(
                     token = principal.name.as_str(),
                     method = path.as_str(),
                     "service-only method called by an application token"
                 );
                 return Err(connect_forbidden(Forbidden::ServiceOnly));
+            }
+            (_, None) => {
+                return Err(connect_forbidden(Forbidden::Module(Module::Admin)));
             }
         }
         next.run(request).await
@@ -302,6 +316,50 @@ mod tests {
     }
 
     #[test]
+    fn the_table_covers_every_registered_rpc() {
+        let expected = [
+            "GetStatus",
+            "ListDueEvents",
+            "AckEvent",
+            "EnqueueTask",
+            "CancelTask",
+            "CreateSchedule",
+            "GetSchedule",
+            "ListSchedules",
+            "UpdateSchedule",
+            "DeleteSchedule",
+            "SetScheduleEnabled",
+            "SnoozeSchedule",
+            "StopSchedule",
+            "SkipScheduleOccurrence",
+            "StartTimer",
+            "GetTimer",
+            "ListTimers",
+            "PauseTimer",
+            "ResumeTimer",
+            "CancelTimer",
+            "CreateAlarm",
+            "GetAlarm",
+            "ListAlarms",
+            "UpdateAlarm",
+            "DeleteAlarm",
+            "SetAlarmEnabled",
+            "SnoozeAlarm",
+            "StopAlarm",
+            "CreateScenario",
+            "GetScenario",
+            "ListScenarios",
+            "UpdateScenario",
+            "DeleteScenario",
+            "SetScenarioEnabled",
+            "RunScenario",
+        ];
+        let mapped: Vec<_> = RPC_MODULES.iter().map(|(name, _)| *name).collect();
+        assert_eq!(mapped, expected);
+        assert_eq!(mapped.len(), expected.len());
+    }
+
+    #[test]
     fn every_method_is_mapped_to_exactly_one_module() {
         for method in [
             "CreateSchedule",
@@ -314,12 +372,13 @@ mod tests {
         ] {
             assert!(method_module(&format!("/home.v1.SchedulerService/{method}")).is_some());
         }
-        assert_eq!(method_module("/x/ListDueEvents"), None);
-        assert_eq!(method_module("/x/AckEvent"), None);
+        assert_eq!(method_module("/x/ListDueEvents"), Some(None));
+        assert_eq!(method_module("/x/AckEvent"), Some(None));
         assert_eq!(
             method_module("/x/GetStatus"),
-            Some(home_app_auth::Module::Base)
+            Some(Some(home_app_auth::Module::Base))
         );
+        assert_eq!(method_module("/x/NotARpc"), None);
     }
 
     #[test]

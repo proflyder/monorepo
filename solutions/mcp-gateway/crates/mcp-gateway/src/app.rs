@@ -3,7 +3,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Context as _;
-use home_app_auth::{AccessCache, AccessSnapshot, RefreshGate};
+use home_app_auth::AccessClient;
 use home_runtime::{Supervisor, shutdown_signal};
 use home_telemetry::TelemetryBuilder;
 use tokio::net::TcpListener;
@@ -220,15 +220,16 @@ pub async fn run() -> anyhow::Result<()> {
     let access = if config.app_token.is_empty() {
         None
     } else {
-        Some(AccessBinding {
-            cache: AccessCache::new(fetch_initial_access(&config).await),
-            url: format!(
-                "{}/v1/access/snapshot",
-                config.scheduler_url.trim_end_matches('/')
-            ),
-            token: config.scheduler_token.clone(),
-            gate: Arc::new(RefreshGate::new(Duration::from_secs(5))),
-        })
+        let url = format!(
+            "{}/v1/access/snapshot",
+            config.scheduler_url.trim_end_matches('/')
+        );
+        let client =
+            AccessClient::new(url, config.scheduler_token.clone()).map_err(anyhow::Error::msg)?;
+        if let Err(error) = client.refresh().await {
+            tracing::warn!(%error, "access snapshot is unavailable");
+        }
+        Some(AccessBinding { client })
     };
     let system = (!config.app_token.is_empty()).then(|| {
         Arc::new(crate::system::Dashboard::new(crate::system::Sources {
@@ -309,24 +310,10 @@ pub async fn run() -> anyhow::Result<()> {
     let supervisor = Supervisor::new();
     let cancel = supervisor.token();
     if let Some(binding) = access {
-        let url = binding.url.clone();
-        let token = binding.token.clone();
-        let cache = binding.cache;
+        let client = binding.client;
         let refresh_cancel = cancel.clone();
         supervisor.spawn("access-refresh", async move {
-            let mut tick = tokio::time::interval(ACCESS_REFRESH);
-            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
-            loop {
-                tokio::select! {
-                    () = refresh_cancel.cancelled() => break,
-                    _ = tick.tick() => {
-                        match fetch_access(&url, &token).await {
-                            Ok(snapshot) => cache.replace(snapshot),
-                            Err(error) => tracing::warn!(%error, "access refresh failed"),
-                        }
-                    }
-                }
-            }
+            client.run(refresh_cancel, ACCESS_REFRESH).await;
         });
     }
     let server = home_http::serve(listener, router, cancel.clone());
@@ -352,49 +339,6 @@ pub async fn run() -> anyhow::Result<()> {
 }
 
 const ACCESS_REFRESH: Duration = Duration::from_secs(30);
-const ACCESS_TIMEOUT: Duration = Duration::from_secs(5);
-
-async fn fetch_initial_access(config: &Config) -> AccessSnapshot {
-    if config.scheduler_url.is_empty() {
-        tracing::warn!("access snapshot URL is empty; application tokens stay rejected");
-        return AccessSnapshot::default();
-    }
-    let url = format!(
-        "{}/v1/access/snapshot",
-        config.scheduler_url.trim_end_matches('/')
-    );
-    match fetch_access(&url, &config.scheduler_token).await {
-        Ok(snapshot) => snapshot,
-        Err(error) => {
-            tracing::warn!(%error, "access snapshot is unavailable");
-            AccessSnapshot::default()
-        }
-    }
-}
-
-async fn fetch_access(url: &str, token: &str) -> Result<AccessSnapshot, String> {
-    let client = reqwest::Client::builder()
-        .timeout(ACCESS_TIMEOUT)
-        .build()
-        .map_err(|error| format!("access client: {error}"))?;
-    let response = client
-        .get(url)
-        .bearer_auth(token)
-        .send()
-        .await
-        .map_err(|_| "access request failed".to_owned())?;
-    if !response.status().is_success() {
-        return Err(format!(
-            "access returned HTTP {}",
-            response.status().as_u16()
-        ));
-    }
-    let body = response
-        .bytes()
-        .await
-        .map_err(|_| "access body".to_owned())?;
-    AccessSnapshot::parse(&body).map_err(|error| error.to_string())
-}
 
 fn non_empty(value: &str) -> Option<String> {
     (!value.trim().is_empty()).then(|| value.trim().to_owned())

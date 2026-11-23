@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Context as _;
-use home_app_auth::{AccessCache, AccessSnapshot};
+use home_app_auth::AccessClient;
 use home_runtime::{Supervisor, shutdown_signal};
 use home_telemetry::TelemetryBuilder;
 use home_worker::{LeaseRequest, SchedulerQueue, Worker, WorkerConfig};
@@ -39,17 +39,19 @@ pub async fn run() -> anyhow::Result<()> {
         config.cache_ttl,
     ));
     let source: Arc<dyn CatalogSource> = provider;
-    let access = AccessCache::new(fetch_initial_access(&config).await);
-    let router = home_http::with_timeout(
-        catalog_api::router(
-            Arc::clone(&source),
-            access.clone(),
-            format!(
-                "{}/v1/access/snapshot",
-                config.scheduler_url.trim_end_matches('/')
-            ),
-            config.scheduler_token.expose().to_owned(),
+    let access = AccessClient::new(
+        format!(
+            "{}/v1/access/snapshot",
+            config.scheduler_url.trim_end_matches('/')
         ),
+        config.scheduler_token.expose(),
+    )
+    .map_err(anyhow::Error::msg)?;
+    if let Err(error) = access.refresh().await {
+        tracing::warn!(%error, "catalog access snapshot is unavailable");
+    }
+    let router = home_http::with_timeout(
+        catalog_api::router(Arc::clone(&source), access.clone()),
         REQUEST_TIMEOUT,
     );
 
@@ -69,28 +71,13 @@ pub async fn run() -> anyhow::Result<()> {
 
     let supervisor = Supervisor::new();
     let cancel = supervisor.token();
-    let url = format!(
-        "{}/v1/access/snapshot",
-        config.scheduler_url.trim_end_matches('/')
-    );
-    let token = config.scheduler_token.expose().to_owned();
-    let cache = access;
-    let refresh_cancel = cancel.clone();
-    supervisor.spawn("access-refresh", async move {
-        let mut tick = tokio::time::interval(ACCESS_REFRESH);
-        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
-        loop {
-            tokio::select! {
-                () = refresh_cancel.cancelled() => break,
-                _ = tick.tick() => {
-                    match fetch_access(&url, &token).await {
-                        Ok(snapshot) => cache.replace(snapshot),
-                        Err(error) => tracing::warn!(%error, "catalog access refresh failed"),
-                    }
-                }
-            }
-        }
-    });
+    {
+        let client = access.clone();
+        let refresh_cancel = cancel.clone();
+        supervisor.spawn("access-refresh", async move {
+            client.run(refresh_cancel, ACCESS_REFRESH).await;
+        });
+    }
 
     if config.execute {
         let scheduler = scheduler_client(&config).context("scheduler client")?;
@@ -206,45 +193,6 @@ fn presence(token: &home_secret::Token) -> &'static str {
 }
 
 const ACCESS_REFRESH: Duration = Duration::from_secs(30);
-const ACCESS_TIMEOUT: Duration = Duration::from_secs(5);
-
-async fn fetch_initial_access(config: &ControlConfig) -> AccessSnapshot {
-    let url = format!(
-        "{}/v1/access/snapshot",
-        config.scheduler_url.trim_end_matches('/')
-    );
-    match fetch_access(&url, config.scheduler_token.expose()).await {
-        Ok(snapshot) => snapshot,
-        Err(error) => {
-            tracing::warn!(%error, "catalog access snapshot is unavailable");
-            AccessSnapshot::default()
-        }
-    }
-}
-
-async fn fetch_access(url: &str, token: &str) -> Result<AccessSnapshot, String> {
-    let client = reqwest::Client::builder()
-        .timeout(ACCESS_TIMEOUT)
-        .build()
-        .map_err(|error| format!("access client: {error}"))?;
-    let response = client
-        .get(url)
-        .bearer_auth(token)
-        .send()
-        .await
-        .map_err(|_| "access request failed".to_owned())?;
-    if !response.status().is_success() {
-        return Err(format!(
-            "access returned HTTP {}",
-            response.status().as_u16()
-        ));
-    }
-    let body = response
-        .bytes()
-        .await
-        .map_err(|_| "access body".to_owned())?;
-    AccessSnapshot::parse(&body).map_err(|error| error.to_string())
-}
 
 #[cfg(test)]
 mod tests {

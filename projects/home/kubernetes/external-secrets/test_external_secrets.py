@@ -44,7 +44,13 @@ class ExternalSecretsContracts(unittest.TestCase):
                     self.assertEqual(doc["spec"]["refreshInterval"], "1h")
                     self.assertEqual(target["creationPolicy"], "Owner")
                     self.assertEqual(target["deletionPolicy"], "Retain")
-                    extract = doc["spec"]["dataFrom"][0]["extract"]["key"]
+                    spec = doc["spec"]
+                    if "dataFrom" in spec:
+                        extract = spec["dataFrom"][0]["extract"]["key"]
+                    else:
+                        keys = {entry["remoteRef"]["key"] for entry in spec["data"]}
+                        self.assertEqual(keys, {f"k8s/{ns}/{name}"})
+                        extract = f"k8s/{ns}/{name}"
                     self.assertEqual(extract, f"k8s/{ns}/{name}")
                     found[(ns, name)] = extract
                 self.assertEqual(found, expected)

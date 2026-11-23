@@ -1600,12 +1600,16 @@ dependencies = [
  "hex",
  "home-secret",
  "http",
+ "reqwest",
+ "rustls",
  "serde",
  "serde_json",
  "sha2 0.11.1",
  "subtle",
  "thiserror",
  "tokio",
+ "tokio-util",
+ "tracing",
 ]
 
 [[package]]

@@ -108,7 +108,7 @@ RINGING --Answer(callee)--> CONNECTING --offer+answer--> ACTIVE
 ## Авторизация
 
 - телефон — `Authorization: Bearer <app_token>`: любой действующий app-токен
-  с модулем `intercom_call` (snapshot scheduler, кэш 30 с);
+  с модулем `intercom_call` (общий AccessClient, refresh 30 с / 5 с на неизвестный токен);
 - колонка — отдельный `station_token` (device secret);
 - identity endpoint'а **выводится из токена**, поля `id`/`kind` в запросе
   игнорируются; `WatchRequest.endpoint_id` допустим только равный identity;
@@ -121,9 +121,8 @@ RINGING --Answer(callee)--> CONNECTING --offer+answer--> ACTIVE
 | Переменная | По умолчанию | |
 |---|---|---|
 | `INTERCOM_LISTEN` | `127.0.0.1:8099` | listener |
-| `INTERCOM_TOKEN` / `_FILE` | — | legacy phone bearer «Мама» (обязателен; доступ проверяется по модулю `intercom_call`) |
-| `INTERCOM_ACCESS_URL` | — | snapshot scheduler `/v1/access/snapshot` |
-| `INTERCOM_SERVICE_TOKEN_FILE` | — | service-token для snapshot (fallback на `INTERCOM_TOKEN`) |
+| `INTERCOM_ACCESS_URL` | — | snapshot scheduler `/v1/access/snapshot` (обязателен) |
+| `INTERCOM_SERVICE_TOKEN_FILE` | — | service-token для snapshot (обязателен) |
 | `INTERCOM_STATION_TOKEN` / `_FILE` | — | station device token (обязателен) |
 | `INTERCOM_PHONE_ENDPOINT_ID` | `phone` | identity телефона |
 | `INTERCOM_STATION_ENDPOINT_ID` | `station` | identity колонки |

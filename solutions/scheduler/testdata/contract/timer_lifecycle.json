@@ -7,7 +7,7 @@
         "method": "POST",
         "path": "/home.v1.SchedulerService/StartTimer",
         "headers": {
-          "Authorization": "Bearer contract-test-token",
+          "Authorization": "Bearer contract-service-token",
           "Content-Type": "application/json"
         },
         "body": {
@@ -42,7 +42,7 @@
         "method": "POST",
         "path": "/home.v1.SchedulerService/GetTimer",
         "headers": {
-          "Authorization": "Bearer contract-test-token",
+          "Authorization": "Bearer contract-service-token",
           "Content-Type": "application/json"
         },
         "body": {
@@ -73,7 +73,7 @@
         "method": "POST",
         "path": "/home.v1.SchedulerService/ListTimers",
         "headers": {
-          "Authorization": "Bearer contract-test-token",
+          "Authorization": "Bearer contract-service-token",
           "Content-Type": "application/json"
         },
         "body": {}
@@ -104,7 +104,7 @@
         "method": "POST",
         "path": "/home.v1.SchedulerService/PauseTimer",
         "headers": {
-          "Authorization": "Bearer contract-test-token",
+          "Authorization": "Bearer contract-service-token",
           "Content-Type": "application/json"
         },
         "body": {
@@ -135,7 +135,7 @@
         "method": "POST",
         "path": "/home.v1.SchedulerService/ResumeTimer",
         "headers": {
-          "Authorization": "Bearer contract-test-token",
+          "Authorization": "Bearer contract-service-token",
           "Content-Type": "application/json"
         },
         "body": {
@@ -166,7 +166,7 @@
         "method": "POST",
         "path": "/home.v1.SchedulerService/CancelTimer",
         "headers": {
-          "Authorization": "Bearer contract-test-token",
+          "Authorization": "Bearer contract-service-token",
           "Content-Type": "application/json"
         },
         "body": {
@@ -196,7 +196,7 @@
         "method": "POST",
         "path": "/home.v1.SchedulerService/CancelTimer",
         "headers": {
-          "Authorization": "Bearer contract-test-token",
+          "Authorization": "Bearer contract-service-token",
           "Content-Type": "application/json"
         },
         "body": {
@@ -226,7 +226,7 @@
         "method": "POST",
         "path": "/home.v1.SchedulerService/PauseTimer",
         "headers": {
-          "Authorization": "Bearer contract-test-token",
+          "Authorization": "Bearer contract-service-token",
           "Content-Type": "application/json"
         },
         "body": {
@@ -260,7 +260,7 @@
         "method": "POST",
         "path": "/home.v1.SchedulerService/StartTimer",
         "headers": {
-          "Authorization": "Bearer contract-test-token",
+          "Authorization": "Bearer contract-service-token",
           "Content-Type": "application/json"
         },
         "body": {
@@ -292,7 +292,7 @@
         "method": "POST",
         "path": "/home.v1.SchedulerService/StartTimer",
         "headers": {
-          "Authorization": "Bearer contract-test-token",
+          "Authorization": "Bearer contract-service-token",
           "Content-Type": "application/json"
         },
         "body": {

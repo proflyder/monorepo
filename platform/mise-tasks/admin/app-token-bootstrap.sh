@@ -5,29 +5,41 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 RUN="$ROOT/platform/workstation/run.sh"
 PY="$ROOT/platform/workstation/app_tokens.py"
 
+kube() {
+  "$ROOT/platform/workstation/with-kube-tunnel.sh" kubectl "$@"
+}
+
 force_sync() {
-  mise run kubectl -- -n home-assistant annotate externalsecret scheduler-auth \
-    force-sync="$(date +%s)" --overwrite >/dev/null
-  mise run kubectl -- -n home-assistant wait --for=condition=Ready \
-    externalsecret/scheduler-auth --timeout=180s
+  for name in scheduler-auth phone-push mcp-gateway-scheduler intercom; do
+    kube -n home-assistant annotate "externalsecret/$name" \
+      force-sync="$(date +%s)" --overwrite >/dev/null
+  done
+  for name in scheduler-auth phone-push mcp-gateway-scheduler intercom; do
+    kube -n home-assistant wait --for=condition=Ready \
+      "externalsecret/$name" --timeout=180s
+  done
+}
+
+verify() {
+  "$ROOT/platform/workstation/fnox.sh" -P kube exec -- "$RUN" "$PY" --verify-service-token
 }
 
 restart() {
   local name="$1"
-  if mise run kubectl -- -n home-assistant get deployment "$name" >/dev/null 2>&1; then
-    mise run kubectl -- -n home-assistant rollout restart "deployment/$name" >/dev/null
-    mise run kubectl -- -n home-assistant rollout status "deployment/$name" --timeout=180s
-  fi
+  kube -n home-assistant get deployment "$name" >/dev/null
+  kube -n home-assistant rollout restart "deployment/$name" >/dev/null
+  kube -n home-assistant rollout status "deployment/$name" --timeout=180s
 }
 
 if [[ " $* " == *" --finalize "* ]]; then
-  "$RUN" "$PY" "$@"
+  "$ROOT/platform/workstation/fnox.sh" -P kube exec -- "$RUN" "$PY" "$@"
   force_sync
   restart scheduler
+  verify
   exit 0
 fi
 
-"$RUN" "$PY" "$@"
+"$ROOT/platform/workstation/fnox.sh" -P kube exec -- "$RUN" "$PY" "$@"
 if [[ " $* " == *" --dry-run "* ]]; then
   exit 0
 fi
@@ -37,7 +49,9 @@ restart scheduler
 for name in phone-push mcp-gateway intercom ha-control ha-bridge ha-scenario hermes voice-proxy; do
   restart "$name"
 done
-"$RUN" "$PY" --finalize
+verify
+"$ROOT/platform/workstation/fnox.sh" -P kube exec -- "$RUN" "$PY" --finalize
 force_sync
 restart scheduler
+verify
 printf '%s\n' "Legacy token is no longer a service token; it remains the app token «Мама»."

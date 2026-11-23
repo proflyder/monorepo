@@ -187,7 +187,7 @@ pub async fn record(
         body: body.body,
         deep_link: body.deep_link,
     };
-    let now = now_unix();
+    let now = super::now_unix();
     let result = blocking(Arc::clone(&state.store), move |store| {
         store.record_notification(&device_id, &input, now)
     })
@@ -278,7 +278,7 @@ pub async fn set_read(
     if let Err(response) = ensure_device(&state, &caller, &device_id).await {
         return *response;
     }
-    let now = now_unix();
+    let now = super::now_unix();
     let id = body.id;
     let read = body.read;
     let result = blocking(Arc::clone(&state.store), move |store| {
@@ -314,7 +314,7 @@ pub async fn read_all(State(state): State<NotificationState>, headers: HeaderMap
     if let Err(response) = ensure_device(&state, &caller, &device_id).await {
         return *response;
     }
-    let now = now_unix();
+    let now = super::now_unix();
     let target = device_id.clone();
     match blocking(Arc::clone(&state.store), move |store| {
         store.mark_notifications_read(&device_id, now)
@@ -455,14 +455,6 @@ where
     }
 }
 
-fn now_unix() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |elapsed| {
-            i64::try_from(elapsed.as_secs()).unwrap_or(i64::MAX)
-        })
-}
-
 fn store_error(failure: &StoreError) -> Response {
     match failure.kind() {
         Some(crate::domain::ErrorKind::InvalidArgument) => {
@@ -472,6 +464,7 @@ fn store_error(failure: &StoreError) -> Response {
             error(StatusCode::TOO_MANY_REQUESTS, "limit exceeded")
         }
         Some(crate::domain::ErrorKind::NotFound) => error(StatusCode::NOT_FOUND, "not found"),
+        Some(crate::domain::ErrorKind::Precondition) => error(StatusCode::CONFLICT, "conflict"),
         _ => error(StatusCode::INTERNAL_SERVER_ERROR, "internal error"),
     }
 }
@@ -751,6 +744,7 @@ mod tests {
                     device_name: "Стас".to_owned(),
                 },
                 "owner",
+                false,
                 1,
             )
             .expect("device");

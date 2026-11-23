@@ -61,7 +61,7 @@ pub async fn run() -> anyhow::Result<()> {
         service.clone(),
         AlarmFacade::new(service),
         auth,
-        cache,
+        cache.clone(),
         vpn_access,
         sync,
     );
@@ -85,6 +85,25 @@ pub async fn run() -> anyhow::Result<()> {
 
     let supervisor = Supervisor::new();
     let cancel = supervisor.token();
+    {
+        let access_cache = cache.clone();
+        let access_store = Arc::clone(&store);
+        let access_cancel = cancel.clone();
+        supervisor.spawn("access-reload", async move {
+            let mut tick = tokio::time::interval(Duration::from_secs(30));
+            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+            loop {
+                tokio::select! {
+                    () = access_cancel.cancelled() => break,
+                    _ = tick.tick() => {
+                        if let Ok(snapshot) = access_store.access_snapshot() {
+                            access_cache.replace(snapshot);
+                        }
+                    }
+                }
+            }
+        });
+    }
     let engine_store = Arc::clone(&store);
     let engine_cancel = cancel.clone();
     let engine_task = engine.clone();
@@ -242,6 +261,7 @@ mod tests {
         Config::load_from(
             &|key| match key {
                 "SCHEDULER_TOKEN" => Some("t".to_owned()),
+                "SCHEDULER_SERVICE_TOKEN" => Some("service".to_owned()),
                 "SCHEDULER_VPN_SETTINGS_FILE" => Some("/run/vpn.json".to_owned()),
                 "SCHEDULER_VPN_SYNC_TOKEN_FILE" => Some("/run/vpn_sync_token".to_owned()),
                 _ => None,
@@ -282,6 +302,7 @@ mod tests {
         let config = Config::load_from(
             &|key| match key {
                 "SCHEDULER_TOKEN" => Some("t".to_owned()),
+                "SCHEDULER_SERVICE_TOKEN" => Some("service".to_owned()),
                 _ => None,
             },
             &|_path| Ok(Vec::new()),

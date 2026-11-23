@@ -37,8 +37,6 @@ spec:
           env:
             - name: INTERCOM_LISTEN
               value: 0.0.0.0:8099
-            - name: INTERCOM_TOKEN_FILE
-              value: /run/secrets/intercom/token
             - name: INTERCOM_ACCESS_URL
               value: http://scheduler.home-assistant.svc.cluster.local:8098/v1/access/snapshot
             - name: INTERCOM_SERVICE_TOKEN_FILE

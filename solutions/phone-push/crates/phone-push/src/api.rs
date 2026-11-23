@@ -50,6 +50,8 @@ pub struct FindBody {
 #[serde(rename_all = "camelCase")]
 pub struct NotifyBody {
     #[serde(default)]
+    pub module: Option<String>,
+    #[serde(default)]
     pub title: String,
     #[serde(default)]
     pub body: String,
@@ -170,8 +172,9 @@ pub async fn deliver(
     history: &HistoryClient,
     now: i64,
     audience: Audience<'_>,
+    module: Option<&str>,
 ) -> Delivery {
-    let devices = match registry.list().await {
+    let devices = match registry.list_for(module).await {
         Ok(devices) => devices,
         Err(error) => {
             tracing::warn!(error = %error, "push registry unavailable");
@@ -249,6 +252,7 @@ async fn find(
             &state.history,
             now(),
             Audience::only(body.device_id.as_deref()),
+            None,
         )
         .await,
     )
@@ -291,6 +295,7 @@ async fn notify(
             &state.history,
             now(),
             Audience::only(body.device_id.as_deref()),
+            body.module.as_deref(),
         )
         .await,
     )
@@ -315,6 +320,7 @@ async fn sync(
             &state.history,
             now(),
             Audience::of_sync(&body),
+            None,
         )
         .await,
     )

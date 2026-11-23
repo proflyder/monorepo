@@ -25,7 +25,9 @@ mise run rollback scheduler --dry-run     # план из units.mjs
 mise run rollback scheduler --yes         # выполнить документированную команду
 ```
 
-`--live` и `rollback --yes` берут admin kubeconfig из OpenBao через fnox
+`with-kube-tunnel.sh` отказывается работать без явного `KUBECONFIG` и
+проверяет, что его сервер — `https://127.0.0.1:16443`; поэтому голый
+`kubectl` и `~/.kube/config` не используются. `--live` и `rollback --yes` берут admin kubeconfig из OpenBao через fnox
 (профиль `kube`) и сами поднимают туннель к API. `rollback` для `forward-only`
 завершается ненулевым кодом, для `pulsar` только печатает команду для
 станции.
@@ -43,50 +45,43 @@ mise run backup:verify [<id>] --dry-run|--yes
 через UI (HA backup) печатает `manual`. Restore не автоматизирован: вывод
 содержит `restore_doc`.
 
-App-токены (модули доступа) выпускаются после первого деплоя PR1:
+App-токены (модули доступа) и service-token:
 
 ```bash
-mise run admin:app-token-bootstrap          # печатает owner-токен один раз
+# 1. до деплоя: создать service_token, если его ещё нет (идемпотентно, молча)
+mise run admin:service-token-init
+
+# 2. после деплоя: bootstrap owner; токен owner пишется в файл 0600
+mise run admin:app-token-bootstrap
+# путь к owner-токену печатается; stdout сам токен не содержит
 ```
 
-Задача сама делает force-sync ESO, перезапуск scheduler, затем phone-push,
-mcp-gateway, intercom, ha-control/ha-bridge/ha-scenario, hermes/voice-proxy,
-после успешного rollout удаляет `service_token_previous` и снова
-перезапускает scheduler. Перед запуском private values Hermes/voice-proxy
-должны брать `HERMES_SCHEDULER_TOKEN` из `scheduler-auth#service_token`, а не
-`#token`: этот файл вне Git. Старый `token` после bootstrap — только app-токен
-«Мама», service-прав у него нет.
+Bootstrap генерирует новый `service_token`, сохраняет старый как
+`service_token_previous`, делает force-sync и wait **всех** ESO-потребителей
+(`scheduler-auth`, `phone-push`, `mcp-gateway-scheduler`, `intercom`),
+перезапускает scheduler и сервисы, проверяет фактический `service_token` в Kubernetes Secrets и в поде
+scheduler (`-service-token-sha256`), затем удаляет `service_token_previous` и снова
+перезапускает scheduler. Если ожидаемый deployment не найден или Secret
+содержит старый токен, задача падает до финализации. Legacy `token` никогда
+не становится service-token и после bootstrap остаётся только app-токеном
+«Мама» (все модули, кроме `admin`).
 
-Команда пишет в OpenBao `secret/k8s/home-assistant/scheduler-auth` только
-sha256 owner-токена (поле `app_tokens`) и **новый случайный** `service_token`;
-старый service-token (или legacy `token` при первом запуске) сохраняется как
-`service_token_previous` только на время ротации. После рестарта scheduler
-импортирует seed, остальные сервисы подхватят snapshot в течение 30 с.
-Дальнейшие токены — через admin API (`/v1/access/tokens`) из приложения.
+Preflight до ротации читает k8s Secrets/ConfigMaps в `home-assistant`, кроме
+производных ESO-секретов (`scheduler-auth`, `phone-push`,
+`mcp-gateway-scheduler`, `intercom`), и останавливается, если находит
+legacy-значение. Аварийный обход — `--skip-preflight`.
 
-### Внешние потребители legacy-токена
+Внешние потребители, которые bootstrap не обновляет:
 
-Bootstrap обновляет только workloads в `home-assistant`. До запуска проверь и
-переведи на `scheduler-auth#service_token`:
-
-- Home Assistant `secrets.yaml` → `scheduler_bearer` (`rest_command.scheduler_rpc`);
-  доставка HA secrets идёт через `ha-config-sync`/ручное обновление, не через
-  этот bootstrap.
-- Hermes и voice-proxy private values → `HERMES_SCHEDULER_TOKEN[_FILE]`
-  (`Secret/runtime-values`/private Helm values), вне Git.
-- локальные admin-файлы: `secrets/home/scheduler.token` (после обновления
-  каталога это уже `service_token`) и `fnox`-профиль `ingress`;
-  перечитай `mise run secrets:file home/scheduler.token`.
-- seed сценариев, `scheduler/deploy.sh`, ingress-verify и разовые
-  `SCHEDULER_TOKEN_FILE` на рабочей машине — тот же локальный файл.
-- ручные e2e/отладочные окружения с `SCHEDULER_TOKEN_FILE`/`SCHEDULER_TOKEN`,
-  если они ходят в service-only RPC.
-
-Автоматический preflight bootstrap читает k8s Secrets/ConfigMaps в
-`home-assistant` (кроме самого `scheduler-auth`) и останавливает ротацию, если
-находит legacy-значение, печатая `Secret/<name>:<key>` или
-`ConfigMap/<name>:<key>`. HAOS secrets и файлы вне кластера он не видит — их
-проверяй по чек-листу. Аварийный обход — `--skip-preflight`.
+- HA `secrets.yaml` → `scheduler_bearer` (`rest_command.scheduler_rpc`);
+- Hermes/voice-proxy private values → `HERMES_SCHEDULER_TOKEN[_FILE]` из
+  `scheduler-auth#service_token` (`runtime-values`/private Helm values);
+- локальные admin-файлы: `secrets/home/scheduler.token` (service-token),
+  `secrets/home/app.token` (legacy app-token для verify/ingress) и
+  `fnox`-профиль `ingress`;
+- seed сценариев, `scheduler/deploy.sh` и разовые `SCHEDULER_TOKEN_FILE`
+  на рабочей машине;
+- ручные e2e/отладочные окружения.
 
 Скрипты с секретами — только `mise run admin:*` (`mise tasks | grep admin:`),
 kubectl/helm — `mise run kubectl|helm -- …`. Разовая команда с kubeconfig:

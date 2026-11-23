@@ -229,7 +229,7 @@ pub async fn register(
         device_name: body.device_name,
     };
     let pool = settings.pool;
-    let now = now_unix();
+    let now = super::now_unix();
     let result = blocking(Arc::clone(&state.store), move |store| {
         store.register_vpn_peer(pool, &input, now)
     })
@@ -317,14 +317,6 @@ where
             "internal error",
         ))),
     }
-}
-
-fn now_unix() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |elapsed| {
-            i64::try_from(elapsed.as_secs()).unwrap_or(i64::MAX)
-        })
 }
 
 fn store_error(failure: &StoreError) -> Response {

@@ -358,7 +358,7 @@
     `notifications`, `chat`, `vpn`, `system`, `infra_reports` (резерв),
     `alerts` (фильтр alert-сообщений в чате), `admin` (`/v1/access/*`).
     Любой действующий токен получает `base`; «Мама» после миграции —
-    `home, scenarios, alarms_timers, intercom_call, notifications`; owner —
+    все модули, кроме `admin` (исторический набор); owner —
     все модули, его нельзя отозвать или лишить `admin`. Проверка — общий
     крейт `home-app-auth` в каждом сервисе; ответ без модуля —
     `403 {"error":"module_forbidden","module":"…"}`. Остальные сервисы
@@ -367,6 +367,8 @@
     телефонам. Причина: один список модулей и одна проверка вместо ролей,
     копипасты и расхождений между сервисами; сервис-к-сервису остаётся на
     отдельном `service_token`, а не на app-токенах. Bootstrap ротирует
-    service-token с окном `service_token_previous`, затем финализирует; push-
-    устройства привязаны к `token_id` регистрации (v9), чужой deviceId — 404;
+    service-token обязателен (init → bootstrap с окном `service_token_previous`,
+    затем finalize); ESO отдаёт только явные ключи; snapshot — общий
+    `AccessClient` (5 с refresh, лимит тела, только больший revision); push-
+    устройства привязаны к `token_id` (v9), чужой deviceId — 404/409;
     `EnqueueTask/CancelTask` для `home` ограничены `control`/`home.control`.

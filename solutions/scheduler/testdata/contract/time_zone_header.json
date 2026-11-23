@@ -7,7 +7,7 @@
         "method": "POST",
         "path": "/home.v1.SchedulerService/CreateSchedule",
         "headers": {
-          "Authorization": "Bearer contract-test-token",
+          "Authorization": "Bearer contract-service-token",
           "Content-Type": "application/json",
           "Time-Zone": "Asia/Almaty"
         },
@@ -62,7 +62,7 @@
         "method": "POST",
         "path": "/home.v1.SchedulerService/GetSchedule",
         "headers": {
-          "Authorization": "Bearer contract-test-token",
+          "Authorization": "Bearer contract-service-token",
           "Content-Type": "application/json",
           "Time-Zone": "Europe/Moscow"
         },
@@ -106,7 +106,7 @@
         "method": "POST",
         "path": "/home.v1.SchedulerService/GetSchedule",
         "headers": {
-          "Authorization": "Bearer contract-test-token",
+          "Authorization": "Bearer contract-service-token",
           "Content-Type": "application/json"
         },
         "body": {

@@ -81,7 +81,7 @@
 | `k8s/home-assistant/mcp-gateway-bb-ssh` | SSH key + known_hosts for bb dispatch from the MCP gateway | ESO → home-assistant |
 | `k8s/home-assistant/mcp-gateway-voice` | voice tool bearer of the MCP gateway | ESO → home-assistant |
 | `k8s/home-assistant/phone-push` | FCM service account (Firebase Cloud Messaging API Admin) for phone-push; service-token — из `scheduler-auth` | ESO → home-assistant |
-| `k8s/home-assistant/scheduler-auth` | app access: legacy `token` («Мама»), seed `app_tokens` (только sha256, импортируется при старте), `service_token` (+ временный `service_token_previous` на время bootstrap), WireGuard peer-sync bearer (`vpn_sync_token`, копия в CT 102 `/etc/wireguard/sync.header`), VPN-профиль (`vpn.json`) | ESO → home-assistant |
+| `k8s/home-assistant/scheduler-auth` | app access: legacy `token` («Мама», все модули кроме admin), seed `app_tokens` (только sha256), обязательный `service_token` (+ временный `service_token_previous` только из прежнего service_token), WireGuard peer-sync bearer (`vpn_sync_token`, копия в CT 102 `/etc/wireguard/sync.header`), VPN-профиль (`vpn.json`) | ESO → home-assistant |
 | `k8s/home-assistant/wakegrant` | wakegrant issuer token and per-machine keys | ESO → home-assistant |
 | `k8s/monitoring/grafana-admin` | Grafana admin login | ESO → monitoring |
 | `k8s/monitoring/heartbeat` | dead-man switch Worker URL and token | ESO → monitoring |

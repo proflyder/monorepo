@@ -91,8 +91,11 @@ impl Config {
             .unwrap_or_else(|| DEFAULT_LISTEN.to_owned());
 
         let token = load_token(getenv, read_file)?;
-        let service_token = load_service_token(getenv, read_file, &token)?;
+        let service_token = load_service_token(getenv, read_file)?;
         let service_token_previous = load_previous_service_token(getenv, read_file)?;
+        if token.ct_eq(service_token.expose()) {
+            return Err(ConfigError::ServiceToken);
+        }
         let access_seed_file = first(getenv, &["SCHEDULER_APP_TOKENS_FILE"]).map(PathBuf::from);
         let owner_device_name =
             first(getenv, &["SCHEDULER_OWNER_DEVICE_NAME"]).unwrap_or_else(|| "Стас".to_owned());
@@ -275,13 +278,12 @@ fn load_token(
 fn load_service_token(
     getenv: &dyn Fn(&str) -> Option<String>,
     read_file: &dyn Fn(&str) -> std::io::Result<Vec<u8>>,
-    legacy: &Secret,
 ) -> Result<Secret, ConfigError> {
     if let Some(token) = first(getenv, &["SCHEDULER_SERVICE_TOKEN"]) {
         return Ok(Secret::new(token));
     }
     let Some(path) = first(getenv, &["SCHEDULER_SERVICE_TOKEN_FILE"]) else {
-        return Ok(legacy.clone());
+        return Err(ConfigError::ServiceToken);
     };
     match read_file(&path) {
         Ok(data) => {
@@ -292,7 +294,6 @@ fn load_service_token(
             }
             Ok(Secret::new(token))
         }
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(legacy.clone()),
         Err(_) => Err(ConfigError::ServiceToken),
     }
 }
@@ -312,7 +313,7 @@ fn load_previous_service_token(
             let token = String::from_utf8_lossy(&data);
             let token = token.trim();
             if token.is_empty() {
-                return Err(ConfigError::ServiceToken);
+                return Ok(None);
             }
             Ok(Some(Secret::new(token)))
         }
@@ -383,6 +384,7 @@ mod tests {
                 .iter()
                 .find(|(name, _)| *name == key)
                 .map(|(_, value)| (*value).to_owned())
+                .or_else(|| (key == "SCHEDULER_SERVICE_TOKEN").then(|| "service-test".to_owned()))
         }
     }
 
@@ -400,7 +402,7 @@ mod tests {
         assert_eq!(config.ring_window, Duration::from_secs(900));
         assert_eq!(config.tick_interval, Duration::from_secs(1));
         assert_eq!(config.token.expose(), "secret");
-        assert_eq!(config.service_token.expose(), "secret");
+        assert_eq!(config.service_token.expose(), "service-test");
         assert_eq!(config.access_seed_file, None);
         assert!(
             !format!("{config:?}").contains("secret"),
@@ -409,7 +411,22 @@ mod tests {
     }
 
     #[test]
-    fn a_service_token_overrides_the_legacy_bearer() {
+    fn the_service_token_is_required_and_must_differ_from_the_app_token() {
+        let error = Config::load_from(
+            &|key| (key == "SCHEDULER_TOKEN").then(|| "legacy".to_owned()),
+            &no_file,
+        )
+        .expect_err("service token");
+        assert!(error.to_string().contains("SCHEDULER_SERVICE_TOKEN"));
+        let error = Config::load_from(
+            &env(&[
+                ("SCHEDULER_TOKEN", "same"),
+                ("SCHEDULER_SERVICE_TOKEN", "same"),
+            ]),
+            &no_file,
+        )
+        .expect_err("same token");
+        assert!(error.to_string().contains("SCHEDULER_SERVICE_TOKEN"));
         let config = Config::load_from(
             &env(&[
                 ("SCHEDULER_TOKEN", "legacy"),
@@ -419,25 +436,26 @@ mod tests {
             &no_file,
         )
         .expect("load");
-        assert_eq!(config.token.expose(), "legacy");
         assert_eq!(config.service_token.expose(), "service");
         assert_eq!(
             config.access_seed_file,
             Some(PathBuf::from("/run/app_tokens"))
         );
+        assert_eq!(config.service_token_previous, None);
     }
 
     #[test]
-    fn a_missing_service_token_file_falls_back_to_the_legacy_token() {
+    fn a_missing_previous_service_token_is_none() {
         let config = Config::load_from(
             &env(&[
                 ("SCHEDULER_TOKEN", "legacy"),
-                ("SCHEDULER_SERVICE_TOKEN_FILE", "/run/service"),
+                ("SCHEDULER_SERVICE_TOKEN", "service"),
+                ("SCHEDULER_SERVICE_TOKEN_PREVIOUS_FILE", "/run/previous"),
             ]),
             &|_| Err(std::io::Error::from(std::io::ErrorKind::NotFound)),
         )
         .expect("load");
-        assert_eq!(config.service_token.expose(), "legacy");
+        assert_eq!(config.service_token_previous, None);
     }
 
     #[test]

@@ -122,7 +122,7 @@ Hermes при переподключении не перезаписывает �
 
 Ответ всегда содержит итоговое локальное время или длительность человеческим
 текстом для озвучки; ошибки планировщика озвучиваются короткой фразой, без
-технических деталей. Токен — `MCP_SCHEDULER_TOKEN_FILE`
+технических деталей. Токен — `MCP_SCHEDULER_SERVICE_TOKEN_FILE`
 (`k8s/home-assistant/scheduler-auth`), URL — `MCP_SCHEDULER_URL`.
 
 ### `phone` (Hermes: найти телефон, уведомление, список телефонов)
@@ -379,11 +379,9 @@ Android ──/v1/chat/*──► mcp-gateway ──► chat relay (voice-proxy)
 | `MCP_BB_DISPATCHER_THREAD_ID` | для voice | — | Постоянный рабочий тред для `profile=work`. |
 | `MCP_VOICE_TOKEN_FILE` | нет | — | Включает `/v1/voice/*`; токен обязан отличаться от MCP-токена. |
 | `MCP_SCHEDULER_URL` | для `time` | — | База `home.v1.SchedulerService`, например `http://scheduler.home-assistant.svc.cluster.local:8098`. |
-| `MCP_SCHEDULER_TOKEN_FILE` | для `time`/app | — | Bearer планировщика; fallback на legacy. |
-| `MCP_SCHEDULER_SERVICE_TOKEN_FILE` | нет | — | `scheduler-auth#service_token`; предпочтительный service-token. |
+| `MCP_SCHEDULER_SERVICE_TOKEN_FILE` | для `time`/app | — | обязательный service-token планировщика (`scheduler-auth#service_token`). |
 | `MCP_PUSH_URL` | для `phone` | — | База `solutions/phone-push`, например `http://phone-push.home-assistant.svc.cluster.local:8095`. |
-| `MCP_PUSH_TOKEN_FILE` | для `phone` | — | Service bearer phone-push; fallback на legacy. |
-| `MCP_PUSH_SERVICE_TOKEN_FILE` | нет | — | `scheduler-auth#service_token` для phone-push. |
+| `MCP_PUSH_SERVICE_TOKEN_FILE` | для `phone` | — | обязательный service-token phone-push. |
 | `MCP_APP_TOKEN_FILE` | нет | — | Включает `/v1/system/*` и `/v1/chat/*`; значение — legacy app-токен «Мама» из `scheduler-auth#token`. |
 | `MCP_CHAT_HERMES_URL` | нет | — | Включает `/v1/chat/*`: база chat relay. Требует `MCP_APP_TOKEN_FILE`. |
 | `MCP_CHAT_HERMES_TOKEN_FILE` | для чата | — | Bearer chat relay (`secret/k8s/home-assistant/hermes-chat-relay`, ключ `token`). |

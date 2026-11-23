@@ -112,13 +112,14 @@ impl Store {
         input: &PushDeviceInput,
         now_unix: i64,
     ) -> Result<PushDevice, StoreError> {
-        self.register_push_device_for(input, "", now_unix)
+        self.register_push_device_for(input, "", true, now_unix)
     }
 
     pub fn register_push_device_for(
         &self,
         input: &PushDeviceInput,
         token_id: &str,
+        allow_claim: bool,
         now_unix: i64,
     ) -> Result<PushDevice, StoreError> {
         let mut device = validate_device(input)?;
@@ -138,6 +139,24 @@ impl Store {
                 "push device belongs to another application token",
             ));
         }
+        if let Some(existing) = existing.as_ref()
+            && existing.token_id.is_empty()
+            && !token_id.is_empty()
+            && !allow_claim
+        {
+            return Err(StoreError::precondition(
+                "push device has no owner and requires an admin claim",
+            ));
+        }
+        if let Some(owner) = self.push_device_by_token(&device.token)?
+            && owner.device_id != device.device_id
+            && !owner.token_id.is_empty()
+            && owner.token_id != token_id
+        {
+            return Err(StoreError::precondition(
+                "push token belongs to another application token",
+            ));
+        }
         let known = existing.is_some();
         if !known && count >= MAX_PUSH_DEVICES {
             return Err(StoreError::limit("too many push devices"));
@@ -147,13 +166,14 @@ impl Store {
         self.call(move |connection| {
             connection.execute(
                 "DELETE FROM notifications WHERE device_id IN (
-                    SELECT device_id FROM push_devices WHERE token = ?1 AND device_id <> ?2
+                    SELECT device_id FROM push_devices
+                    WHERE token = ?1 AND device_id <> ?2 AND token_id = ?3
                 )",
-                params![device.token, device.device_id],
+                params![device.token, device.device_id, token_id],
             )?;
             connection.execute(
-                "DELETE FROM push_devices WHERE token = ?1 AND device_id <> ?2",
-                params![device.token, device.device_id],
+                "DELETE FROM push_devices WHERE token = ?1 AND device_id <> ?2 AND token_id = ?3",
+                params![device.token, device.device_id, token_id],
             )?;
             connection.execute(
                 "INSERT INTO push_devices (device_id, token, platform, app_version, device_name, token_id, created_unix, updated_unix)
@@ -664,13 +684,13 @@ mod tests {
         let mut owner_input = input(TOKEN_A);
         owner_input.device_name = "Стас".to_owned();
         let owner = store
-            .register_push_device_for(&owner_input, "owner", 100)
+            .register_push_device_for(&owner_input, "owner", false, 100)
             .expect("owner device");
         let mut mama_input = input(TOKEN_B);
         mama_input.device_id = "device-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".to_owned();
         mama_input.device_name = "Мама".to_owned();
         let mama = store
-            .register_push_device_for(&mama_input, "mama", 101)
+            .register_push_device_for(&mama_input, "mama", false, 101)
             .expect("member device");
         assert_eq!(owner.token_id, "owner");
         assert_eq!(mama.token_id, "mama");
@@ -704,7 +724,7 @@ mod tests {
         );
         assert!(
             store
-                .register_push_device_for(&input(TOKEN_A), "mama", 103)
+                .register_push_device_for(&input(TOKEN_A), "mama", false, 103)
                 .is_err()
         );
     }
@@ -740,5 +760,63 @@ mod tests {
                 .token_id,
             "mama"
         );
+    }
+    #[tokio::test]
+    async fn a_v8_database_migrates_with_devices_and_empty_ownership() {
+        let (directory, path) = temp_database("v9");
+        {
+            let db = home_sqlite::Db::open(&path, &MIGRATIONS[..8]).expect("v8 database");
+            db.call(|connection| {
+                connection.execute(
+                    "INSERT INTO push_devices (device_id, token, platform, app_version, device_name, created_unix, updated_unix)
+                     VALUES ('device-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', ?1, 'android', '0.1.0', 'Стас', 100, 100)",
+                    params![TOKEN_A],
+                )?;
+                Ok(())
+            })
+            .await
+            .expect("insert v8 row");
+            db.shutdown().expect("close");
+        }
+        let store = Store::open(&path, Config::default()).expect("migrates to v9");
+        let devices = store.list_push_devices().expect("list");
+        assert_eq!(devices[0].token_id, "");
+        store
+            .assign_unowned_push_devices("Стас", "mama", "owner")
+            .expect("assign");
+        assert_eq!(
+            store.list_push_devices().expect("list")[0].token_id,
+            "owner"
+        );
+        std::fs::remove_dir_all(directory).expect("cleanup");
+    }
+
+    #[test]
+    fn an_unowned_device_cannot_be_claimed_without_admin() {
+        let store = store();
+        store
+            .register_push_device(&input(TOKEN_A), 100)
+            .expect("legacy");
+        let error = store
+            .register_push_device_for(&input(TOKEN_A), "mama", false, 101)
+            .expect_err("claim");
+        assert_eq!(error.kind(), Some(crate::domain::ErrorKind::Precondition));
+        store
+            .register_push_device_for(&input(TOKEN_A), "mama", true, 102)
+            .expect("admin claim");
+    }
+
+    #[test]
+    fn a_foreign_fcm_token_is_rejected() {
+        let store = store();
+        store
+            .register_push_device_for(&input(TOKEN_A), "owner", true, 100)
+            .expect("owner");
+        let mut other = input(TOKEN_A);
+        other.device_id = "device-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".to_owned();
+        let error = store
+            .register_push_device_for(&other, "mama", false, 101)
+            .expect_err("foreign token");
+        assert_eq!(error.kind(), Some(crate::domain::ErrorKind::Precondition));
     }
 }

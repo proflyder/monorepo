@@ -107,7 +107,7 @@ fn config() -> Config {
         &|key| match key {
             "HA_URL" => Some("http://ha.example:8123".to_owned()),
             "SCHEDULER_ENDPOINT" => Some("http://scheduler.example:8098".to_owned()),
-            "SCHEDULER_TOKEN" => Some("scheduler-secret".to_owned()),
+            "SCHEDULER_SERVICE_TOKEN" => Some("scheduler-secret".to_owned()),
             "HA_TOKEN" => Some("ha-secret".to_owned()),
             "BRIDGE_CONSUMER_ID" => Some("ha-bridge-home".to_owned()),
             "BRIDGE_EXECUTE" => Some("true".to_owned()),
@@ -584,7 +584,9 @@ fn catalog_vectors_match_the_go_server() {
                     .collect(),
             }],
         };
-        home_app_auth::AccessCache::new(snapshot)
+        let client = home_app_auth::AccessClient::new("http://test", "test").expect("client");
+        client.cache().replace(snapshot);
+        client
     };
 
     let ha = make();
@@ -597,7 +599,7 @@ fn catalog_vectors_match_the_go_server() {
     let source: Arc<dyn CatalogSource> = provider;
     assert_catalog_response(
         &catalog_request(
-            catalog_api::router(Arc::clone(&source), token(), String::new(), String::new()),
+            catalog_api::router(Arc::clone(&source), token()),
             Some("Bearer control-secret"),
         ),
         &fixture.responses["live"],
@@ -605,10 +607,7 @@ fn catalog_vectors_match_the_go_server() {
     );
 
     assert_catalog_response(
-        &catalog_request(
-            catalog_api::router(Arc::clone(&source), token(), String::new(), String::new()),
-            None,
-        ),
+        &catalog_request(catalog_api::router(Arc::clone(&source), token()), None),
         &fixture.responses["unauthorized"],
         "unauthorized",
     );
@@ -619,12 +618,7 @@ fn catalog_vectors_match_the_go_server() {
         Vec::new(),
         Duration::from_secs(0),
     ));
-    let stale_router = catalog_api::router(
-        Arc::clone(&stale_source),
-        token(),
-        String::new(),
-        String::new(),
-    );
+    let stale_router = catalog_api::router(Arc::clone(&stale_source), token());
     let live = catalog_request(stale_router.clone(), Some("Bearer control-secret"));
     assert_eq!(live.0, 200, "the first stale-provider request is live");
     ha.down.store(true, std::sync::atomic::Ordering::SeqCst);
@@ -647,7 +641,7 @@ fn catalog_vectors_match_the_go_server() {
     ));
     assert_catalog_response(
         &catalog_request(
-            catalog_api::router(outage_source, token(), String::new(), String::new()),
+            catalog_api::router(outage_source, token()),
             Some("Bearer control-secret"),
         ),
         &fixture.responses["scenarioLabelOutage"],
@@ -666,7 +660,7 @@ fn catalog_vectors_match_the_go_server() {
     ));
     assert_catalog_response(
         &catalog_request(
-            catalog_api::router(down_source, token(), String::new(), String::new()),
+            catalog_api::router(down_source, token()),
             Some("Bearer control-secret"),
         ),
         &fixture.responses["unreachable"],

@@ -7,7 +7,7 @@
         "method": "POST",
         "path": "/home.v1.ScenarioService/CreateScenario",
         "headers": {
-          "Authorization": "Bearer contract-test-token",
+          "Authorization": "Bearer contract-service-token",
           "Content-Type": "application/json"
         },
         "body": {
@@ -129,7 +129,7 @@
         "method": "POST",
         "path": "/home.v1.ScenarioService/GetScenario",
         "headers": {
-          "Authorization": "Bearer contract-test-token",
+          "Authorization": "Bearer contract-service-token",
           "Content-Type": "application/json"
         },
         "body": {
@@ -203,7 +203,7 @@
         "method": "POST",
         "path": "/home.v1.ScenarioService/ListScenarios",
         "headers": {
-          "Authorization": "Bearer contract-test-token",
+          "Authorization": "Bearer contract-service-token",
           "Content-Type": "application/json"
         },
         "body": {
@@ -279,7 +279,7 @@
         "method": "POST",
         "path": "/home.v1.SchedulerService/ListSchedules",
         "headers": {
-          "Authorization": "Bearer contract-test-token",
+          "Authorization": "Bearer contract-service-token",
           "Content-Type": "application/json"
         },
         "body": {
@@ -299,7 +299,7 @@
         "method": "POST",
         "path": "/home.v1.SchedulerService/ListSchedules",
         "headers": {
-          "Authorization": "Bearer contract-test-token",
+          "Authorization": "Bearer contract-service-token",
           "Content-Type": "application/json"
         },
         "body": {
@@ -320,7 +320,7 @@
         "method": "POST",
         "path": "/home.v1.ScenarioService/RunScenario",
         "headers": {
-          "Authorization": "Bearer contract-test-token",
+          "Authorization": "Bearer contract-service-token",
           "Content-Type": "application/json"
         },
         "body": {
@@ -358,7 +358,7 @@
         "method": "POST",
         "path": "/home.v1.ScenarioService/RunScenario",
         "headers": {
-          "Authorization": "Bearer contract-test-token",
+          "Authorization": "Bearer contract-service-token",
           "Content-Type": "application/json"
         },
         "body": {
@@ -393,7 +393,7 @@
         "method": "POST",
         "path": "/home.v1.ScenarioService/UpdateScenario",
         "headers": {
-          "Authorization": "Bearer contract-test-token",
+          "Authorization": "Bearer contract-service-token",
           "Content-Type": "application/json"
         },
         "body": {
@@ -441,7 +441,7 @@
         "method": "POST",
         "path": "/home.v1.ScenarioService/SetScenarioEnabled",
         "headers": {
-          "Authorization": "Bearer contract-test-token",
+          "Authorization": "Bearer contract-service-token",
           "Content-Type": "application/json"
         },
         "body": {
@@ -514,7 +514,7 @@
         "method": "POST",
         "path": "/home.v1.SchedulerService/ListSchedules",
         "headers": {
-          "Authorization": "Bearer contract-test-token",
+          "Authorization": "Bearer contract-service-token",
           "Content-Type": "application/json"
         },
         "body": {
@@ -552,7 +552,7 @@
         "method": "POST",
         "path": "/home.v1.ScenarioService/DeleteScenario",
         "headers": {
-          "Authorization": "Bearer contract-test-token",
+          "Authorization": "Bearer contract-service-token",
           "Content-Type": "application/json"
         },
         "body": {
@@ -574,7 +574,7 @@
         "method": "POST",
         "path": "/home.v1.ScenarioService/GetScenario",
         "headers": {
-          "Authorization": "Bearer contract-test-token",
+          "Authorization": "Bearer contract-service-token",
           "Content-Type": "application/json"
         },
         "body": {

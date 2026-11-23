@@ -666,6 +666,12 @@
    "encoding": "text+nl"
   },
   {
+   "file": "home/app.token",
+   "path": "k8s/home-assistant/scheduler-auth",
+   "field": "token",
+   "encoding": "text+nl"
+  },
+  {
    "file": "home/vpn/client-ca",
    "path": "infra/vpn/client-ca",
    "field": "client_ca_dir_tar_gz_b64",

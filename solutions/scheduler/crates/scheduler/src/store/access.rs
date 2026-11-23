@@ -154,7 +154,7 @@ impl Store {
                 |row| row.get(0),
             )?;
             if exists == 0 {
-                let modules = Modules::member();
+                let modules = Modules::all_but_admin();
                 transaction.execute(
                     "INSERT INTO app_tokens (id, name, sha256, modules_json, is_owner, created_unix, updated_unix, revoked_unix)
                      VALUES ('mama', 'Мама', ?, ?, 0, ?, ?, 0)",
@@ -183,22 +183,34 @@ impl Store {
         }
         let snapshot = snapshot.clone();
         self.with_tx(move |transaction| {
-            let owner: i64 = transaction.query_row(
-                "SELECT COUNT(*) FROM app_tokens WHERE is_owner = 1 AND revoked_unix = 0",
-                [],
-                |row| row.get(0),
-            )?;
-            if owner != 0 {
-                return Ok(false);
-            }
             let mut changed = false;
             for record in &snapshot.tokens {
-                let exists: i64 = transaction.query_row(
-                    "SELECT COUNT(*) FROM app_tokens WHERE id = ? OR name = ?",
-                    params![record.id, record.name],
+                let existing = token(transaction, &record.id)?;
+                if let Some(existing) = existing {
+                    if record.owner && existing.owner {
+                        let modules = serde_json::to_string(&record.modules)
+                            .map_err(|error| StoreError::invalid(error.to_string()))?;
+                        let digest: String = transaction.query_row(
+                            "SELECT sha256 FROM app_tokens WHERE id = ?1",
+                            params![record.id],
+                            |row| row.get(0),
+                        )?;
+                        if digest != record.sha256 {
+                            transaction.execute(
+                                "UPDATE app_tokens SET sha256 = ?, modules_json = ?, name = ?, updated_unix = ? WHERE id = ?",
+                                params![record.sha256, modules, record.name, now_unix, record.id],
+                            )?;
+                            changed = true;
+                        }
+                    }
+                    continue;
+                }
+                let name_taken: i64 = transaction.query_row(
+                    "SELECT COUNT(*) FROM app_tokens WHERE name = ?",
+                    params![record.name],
                     |row| row.get(0),
                 )?;
-                if exists != 0 {
+                if name_taken != 0 {
                     continue;
                 }
                 transaction.execute(
@@ -263,7 +275,7 @@ impl Store {
         let digest = digest.to_owned();
         self.with_tx(move |transaction| {
             let duplicate: i64 = transaction.query_row(
-                "SELECT COUNT(*) FROM app_tokens WHERE name = ?",
+                "SELECT COUNT(*) FROM app_tokens WHERE lower(name) = lower(?) AND revoked_unix = 0",
                 params![name],
                 |row| row.get(0),
             )?;
@@ -291,7 +303,7 @@ impl Store {
         self.with_tx(move |transaction| {
             token(transaction, &id)?.ok_or(StoreError::NotFound)?;
             let duplicate: i64 = transaction.query_row(
-                "SELECT COUNT(*) FROM app_tokens WHERE name = ? AND id != ?",
+                "SELECT COUNT(*) FROM app_tokens WHERE lower(name) = lower(?) AND id != ? AND revoked_unix = 0",
                 params![name, id],
                 |row| row.get(0),
             )?;
@@ -346,6 +358,13 @@ impl Store {
                 return Err(StoreError::precondition("owner token cannot be revoked"));
             }
             transaction.execute(
+                "DELETE FROM notifications WHERE device_id IN (
+                    SELECT device_id FROM push_devices WHERE token_id = ?1
+                )",
+                params![id],
+            )?;
+            transaction.execute("DELETE FROM push_devices WHERE token_id = ?1", params![id])?;
+            transaction.execute(
                 "UPDATE app_tokens SET revoked_unix = ?, updated_unix = ? WHERE id = ?",
                 params![now_unix, now_unix, id],
             )?;
@@ -382,7 +401,7 @@ mod tests {
         let tokens = store.access_list().expect("list");
         assert_eq!(tokens.len(), 1);
         assert_eq!(tokens[0].name, "Мама");
-        assert_eq!(tokens[0].modules.ids(), Modules::member().ids());
+        assert_eq!(tokens[0].modules.ids(), Modules::all_but_admin().ids());
     }
 
     #[test]
@@ -493,5 +512,96 @@ mod tests {
         );
         assert!(snapshot.authenticate_token("wrong").is_none());
         assert!(!format!("{snapshot:?}").contains("phone-token"));
+    }
+    #[test]
+    fn revoking_a_token_removes_its_devices_and_history() {
+        let store = store();
+        let created = store
+            .access_create(
+                "phone",
+                "Phone",
+                &sha256_hex("phone-token"),
+                &Modules::member(),
+                10,
+            )
+            .expect("token");
+        store
+            .register_push_device_for(
+                &crate::store::PushDeviceInput {
+                    device_id: "device-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_owned(),
+                    token: "token-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_owned(),
+                    platform: "android".to_owned(),
+                    app_version: "0.1.0".to_owned(),
+                    device_name: "Phone".to_owned(),
+                },
+                &created.id,
+                true,
+                11,
+            )
+            .expect("device");
+        store
+            .record_notification(
+                "device-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                &crate::store::NotificationInput {
+                    id: "n-1".to_owned(),
+                    kind: "notify".to_owned(),
+                    title: "T".to_owned(),
+                    body: "B".to_owned(),
+                    deep_link: None,
+                },
+                12,
+            )
+            .expect("history");
+        store.access_revoke(&created.id, 13).expect("revoke");
+        assert!(store.list_push_devices().expect("devices").is_empty());
+        assert!(
+            store
+                .list_notifications(
+                    "device-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    None,
+                    crate::store::DEFAULT_HISTORY_LIMIT,
+                )
+                .expect("history")
+                .entries
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn a_seed_rotates_the_owner_hash_by_id() {
+        let store = store();
+        let first = AccessSnapshot {
+            revision: 1,
+            tokens: vec![TokenRecord {
+                id: "owner".to_owned(),
+                name: "owner".to_owned(),
+                sha256: sha256_hex("first"),
+                owner: true,
+                modules: Modules::owner()
+                    .ids()
+                    .into_iter()
+                    .map(str::to_owned)
+                    .collect(),
+            }],
+        };
+        store.access_import_seed(&first, 10).expect("first");
+        let second = AccessSnapshot {
+            revision: 2,
+            tokens: vec![TokenRecord {
+                id: "owner".to_owned(),
+                name: "owner".to_owned(),
+                sha256: sha256_hex("second"),
+                owner: true,
+                modules: Modules::owner()
+                    .ids()
+                    .into_iter()
+                    .map(str::to_owned)
+                    .collect(),
+            }],
+        };
+        store.access_import_seed(&second, 11).expect("rotate");
+        let snapshot = store.access_snapshot().expect("snapshot");
+        assert!(snapshot.authenticate_token("second").is_some());
+        assert!(snapshot.authenticate_token("first").is_none());
     }
 }

@@ -339,9 +339,8 @@ sha256, имя, набор модулей и флаг owner; `access_meta` — �
 | `alerts` | фильтр alert-сообщений в `/v1/chat/messages` и `/v1/chat/events`; `/v1/chat/alerts` — service-token |
 | `admin` | `GET /v1/access/modules`, `GET/POST /v1/access/tokens`, `PATCH/DELETE /v1/access/tokens/{id}` |
 
-Любой действующий токен получает `base` неявно. Member-набор по умолчанию:
-`home, scenarios, alarms_timers, intercom_call, notifications`. Owner — все
-модули. Запрос без модуля получает `403
+Любой действующий токен получает `base` неявно. Набор legacy-токена после миграции (раньше `member`):
+все модули, кроме `admin`. Owner — все модули. Запрос без модуля получает `403
 {"error":"module_forbidden","module":"<id>"}`; без/с неверным токеном — `401`.
 
 Admin API:
@@ -373,7 +372,7 @@ SCHEDULER_DB_PATH=scheduler.db              (ALARM_DB_PATH)
 SCHEDULER_LISTEN=127.0.0.1:8098             (ALARM_LISTEN; loopback default)
 SCHEDULER_TOKEN=...                         (или SCHEDULER_TOKEN_FILE; legacy app token «Мама»)
 SCHEDULER_APP_TOKENS_FILE=...               (optional seed owner-токена из OpenBao)
-SCHEDULER_SERVICE_TOKEN_FILE=...            (service-token, fallback на legacy до bootstrap)
+SCHEDULER_SERVICE_TOKEN_FILE=...            (обязателен, без fallback на legacy)
 SCHEDULER_SERVICE_TOKEN_PREVIOUS_FILE=...   (optional, второй service-token на время ротации)
 SCHEDULER_OWNER_DEVICE_NAME=Стас            (имя устройства владельца для миграции v9)
 SCHEDULER_MISSED_GRACE_SECONDS=600

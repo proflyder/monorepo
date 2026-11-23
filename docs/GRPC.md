@@ -88,7 +88,7 @@ curl -sS http://127.0.0.1:8098/home.v1.SchedulerService/CreateSchedule \
   constant-time по SHA-256;
 - app-токены проверяются по модулям (`base` для GetStatus, `alarms_timers`,
   `scenarios`, `home` для EnqueueTask/CancelTask); service-token задаётся
-  `SCHEDULER_SERVICE_TOKEN[_FILE]` (fallback `SCHEDULER_TOKEN[_FILE]`); без него
+  `SCHEDULER_SERVICE_TOKEN[_FILE]` (обязателен, без fallback на `SCHEDULER_TOKEN`); без него
   процесс не стартует;
 - `SCHEDULER_CONSUMERS` — опциональный allowlist `consumer_id` для
   executor-ов;

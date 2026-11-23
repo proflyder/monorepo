@@ -21,6 +21,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[3]
 SERVICE_PREFIX = "/home.v1.SchedulerService/"
 SCHEDULER_TOKEN = "e2e-scheduler-token"
+SCHEDULER_SERVICE_TOKEN = "e2e-scheduler-service-token"
 WRONG_TOKEN = "e2e-wrong-token"
 HA_TOKEN = "e2e-ha-token"
 CONSUMER = "e2e-ha-bridge"
@@ -56,7 +57,7 @@ def wait_until(getter, timeout: float, description: str):
     raise Failure(f"timed out after {timeout:.0f}s waiting for {description} (last={last!r})")
 
 
-def rpc(base: str, method: str, payload: dict, token: str | None = SCHEDULER_TOKEN, timeout: float = 5.0):
+def rpc(base: str, method: str, payload: dict, token: str | None = SCHEDULER_SERVICE_TOKEN, timeout: float = 5.0):
     body = json.dumps(payload).encode()
     request = urllib.request.Request(
         base + SERVICE_PREFIX + method,
@@ -268,6 +269,7 @@ def run(verbose: bool) -> None:
                     "SCHEDULER_LISTEN": "127.0.0.1:0",
                     "SCHEDULER_DB_PATH": str(tmp / "scheduler.db"),
                     "SCHEDULER_TOKEN": SCHEDULER_TOKEN,
+                    "SCHEDULER_SERVICE_TOKEN": SCHEDULER_SERVICE_TOKEN,
                     "SCHEDULER_TICK_MS": "100",
                 }
             )
@@ -289,6 +291,7 @@ def run(verbose: bool) -> None:
                     "HA_TOKEN": HA_TOKEN,
                     "SCHEDULER_ENDPOINT": base,
                     "SCHEDULER_TOKEN": SCHEDULER_TOKEN,
+                    "SCHEDULER_SERVICE_TOKEN": SCHEDULER_SERVICE_TOKEN,
                     "BRIDGE_CONSUMER_ID": CONSUMER,
                     "BRIDGE_QUEUE": "home",
                     "BRIDGE_BATCH_SIZE": "5",

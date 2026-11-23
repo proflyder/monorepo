@@ -102,6 +102,11 @@ fn store_error(error: StoreError) -> Response {
         StoreError::NotFound => {
             (StatusCode::NOT_FOUND, Json(json!({"error": "not_found"}))).into_response()
         }
+        StoreError::Domain(domain) if domain.kind() == crate::domain::ErrorKind::Precondition => (
+            StatusCode::CONFLICT,
+            Json(json!({"error": "conflict", "detail": domain.to_string()})),
+        )
+            .into_response(),
         StoreError::Domain(domain) => (
             StatusCode::BAD_REQUEST,
             Json(json!({"error": "invalid", "detail": domain.to_string()})),
@@ -222,7 +227,7 @@ pub async fn create(
     };
     let id = uuid::Uuid::new_v4().simple().to_string();
     let digest = home_app_auth::sha256_hex(&token);
-    let now = now_unix();
+    let now = super::now_unix();
     let created = match state
         .store
         .access_create(&id, &body.name, &digest, &modules, now)
@@ -239,11 +244,14 @@ pub async fn create(
         modules = ?created.modules.ids(),
         "application token created"
     );
-    Json(CreatedView {
-        token,
-        access: TokenView::from(created),
-    })
-    .into_response()
+    (
+        StatusCode::CREATED,
+        Json(CreatedView {
+            token,
+            access: TokenView::from(created),
+        }),
+    )
+        .into_response()
 }
 
 pub async fn update(
@@ -259,7 +267,7 @@ pub async fn update(
         return forbidden(error);
     }
     if let Some(name) = body.name.as_deref()
-        && let Err(error) = state.store.access_rename(&id, name, now_unix())
+        && let Err(error) = state.store.access_rename(&id, name, super::now_unix())
     {
         return store_error(error);
     }
@@ -268,7 +276,10 @@ pub async fn update(
             Ok(modules) => modules,
             Err(response) => return *response,
         };
-        if let Err(error) = state.store.access_set_modules(&id, &modules, now_unix()) {
+        if let Err(error) = state
+            .store
+            .access_set_modules(&id, &modules, super::now_unix())
+        {
             return store_error(error);
         }
     }
@@ -303,7 +314,7 @@ pub async fn revoke(
         Ok(token) => token,
         Err(error) => return store_error(error),
     };
-    if let Err(error) = state.store.access_revoke(&id, now_unix()) {
+    if let Err(error) = state.store.access_revoke(&id, super::now_unix()) {
         return store_error(error);
     }
     if let Err(response) = reload(&state) {
@@ -325,11 +336,6 @@ pub async fn snapshot(State(state): State<AccessState>, headers: HeaderMap) -> R
         Ok(snapshot) => Json(snapshot).into_response(),
         Err(error) => store_error(error),
     }
-}
-
-#[must_use]
-pub fn now_unix() -> i64 {
-    jiff::Timestamp::now().as_second()
 }
 
 #[cfg(test)]
@@ -454,7 +460,7 @@ mod tests {
             .await,
         )
         .await;
-        assert_eq!(status, StatusCode::OK);
+        assert_eq!(status, StatusCode::CREATED);
         let token = created["token"].as_str().expect("token").to_owned();
         assert!(token.starts_with("home_"));
         let snapshot = state.store.access_snapshot().expect("snapshot");

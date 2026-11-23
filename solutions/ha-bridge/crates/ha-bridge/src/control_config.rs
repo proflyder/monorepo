@@ -359,7 +359,7 @@ mod tests {
                 "SCHEDULER_ENDPOINT",
                 "http://192.0.2.27:8098/home.v1.SchedulerService",
             ),
-            ("SCHEDULER_TOKEN", "s"),
+            ("SCHEDULER_SERVICE_TOKEN", "s"),
             ("CONTROL_TOKEN", "c"),
             ("CONTROL_CONSUMER_ID", "ha-control-home"),
         ]
