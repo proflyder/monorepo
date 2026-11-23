@@ -22,7 +22,7 @@ class ButtonStylesTest {
 
     @Test
     fun loadingKeepsTheWidth() {
-        val button = button(themed(AppTheme.CURRENT), "Widget.Home.Button.Filled.M")
+        val button = button(themed(AppTheme.EMERALD), "Widget.Home.Button.Filled.M")
         button.setText(R.string.ds_catalog_action)
         val before = measure(button).measuredWidth
         button.setLoading(true)

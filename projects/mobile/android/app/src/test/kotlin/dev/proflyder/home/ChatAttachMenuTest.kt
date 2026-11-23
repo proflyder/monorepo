@@ -55,7 +55,7 @@ class ChatAttachMenuTest {
     }
 
     private fun openChat(app: HomeApplication): MainActivity {
-        runBlocking { app.graph.appearance.selectTheme(AppTheme.CURRENT) }
+        runBlocking { app.graph.appearance.selectTheme(AppTheme.EMERALD) }
         val activity = Robolectric.buildActivity(MainActivity::class.java).setup().get()
         idle(activity)
         activity.router.selectTab("chat")

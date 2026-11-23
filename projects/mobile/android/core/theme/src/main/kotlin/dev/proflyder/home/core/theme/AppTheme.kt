@@ -10,20 +10,22 @@ enum class AppTheme(
     @StyleRes val overlayRes: Int,
     val palette: ThemePalette,
     val dynamic: Boolean = false,
+    val legacyKeys: Set<String> = emptySet(),
 ) {
-    CURRENT(
-        key = "current",
-        titleRes = R.string.theme_current_title,
-        summaryRes = R.string.theme_current_summary,
-        overlayRes = R.style.ThemeOverlay_Home_Current,
-        palette = Palettes.current,
+    EMERALD(
+        key = "emerald",
+        titleRes = R.string.theme_emerald_title,
+        summaryRes = R.string.theme_emerald_summary,
+        overlayRes = R.style.ThemeOverlay_Home_Emerald,
+        palette = Palettes.emerald,
+        legacyKeys = setOf("current"),
     ),
     SYSTEM(
         key = "system",
         titleRes = R.string.theme_system_title,
         summaryRes = R.string.theme_system_summary,
-        overlayRes = R.style.ThemeOverlay_Home_Current,
-        palette = Palettes.current,
+        overlayRes = R.style.ThemeOverlay_Home_Emerald,
+        palette = Palettes.emerald,
         dynamic = true,
     ),
     NEON(
@@ -36,9 +38,9 @@ enum class AppTheme(
     ;
 
     companion object {
-        val DEFAULT: AppTheme = CURRENT
+        val DEFAULT: AppTheme = EMERALD
 
-        fun fromKey(key: String?): AppTheme = entries.firstOrNull { it.key == key } ?: DEFAULT
+        fun fromKey(key: String?): AppTheme = entries.firstOrNull { it.key == key || key in it.legacyKeys } ?: DEFAULT
     }
 }
 

@@ -83,7 +83,7 @@ class PushChannelsTest {
         assertNotNull(notification.fullScreenIntent)
         assertNull(notification.group)
         assertEquals(Notification.GROUP_ALERT_ALL, notification.groupAlertBehavior)
-        assertEquals(AppTheme.CURRENT.palette.light.primary, notification.color)
+        assertEquals(AppTheme.EMERALD.palette.light.primary, notification.color)
     }
 
     private fun appearance(context: android.content.Context) = AppearanceController(

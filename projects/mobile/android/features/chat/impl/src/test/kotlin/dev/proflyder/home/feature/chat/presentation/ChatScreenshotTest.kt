@@ -128,8 +128,8 @@ class ChatScreenshotTest {
     )
 
     @Test
-    fun alertsInCurrent() {
-        val binding = render("chat-alerts-current", AppTheme.CURRENT, alerts(), prepare = {})
+    fun alertsInEmerald() {
+        val binding = render("chat-alerts-emerald", AppTheme.EMERALD, alerts(), prepare = {})
         assertEquals(4, binding.chatList.adapter?.itemCount)
     }
 
@@ -140,9 +140,9 @@ class ChatScreenshotTest {
     }
 
     @Test
-    fun mediaInCurrent() {
+    fun mediaInEmerald() {
         val playback = VoicePlayback("a-f_v", 2_600, 7_400, playing = true)
-        val binding = render("chat-media-current", AppTheme.CURRENT, media(), playback, prepare = {})
+        val binding = render("chat-media-emerald", AppTheme.EMERALD, media(), playback, prepare = {})
         assertEquals(5, binding.chatList.adapter?.itemCount)
     }
 
@@ -184,8 +184,8 @@ class ChatScreenshotTest {
         ChatTimeline(messages = ChatFixtures.conversation + streaming, outbox = listOf(queued), loaded = true)
 
     @Test
-    fun conversationInCurrent() {
-        val binding = render("chat-current", AppTheme.CURRENT, conversation())
+    fun conversationInEmerald() {
+        val binding = render("chat-emerald", AppTheme.EMERALD, conversation())
         assertEquals(9, binding.chatList.adapter?.itemCount)
     }
 
@@ -197,8 +197,8 @@ class ChatScreenshotTest {
 
     @Test
     @Config(qualifiers = "ru-w411dp-h891dp-night-xxhdpi")
-    fun conversationInCurrentDark() {
-        render("chat-current-dark", AppTheme.CURRENT, conversation())
+    fun conversationInEmeraldDark() {
+        render("chat-emerald-dark", AppTheme.EMERALD, conversation())
     }
 
     @Test

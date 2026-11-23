@@ -145,7 +145,7 @@ class VpnScreenshotTest {
             RuntimeEnvironment.getApplication(),
             com.google.android.material.R.style.Theme_Material3_DayNight_NoActionBar,
         )
-        return ContextThemeWrapper(base, AppTheme.CURRENT.overlayRes)
+        return ContextThemeWrapper(base, AppTheme.EMERALD.overlayRes)
     }
 
     private fun save(root: View, name: String) {

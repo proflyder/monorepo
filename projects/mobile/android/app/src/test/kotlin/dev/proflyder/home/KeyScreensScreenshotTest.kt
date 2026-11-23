@@ -25,11 +25,11 @@ import kotlinx.coroutines.runBlocking
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class KeyScreensScreenshotTest {
     @Test
-    fun emeraldDark() = shootAll(AppTheme.CURRENT, "dark")
+    fun emeraldDark() = shootAll(AppTheme.EMERALD, "dark")
 
     @Test
     @Config(qualifiers = LIGHT)
-    fun emeraldLight() = shootAll(AppTheme.CURRENT, "light")
+    fun emeraldLight() = shootAll(AppTheme.EMERALD, "light")
 
     @Test
     fun systemDark() = shootAll(AppTheme.SYSTEM, "dark")

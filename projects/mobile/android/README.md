@@ -537,8 +537,10 @@ navigate by route string, not by an impl destination.
   navigation hides while the keyboard is open; pinned panels use
   `pinAboveKeyboard`, lists `applyScrollBottomInset`.
 - **Themes** are `ThemeOverlay`s applied in `onActivityPreCreated` before
-  inflation (Material You: dynamic colours over Emerald). Stored keys
-  (`current`, `system`, `neon`) never change. Screens use only theme
+  inflation (Material You: dynamic colours over Emerald). Stored keys are
+  `emerald`, `system`, `neon`; a retired key stays in `AppTheme.legacyKeys`
+  (`current` reads as `emerald`), so a rename never drops the user's choice.
+  Screens use only theme
   attributes; `AndroidThemeColorTests` rejects literal colours and segmented
   buttons. No effect exists in only one theme. Adding a theme: one `AppTheme`
   entry, its palette, `@color/theme_<key>_*` and the overlay. Components and

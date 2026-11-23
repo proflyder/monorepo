@@ -16,25 +16,26 @@ class ThemeRegistryTest {
     @Test
     fun keysAreUniqueAndUnknownKeysFallBackToTheDefault() {
         assertEquals(AppTheme.entries.size, AppTheme.entries.map { it.key }.toSet().size)
-        assertEquals(AppTheme.CURRENT, AppTheme.fromKey("missing"))
+        assertEquals(AppTheme.EMERALD, AppTheme.fromKey("missing"))
         assertEquals(AppTheme.NEON, AppTheme.fromKey("neon"))
         assertEquals(ThemeMode.SYSTEM, ThemeMode.fromKey(null))
         assertEquals(ThemeMode.DARK, ThemeMode.fromKey("dark"))
     }
 
     @Test
-    fun storedKeysStayTheSameAfterTheRename() {
-        assertEquals(listOf("current", "system", "neon"), AppTheme.entries.map { it.key })
-        assertEquals(AppTheme.CURRENT, AppTheme.fromKey("current"))
+    fun keysAreNamedAfterThemesAndLegacyKeysStillResolve() {
+        assertEquals(listOf("emerald", "system", "neon"), AppTheme.entries.map { it.key })
+        assertEquals(AppTheme.EMERALD, AppTheme.fromKey("emerald"))
+        assertEquals(AppTheme.EMERALD, AppTheme.fromKey("current"))
         assertEquals(AppTheme.SYSTEM, AppTheme.fromKey("system"))
     }
 
     @Test
     fun theCurrentThemeKeepsTheOriginalPalette() {
-        assertEquals(rgb(0x0E7C66), AppTheme.CURRENT.palette.light.primary)
-        assertEquals(rgb(0x6FDBC0), AppTheme.CURRENT.palette.dark.primary)
-        assertEquals(rgb(0x0E1512), AppTheme.CURRENT.palette.dark.surface)
-        assertEquals(AppTheme.CURRENT.palette, AppTheme.SYSTEM.palette)
+        assertEquals(rgb(0x0E7C66), AppTheme.EMERALD.palette.light.primary)
+        assertEquals(rgb(0x6FDBC0), AppTheme.EMERALD.palette.dark.primary)
+        assertEquals(rgb(0x0E1512), AppTheme.EMERALD.palette.dark.surface)
+        assertEquals(AppTheme.EMERALD.palette, AppTheme.SYSTEM.palette)
     }
 
     @Test
@@ -49,7 +50,7 @@ class ThemeRegistryTest {
     fun onStateUsesTheThemeAccent() {
         assertEquals(rgb(0x00E5FF), AppTheme.NEON.palette.dark.stateOn)
         assertEquals(AppTheme.NEON.palette.light.secondary, AppTheme.NEON.palette.light.stateOn)
-        listOf(AppTheme.CURRENT.palette.light, AppTheme.CURRENT.palette.dark, AppTheme.SYSTEM.palette.dark).forEach {
+        listOf(AppTheme.EMERALD.palette.light, AppTheme.EMERALD.palette.dark, AppTheme.SYSTEM.palette.dark).forEach {
             assertEquals(it.primary, it.stateOn)
         }
     }

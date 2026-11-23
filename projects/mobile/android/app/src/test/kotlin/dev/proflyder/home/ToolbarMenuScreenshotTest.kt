@@ -31,7 +31,7 @@ import kotlinx.coroutines.runBlocking
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class ToolbarMenuScreenshotTest {
     @Test
-    fun emerald() = shootAll(AppTheme.CURRENT)
+    fun emerald() = shootAll(AppTheme.EMERALD)
 
     @Test
     fun neon() = shootAll(AppTheme.NEON)

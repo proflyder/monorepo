@@ -3,6 +3,8 @@ package dev.proflyder.home.core.theme
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringPreferencesKey
 import java.io.File
 import java.util.UUID
 import kotlinx.coroutines.CompletableDeferred
@@ -59,6 +61,18 @@ class AppearanceControllerTest {
         val restored = controller(disk)
         withTimeout(TIMEOUT) { restored.loaded.first { it } }
         assertEquals(Appearance(AppTheme.NEON, ThemeMode.DARK), restored.state.value)
+    }
+
+    @Test
+    fun legacyCurrentKeyIsReadAsEmerald() = runBlocking<Unit> {
+        val disk = dataStore()
+        withTimeout(TIMEOUT) {
+            disk.edit { it[stringPreferencesKey("appearance_theme")] = "current" }
+        }
+
+        val restored = controller(disk)
+        withTimeout(TIMEOUT) { restored.loaded.first { it } }
+        assertEquals(AppTheme.EMERALD, restored.state.value.theme)
     }
 
     private fun controller(dataStore: DataStore<Preferences>) =

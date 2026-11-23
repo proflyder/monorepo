@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="DuplicateStrings">
-    <string name="theme_current_title">Emerald</string>
-    <string name="theme_current_summary">Evening emerald: the original green palette</string>
+    <string name="theme_emerald_title">Emerald</string>
+    <string name="theme_emerald_summary">Evening emerald: the original green palette</string>
     <string name="theme_system_title">System</string>
     <string name="theme_system_summary">Colours from your wallpaper</string>
     <string name="theme_system_unavailable">Needs Android 12; the Emerald palette is used instead</string>

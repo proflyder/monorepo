@@ -10,7 +10,7 @@ object LauncherAliases {
     fun className(theme: AppTheme): String = "$PACKAGE.${aliasName(theme)}"
 
     private fun aliasName(theme: AppTheme): String = when (theme) {
-        AppTheme.CURRENT -> "Current"
+        AppTheme.EMERALD -> "Emerald"
         AppTheme.SYSTEM -> "System"
         AppTheme.NEON -> "Neon"
     }
