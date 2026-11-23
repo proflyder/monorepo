@@ -85,6 +85,17 @@ jobs:
           repository-cache: false
           cache-save: true
 
+      - uses: ./.github/actions/bazel-repository-cache
+        id: bazel-repo
+        with:
+          key: bazel-repo-android-${{ runner.os }}-${{ hashFiles('MODULE.bazel', 'MODULE.bazel.lock', '.bazelversion', 'projects/mobile/android/maven_install.json') }}
+          restore-prefix: bazel-repo-android-${{ runner.os }}-
+
+      - uses: ./.github/actions/nexus-cache
+        with:
+          host: ${{ vars.NEXUS_HOST }}
+          password: ${{ secrets.NEXUS_CI_PASSWORD }}
+
       - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: ~/.cache/bazel-disk
