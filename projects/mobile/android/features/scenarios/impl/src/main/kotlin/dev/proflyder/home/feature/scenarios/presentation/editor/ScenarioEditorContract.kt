@@ -62,3 +62,25 @@ internal sealed interface ScenarioEditorEvent {
     data class OpenRoute(val route: Route) : ScenarioEditorEvent
     data class Error(@StringRes val message: Int) : ScenarioEditorEvent
 }
+
+internal data class EditorControls(
+    val hasUnsupportedParts: Boolean,
+    val canAddTrigger: Boolean,
+    val canAddCondition: Boolean,
+    val canAddStep: Boolean,
+    val canSave: Boolean,
+    val canDelete: Boolean,
+    val isExisting: Boolean,
+    val busy: Boolean,
+)
+
+internal fun editorControlsOf(state: ScenarioEditorUiState): EditorControls = EditorControls(
+    hasUnsupportedParts = state.hasUnsupportedParts,
+    canAddTrigger = state.canAddTrigger,
+    canAddCondition = state.canAddCondition,
+    canAddStep = state.canAddStep,
+    canSave = state.canSave,
+    canDelete = state.canDelete,
+    isExisting = state.isExisting,
+    busy = state.saving || state.loading,
+)

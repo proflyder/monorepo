@@ -1,7 +1,6 @@
 package dev.proflyder.home.feature.settings.presentation
 
 import android.os.Bundle
-import androidx.recyclerview.widget.LinearLayoutManager
 import dev.proflyder.home.core.presentation.IntentAdapterCallback
 import dev.proflyder.home.core.presentation.ScreenFragment
 import dev.proflyder.home.core.presentation.screenViewModel
@@ -23,24 +22,24 @@ internal class NotificationHistoryFragment :
 
     private val adapter by lazy { NotificationHistoryAdapter(callback) }
 
-    override fun onScreenCreated(binding: FragmentNotificationHistoryBinding, savedInstanceState: Bundle?) {
+    override fun onViewReady(binding: FragmentNotificationHistoryBinding, savedInstanceState: Bundle?) {
         binding.historyList.applyScrollBottomInset()
-        binding.historyList.layoutManager = LinearLayoutManager(requireContext())
         binding.historyList.adapter = adapter
         binding.historyList.addHistoryDecorations()
         binding.historyClear.setOnClickListener { confirmClear() }
+        render(NotificationHistoryUiState::rows, adapter::submitList)
+        render({ it.entries.size }, ::renderCount)
     }
 
     override fun onBindingDestroyed() {
         binding.historyList.adapter = null
     }
 
-    override fun render(state: NotificationHistoryUiState) {
-        adapter.submitList(state.rows)
-        binding.historyClear.setVisible(!state.isEmpty)
-        binding.historyCount.text = getString(R.string.history_count, state.entries.size)
-        binding.historyCount.setVisible(!state.isEmpty)
-        binding.historyEmpty.setVisible(state.isEmpty)
+    private fun renderCount(count: Int) = with(binding) {
+        historyClear.setVisible(count > 0)
+        historyCount.text = getString(R.string.history_count, count)
+        historyCount.setVisible(count > 0)
+        historyEmpty.setVisible(count == 0)
     }
 
     override fun onEvent(event: HistoryEvent) {

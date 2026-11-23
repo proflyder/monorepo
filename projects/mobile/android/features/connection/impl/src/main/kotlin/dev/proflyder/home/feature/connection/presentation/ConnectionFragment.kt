@@ -5,8 +5,9 @@ import android.os.Bundle
 import dev.proflyder.home.core.config.RemoteConnectionState
 import dev.proflyder.home.core.config.TokenStatus
 import dev.proflyder.home.core.model.Field
+import dev.proflyder.home.core.model.RemoteFailure
+import dev.proflyder.home.core.model.SchedulerStatus
 import dev.proflyder.home.core.presentation.ScreenFragment
-import dev.proflyder.home.core.presentation.TextBinder
 import dev.proflyder.home.core.presentation.screenViewModel
 import dev.proflyder.home.core.ui.applyScrollBottomInset
 import dev.proflyder.home.core.ui.keepFocusedVisible
@@ -26,16 +27,18 @@ internal class ConnectionFragment :
     ) {
     override val viewModel: ConnectionViewModel by screenViewModel()
 
-    private lateinit var tokenBinder: TextBinder
-
-    override fun onScreenCreated(binding: FragmentConnectionBinding, savedInstanceState: Bundle?) {
+    override fun onViewReady(binding: FragmentConnectionBinding, savedInstanceState: Bundle?) {
         binding.connectionScroll.applyScrollBottomInset()
         binding.connectionScroll.keepFocusedVisible()
-        tokenBinder = bindText(binding.connectionToken, ConnectionIntent::EditToken)
+        val tokenBinder = bindText(binding.connectionToken, ConnectionIntent::EditToken)
         binding.connectionRefresh.setupPullToRefresh { dispatch(ConnectionIntent.Test) }
         binding.connectionTest.setOnClickListener { dispatch(ConnectionIntent.Test) }
         binding.connectionRefreshConfig.setOnClickListener { dispatch(ConnectionIntent.RefreshConfig) }
         binding.connectionClearToken.setOnClickListener { dispatch(ConnectionIntent.ClearToken) }
+        render(ConnectionUiState::tokenInput, tokenBinder::render)
+        render(ConnectionUiState::remote, ::renderRemote)
+        render(ConnectionUiState::tokenStatus, ::renderTokenStatus)
+        render(::connectionProgressOf, ::renderProgress)
     }
 
     override fun onEvent(event: ConnectionEvent) {
@@ -50,49 +53,44 @@ internal class ConnectionFragment :
         ConnectionNotice.CONFIG_REFRESHED -> R.string.connection_remote_refreshed
     }
 
-    override fun render(state: ConnectionUiState) {
-        val loaded = loadedConfiguration(state.remote)
-        tokenBinder.render(state.tokenInput)
-        with(binding) {
-            connectionRemoteState.text = remoteStateText(state.remote)
-            connectionRemoteScheduler.text = loaded?.endpoint?.baseUrl()
-                ?: getString(R.string.connection_remote_not_provided)
-            connectionRemoteControl.text = when {
-                loaded == null -> getString(R.string.connection_remote_not_provided)
-                else -> loaded.controlEndpoint?.baseUrl() ?: getString(R.string.connection_remote_not_set)
-            }
-            connectionRemoteIntercom.text = when {
-                loaded == null -> getString(R.string.connection_remote_not_provided)
-                else -> loaded.intercomEndpoint?.baseUrl() ?: getString(R.string.connection_remote_not_set_calls)
-            }
-            connectionRemoteTimeouts.text = loaded?.let {
-                getString(
-                    R.string.connection_remote_timeouts,
-                    it.connectTimeoutMillis / 1000L,
-                    it.readTimeoutMillis / 1000L,
-                )
-            } ?: getString(R.string.connection_remote_not_provided)
-
-            connectionHttpWarning.setVisible(
-                loaded?.endpoint?.baseUrl()?.startsWith("http://", ignoreCase = true) == true,
-            )
-            connectionTokenStatus.text = when (state.tokenStatus) {
-                TokenStatus.AVAILABLE -> getString(R.string.connection_token_present)
-                TokenStatus.UNREADABLE -> getString(R.string.connection_token_unreadable)
-                TokenStatus.ABSENT -> getString(R.string.connection_token_absent)
-                TokenStatus.LOADING -> getString(R.string.connection_token_loading)
-            }
-            connectionTokenWarning.setVisible(state.tokenStatus == TokenStatus.UNREADABLE)
-            connectionClearToken.setVisible(state.tokenStatus in CLEARABLE_TOKEN)
-
-            connectionTest.isEnabled = !state.busy
-            connectionRefreshConfig.isEnabled = !state.refreshingConfig
-            connectionRefresh.isRefreshing = state.saving || state.testing
-            connectionProgress.setVisible(state.busy)
-            connectionError.setVisible(state.error != null)
-            connectionError.text = state.error?.userMessage(requireContext())
-            connectionStatusText.text = statusText(state, loaded != null)
+    private fun renderRemote(remote: RemoteConnectionState) = with(binding) {
+        val loaded = loadedConfiguration(remote)
+        connectionRemoteState.text = remoteStateText(remote)
+        connectionRemoteScheduler.text = loaded?.endpoint?.baseUrl()
+            ?: getString(R.string.connection_remote_not_provided)
+        connectionRemoteControl.text = when {
+            loaded == null -> getString(R.string.connection_remote_not_provided)
+            else -> loaded.controlEndpoint?.baseUrl() ?: getString(R.string.connection_remote_not_set)
         }
+        connectionRemoteIntercom.text = when {
+            loaded == null -> getString(R.string.connection_remote_not_provided)
+            else -> loaded.intercomEndpoint?.baseUrl() ?: getString(R.string.connection_remote_not_set_calls)
+        }
+        connectionRemoteTimeouts.text = loaded?.let {
+            getString(R.string.connection_remote_timeouts, it.connectTimeoutMillis / 1000L, it.readTimeoutMillis / 1000L)
+        } ?: getString(R.string.connection_remote_not_provided)
+        connectionHttpWarning.setVisible(loaded?.endpoint?.baseUrl()?.startsWith("http://", ignoreCase = true) == true)
+    }
+
+    private fun renderTokenStatus(status: TokenStatus) = with(binding) {
+        connectionTokenStatus.text = when (status) {
+            TokenStatus.AVAILABLE -> getString(R.string.connection_token_present)
+            TokenStatus.UNREADABLE -> getString(R.string.connection_token_unreadable)
+            TokenStatus.ABSENT -> getString(R.string.connection_token_absent)
+            TokenStatus.LOADING -> getString(R.string.connection_token_loading)
+        }
+        connectionTokenWarning.setVisible(status == TokenStatus.UNREADABLE)
+        connectionClearToken.setVisible(status in CLEARABLE_TOKEN)
+    }
+
+    private fun renderProgress(progress: ConnectionProgress) = with(binding) {
+        connectionTest.isEnabled = !progress.busy
+        connectionRefreshConfig.isEnabled = !progress.refreshingConfig
+        connectionRefresh.isRefreshing = progress.checking
+        connectionProgress.setVisible(progress.busy)
+        connectionError.setVisible(progress.error != null)
+        connectionError.text = progress.error?.userMessage(requireContext())
+        connectionStatusText.text = statusText(progress.status, progress.configured)
     }
 
     private fun remoteStateText(remote: RemoteConnectionState): String = when (remote) {
@@ -122,8 +120,7 @@ internal class ConnectionFragment :
         else -> null
     }
 
-    private fun statusText(state: ConnectionUiState, configured: Boolean): String {
-        val status = state.status
+    private fun statusText(status: SchedulerStatus?, configured: Boolean): String {
         if (status == null) {
             return if (configured) {
                 getString(R.string.connection_not_tested)
@@ -149,3 +146,21 @@ internal class ConnectionFragment :
 }
 
 private val CLEARABLE_TOKEN = setOf(TokenStatus.AVAILABLE, TokenStatus.UNREADABLE)
+
+internal data class ConnectionProgress(
+    val busy: Boolean,
+    val refreshingConfig: Boolean,
+    val checking: Boolean,
+    val error: RemoteFailure?,
+    val status: SchedulerStatus?,
+    val configured: Boolean,
+)
+
+internal fun connectionProgressOf(state: ConnectionUiState): ConnectionProgress = ConnectionProgress(
+    busy = state.busy,
+    refreshingConfig = state.refreshingConfig,
+    checking = state.saving || state.testing,
+    error = state.error,
+    status = state.status,
+    configured = state.remote is RemoteConnectionState.Loaded || (state.remote as? RemoteConnectionState.FetchFailed)?.lastKnown != null,
+)

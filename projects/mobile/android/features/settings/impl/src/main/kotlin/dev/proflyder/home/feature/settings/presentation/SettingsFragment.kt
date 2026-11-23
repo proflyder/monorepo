@@ -14,7 +14,7 @@ internal class SettingsFragment :
     ) {
     override val viewModel: SettingsViewModel by screenViewModel()
 
-    override fun onScreenCreated(binding: FragmentSettingsBinding, savedInstanceState: Bundle?) {
+    override fun onViewReady(binding: FragmentSettingsBinding, savedInstanceState: Bundle?) {
         binding.root.applyScrollBottomInset()
         link(binding.settingsConnection, SettingsLink.CONNECTION)
         link(binding.settingsVpn, SettingsLink.VPN)
@@ -22,10 +22,7 @@ internal class SettingsFragment :
         link(binding.settingsHistory, SettingsLink.HISTORY)
         link(binding.settingsAppearance, SettingsLink.APPEARANCE)
         link(binding.settingsDesignSystem, SettingsLink.DESIGN_SYSTEM)
-    }
-
-    override fun render(state: SettingsUiState) {
-        binding.settingsDesignSystem.isVisible = state.designSystemVisible
+        render(SettingsUiState::designSystemVisible) { binding.settingsDesignSystem.isVisible = it }
     }
 
     override fun onEvent(event: SettingsEvent) {

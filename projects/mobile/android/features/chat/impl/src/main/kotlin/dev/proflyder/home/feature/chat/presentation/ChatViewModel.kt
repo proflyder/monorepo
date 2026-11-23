@@ -185,7 +185,6 @@ internal class ChatViewModel(
     override fun onCleared() {
         recording.cancel()
         player.release()
-        super.onCleared()
     }
 
     private companion object {

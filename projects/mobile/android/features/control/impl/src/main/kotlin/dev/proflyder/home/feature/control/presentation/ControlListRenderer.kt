@@ -39,9 +39,9 @@ internal class ControlListRenderer(
         StickySectionHeaders().attachTo(binding.controlList)
     }
 
-    fun render(state: ControlUiState) {
+    fun render(state: ControlListInput) {
         val catalog = state.catalog
-        val hasItems = state.entries.isNotEmpty()
+        val hasItems = catalog.entries.isNotEmpty()
         val failure = catalog.failure
         when {
             !catalog.configured -> showError(context.getString(R.string.control_not_configured), configured = false)
@@ -60,22 +60,22 @@ internal class ControlListRenderer(
         binding.controlOpenConnection.setVisible(!configured)
     }
 
-    private fun showContent(state: ControlUiState) {
+    private fun showContent(state: ControlListInput) {
         states.showContent()
         val stickToTop = hubWasEmpty && state.hub.cards.isNotEmpty() && !binding.controlList.canScrollVertically(-1)
         hubWasEmpty = state.hub.cards.isEmpty()
         adapter.submitList(items(state)) { if (stickToTop) binding.controlList.scrollToPosition(0) }
     }
 
-    private fun items(state: ControlUiState): List<ControlItem> = ControlItems.build(
-        entries = state.entries,
+    private fun items(state: ControlListInput): List<ControlItem> = ControlItems.build(
+        entries = state.catalog.entries,
         pending = state.pending,
         statesOk = state.catalog.statesOk,
         filter = state.filter,
         texts = texts,
-        expandedDevices = state.layout.expandedDevices,
+        expandedDevices = state.expandedDevices,
         leading = listOf(ControlItem.Hub(state.hub.cards, state.hub.remaining, state.hub.nowUnix)),
-        collapsedRooms = state.layout.collapsedRooms,
+        collapsedRooms = state.collapsedRooms,
     )
 
     private fun controlTexts() = ControlTexts(

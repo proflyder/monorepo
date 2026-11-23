@@ -24,6 +24,8 @@ metro_android_library(
         "@maven//:androidx_recyclerview_recyclerview",
         "@maven//:dev_zacsweers_metro_runtime_jvm",
         "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_android",
+        "@maven//:org_jetbrains_kotlinx_kotlinx_serialization_core_jvm",
+        "@maven//:org_jetbrains_kotlinx_kotlinx_serialization_json",
     ],
 )
 
@@ -62,6 +64,7 @@ home_android_local_test(
         "//projects/mobile/android/core/designsystem",
         "//projects/mobile/android/core/model",
         "//projects/mobile/android/core/testing",
+        "//projects/mobile/android/core/theme",
         "//projects/mobile/android/core/ui",
         "@maven//:androidx_activity_activity",
         "@maven//:androidx_fragment_fragment_ktx",
@@ -72,6 +75,7 @@ home_android_local_test(
         "@maven//:junit_junit",
         "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_android",
         "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_test",
+        "@maven//:org_jetbrains_kotlinx_kotlinx_serialization_core_jvm",
         "@maven//:org_robolectric_robolectric",
     ],
 )

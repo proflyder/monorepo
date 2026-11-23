@@ -107,3 +107,6 @@ home-rules:
     implPathMarker: /impl/src/main/
   NoUiOwnedControlState:
     active: true
+  NoCodeLayoutManager:
+    active: true
+    excludes: ['**/src/test/**']

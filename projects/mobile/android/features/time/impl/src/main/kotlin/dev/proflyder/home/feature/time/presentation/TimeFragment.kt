@@ -19,30 +19,27 @@ internal class TimeFragment :
     ScreenFragment<FragmentTimeBinding, TimeUiState, TimeIntent, Nothing>(FragmentTimeBinding.Companion::inflate) {
     override val viewModel: TimeViewModel by screenViewModel()
 
-    private var tabs: PillSegmentsBinder<TimeSection>? = null
-
     private val pageCallback = object : ViewPager2.OnPageChangeCallback() {
         override fun onPageSelected(position: Int) = select(position)
     }
 
-    override fun onScreenCreated(binding: FragmentTimeBinding, savedInstanceState: Bundle?) {
+    override fun onViewReady(binding: FragmentTimeBinding, savedInstanceState: Bundle?) {
         val features = requireContext().appGraph<TimeGraph>().featureRegistry
         binding.timePager.adapter = TimePagerAdapter(this, features)
-        binding.timePager.setCurrentItem(viewModel.state.value.section.ordinal, false)
         binding.timePager.registerOnPageChangeCallback(pageCallback)
         binding.timeTabs.setLabels(TimeSection.entries.map { getString(features.sectionEntry(it).titleRes) })
-        tabs = bindPills(binding.timeTabs, TimeSection.entries, TimeIntent::Select)
+        val tabs = bindPills(binding.timeTabs, TimeSection.entries, TimeIntent::Select)
+        render(TimeUiState::section) { section -> renderSection(tabs, section) }
     }
 
-    override fun render(state: TimeUiState) {
-        val index = state.section.ordinal
-        if (binding.timePager.currentItem != index) binding.timePager.currentItem = index
-        tabs?.render(state.section)
+    private fun renderSection(tabs: PillSegmentsBinder<TimeSection>, section: TimeSection) {
+        val index = section.ordinal
+        if (binding.timePager.currentItem != index) binding.timePager.setCurrentItem(index, isResumed)
+        tabs.render(section)
     }
 
     override fun onBindingDestroyed() {
         binding.timeTabs.onSelectionRequested = null
-        tabs = null
         binding.timePager.unregisterOnPageChangeCallback(pageCallback)
         binding.timePager.adapter = null
     }

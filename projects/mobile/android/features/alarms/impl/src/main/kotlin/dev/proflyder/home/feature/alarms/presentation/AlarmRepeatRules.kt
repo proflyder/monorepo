@@ -1,6 +1,8 @@
 package dev.proflyder.home.feature.alarms.presentation
 
 import dev.proflyder.home.core.model.RepeatKind
+import dev.proflyder.home.core.presentation.ResultKey
+import kotlinx.serialization.Serializable
 
 internal object AlarmRepeatRules {
     val WEEKDAYS: Set<Int> = setOf(1, 2, 3, 4, 5)
@@ -22,6 +24,7 @@ internal object AlarmRepeatRules {
     }
 }
 
+@Serializable
 internal data class AlarmRepeatChoice(
     val repeat: RepeatKind,
     val days: Set<Int>,
@@ -31,3 +34,5 @@ internal fun AlarmRepeatChoice.normalized(): AlarmRepeatChoice = when (repeat) {
     RepeatKind.CUSTOM -> copy(repeat = AlarmRepeatRules.presetFor(days))
     else -> this
 }
+
+internal object AlarmRepeatChosen : ResultKey<AlarmRepeatChoice>(AlarmRepeatChoice.serializer())

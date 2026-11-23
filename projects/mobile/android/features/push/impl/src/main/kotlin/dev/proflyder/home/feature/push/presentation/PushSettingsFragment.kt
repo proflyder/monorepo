@@ -6,11 +6,11 @@ import com.google.android.material.button.MaterialButton
 import dev.proflyder.home.core.designsystem.ListRow
 import dev.proflyder.home.core.designsystem.Tone
 import dev.proflyder.home.core.presentation.ScreenFragment
-import dev.proflyder.home.core.presentation.TextBinder
 import dev.proflyder.home.core.presentation.screenViewModel
 import dev.proflyder.home.core.ui.applyScrollBottomInset
 import dev.proflyder.home.core.ui.keepFocusedVisible
 import dev.proflyder.home.core.ui.setVisible
+import dev.proflyder.home.feature.push.PushPermissionStatus
 import dev.proflyder.home.feature.push.PushRegistration
 import dev.proflyder.home.feature.push.impl.R
 import dev.proflyder.home.feature.push.impl.databinding.FragmentPushSettingsBinding
@@ -21,9 +21,7 @@ internal class PushSettingsFragment :
     ) {
     override val viewModel: PushSettingsViewModel by screenViewModel()
 
-    private lateinit var nameBinder: TextBinder
-
-    override fun onScreenCreated(binding: FragmentPushSettingsBinding, savedInstanceState: Bundle?) {
+    override fun onViewReady(binding: FragmentPushSettingsBinding, savedInstanceState: Bundle?) {
         binding.root.applyScrollBottomInset()
         binding.root.keepFocusedVisible()
         bindRow(binding.pushNotificationsRow, binding.pushNotificationsAction, PushSettingsScreen.NOTIFICATIONS)
@@ -31,21 +29,24 @@ internal class PushSettingsFragment :
         bindRow(binding.pushFullScreenRow, binding.pushFullScreenAction, PushSettingsScreen.FULL_SCREEN)
         binding.pushRegister.setOnClickListener { dispatch(PushSettingsIntent.Register) }
         binding.pushDeviceNameSave.setOnClickListener { dispatch(PushSettingsIntent.SaveName) }
-        nameBinder = bindText(binding.pushDeviceName, PushSettingsIntent::EditName)
+        val nameBinder = bindText(binding.pushDeviceName, PushSettingsIntent::EditName)
+        render(PushSettingsUiState::permissions, ::renderPermissions)
+        render({ it.registration to it.sync.busy }) { (registration, busy) -> renderRegistration(registration, busy) }
+        render(PushSettingsUiState::deviceName, nameBinder::render)
     }
 
-    override fun render(state: PushSettingsUiState) {
-        with(binding) {
-            renderRow(pushNotificationsRow, state.permissions.notifications)
-            renderRow(pushDndRow, state.permissions.dndAccess)
-            renderRow(pushFullScreenRow, state.permissions.fullScreenIntent)
-            pushRingSummary.setText(if (state.canRing) R.string.push_ring_ready else R.string.push_ring_incomplete)
-            pushRegistration.text = registrationText(state.registration, state.sync.busy)
-            pushRegister.isEnabled = !state.sync.busy
-            pushDeviceNameSave.isEnabled = !state.sync.busy
-            pushProgress.setVisible(state.sync.busy)
-        }
-        nameBinder.render(state.deviceName)
+    private fun renderPermissions(permissions: PushPermissionStatus) = with(binding) {
+        renderRow(pushNotificationsRow, permissions.notifications)
+        renderRow(pushDndRow, permissions.dndAccess)
+        renderRow(pushFullScreenRow, permissions.fullScreenIntent)
+        pushRingSummary.setText(if (permissions.canRing) R.string.push_ring_ready else R.string.push_ring_incomplete)
+    }
+
+    private fun renderRegistration(registration: PushRegistration, busy: Boolean) = with(binding) {
+        pushRegistration.text = registrationText(registration, busy)
+        pushRegister.isEnabled = !busy
+        pushDeviceNameSave.isEnabled = !busy
+        pushProgress.setVisible(busy)
     }
 
     override fun onEvent(event: PushSettingsEvent) {

@@ -86,7 +86,8 @@ internal class TimersViewModel(
     private data class StartPayload(val label: String, val seconds: Long, val endpoint: String)
 
     init {
-        loader.refreshOn(screenShown)
+        loader.refresh(RefreshMode.SOFT)
+        loader.refreshOn(visibility.returned)
         countdownWhileVisible()
     }
 
@@ -105,7 +106,7 @@ internal class TimersViewModel(
 
     @OptIn(ExperimentalCoroutinesApi::class)
     private fun countdownWhileVisible() {
-        screenVisible
+        visibility.visible
             .flatMapLatest { visible -> if (visible) tickerFlow(TICK) else emptyFlow() }
             .onEach { tick() }
             .launchIn(viewModelScope)

@@ -7,6 +7,7 @@ import dev.proflyder.home.core.model.RepeatKind
 import dev.proflyder.home.core.presentation.CheckableBinder
 import dev.proflyder.home.core.presentation.RadioGroupBinder
 import dev.proflyder.home.core.presentation.ScreenBottomSheet
+import dev.proflyder.home.core.presentation.setResult
 import dev.proflyder.home.core.presentation.screenViewModel
 import dev.proflyder.home.core.ui.SavedStateViewModelFactory
 import dev.proflyder.home.core.ui.setVisible
@@ -24,28 +25,21 @@ internal class AlarmRepeatSheet :
     ) {
     override val viewModel: AlarmRepeatSheetViewModel by screenViewModel()
 
-    private var options: RadioGroupBinder<RepeatKind>? = null
-    private var days: List<CheckableBinder<*>> = emptyList()
-
-    override fun onSheetCreated(binding: SheetAlarmRepeatBinding, savedInstanceState: Bundle?) {
+    override fun onViewReady(binding: SheetAlarmRepeatBinding, savedInstanceState: Bundle?) {
         binding.sheetCancel.setOnClickListener { dismiss() }
         binding.sheetDone.setOnClickListener { dispatch(AlarmRepeatIntent.Confirm) }
-        options = RadioGroupBinder(binding.repeatOptions, ::optionId, ::repeatFor) { dispatch(AlarmRepeatIntent.Choose(it)) }
-        days = dayToggles(binding).mapIndexed { index, toggle ->
+        val options = RadioGroupBinder(binding.repeatOptions, ::optionId, ::repeatFor) { dispatch(AlarmRepeatIntent.Choose(it)) }
+        val days = dayToggles(binding).mapIndexed { index, toggle ->
             CheckableBinder(toggle) { selected -> dispatch(AlarmRepeatIntent.SetDay(index + 1, selected)) }
         }
+        render({ it.choice.repeat }) { repeat -> renderRepeat(options, repeat) }
+        render({ it.choice.days }) { selected -> days.forEachIndexed { index, day -> day.render(index + 1 in selected) } }
+        render(AlarmRepeatSheetState::canConfirm) { binding.sheetDone.isEnabled = it }
     }
 
-    override fun onSheetDestroyed() {
-        options = null
-        days = emptyList()
-    }
-
-    override fun render(state: AlarmRepeatSheetState) {
-        options?.render(state.choice.repeat)
-        binding.repeatDaysGroup.setVisible(state.choice.repeat == RepeatKind.CUSTOM)
-        days.forEachIndexed { index, day -> day.render(state.choice.days.contains(index + 1)) }
-        binding.sheetDone.isEnabled = state.canConfirm
+    private fun renderRepeat(options: RadioGroupBinder<RepeatKind>, repeat: RepeatKind) {
+        options.render(repeat)
+        binding.repeatDaysGroup.setVisible(repeat == RepeatKind.CUSTOM)
     }
 
     override fun onEvent(event: AlarmRepeatEvent) {
@@ -55,13 +49,7 @@ internal class AlarmRepeatSheet :
     }
 
     private fun publish(choice: AlarmRepeatChoice) {
-        parentFragmentManager.setFragmentResult(
-            REQUEST_KEY,
-            Bundle().apply {
-                putString(RESULT_REPEAT, choice.repeat.name)
-                putIntArray(RESULT_DAYS, choice.days.sorted().toIntArray())
-            },
-        )
+        setResult(AlarmRepeatChosen, choice)
         dismiss()
     }
 
@@ -87,21 +75,12 @@ internal class AlarmRepeatSheet :
 
     companion object {
         const val TAG = "alarm_repeat_sheet"
-        const val REQUEST_KEY = "alarm_repeat_request"
-        private const val RESULT_REPEAT = "alarm_repeat_result"
-        private const val RESULT_DAYS = "alarm_repeat_days_result"
 
         fun create(repeat: RepeatKind, days: Set<Int>): AlarmRepeatSheet = AlarmRepeatSheet().apply {
             arguments = Bundle().apply {
                 putString(AlarmRepeatSheetViewModel.KEY_REPEAT, repeat.name)
                 putIntArray(AlarmRepeatSheetViewModel.KEY_DAYS, days.sorted().toIntArray())
             }
-        }
-
-        fun resultOf(result: Bundle): AlarmEditorIntent? {
-            val repeat = RepeatKind.entries.firstOrNull { it.name == result.getString(RESULT_REPEAT) } ?: return null
-            val days = result.getIntArray(RESULT_DAYS)?.toSet().orEmpty()
-            return AlarmEditorIntent.SetRepeat(repeat, days)
         }
     }
 }

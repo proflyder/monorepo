@@ -5,8 +5,7 @@ import dev.proflyder.home.core.presentation.bindText
 import dev.proflyder.home.core.designsystem.R as DesignR
 import android.os.Bundle
 import dev.proflyder.home.core.presentation.ScreenFragment
-import dev.proflyder.home.core.presentation.SwitchBinder
-import dev.proflyder.home.core.presentation.TextBinder
+import dev.proflyder.home.core.presentation.EditorStatus
 import dev.proflyder.home.core.ui.applyScrollBottomInset
 import dev.proflyder.home.core.ui.injectedViewModels
 import dev.proflyder.home.core.ui.keepFocusedVisible
@@ -25,36 +24,29 @@ internal class ReminderEditorFragment :
     ) {
     override val viewModel: ReminderEditorViewModel by injectedViewModels()
 
-    private var label: TextBinder? = null
-    private var enabled: SwitchBinder? = null
-
-    override fun onScreenCreated(binding: FragmentReminderEditorBinding, savedInstanceState: Bundle?) {
+    override fun onViewReady(binding: FragmentReminderEditorBinding, savedInstanceState: Bundle?) {
         binding.root.applyScrollBottomInset()
         binding.root.keepFocusedVisible()
-        label = bindText(binding.reminderEditorLabel, ReminderEditorIntent::SetLabel)
-        enabled = bindSwitch(binding.reminderEditorEnabled, ReminderEditorIntent::SetEnabled)
+        val label = bindText(binding.reminderEditorLabel, ReminderEditorIntent::SetLabel)
+        val enabled = bindSwitch(binding.reminderEditorEnabled, ReminderEditorIntent::SetEnabled)
         binding.reminderEditorDate.setOnClickListener { dispatch(ReminderEditorIntent.PickDate) }
         binding.reminderEditorTime.setOnClickListener { dispatch(ReminderEditorIntent.PickTime) }
         binding.reminderEditorSave.setOnClickListener { dispatch(ReminderEditorIntent.Save) }
         binding.reminderEditorDelete.setOnClickListener { dispatch(ReminderEditorIntent.RequestDelete) }
+        render(ReminderEditorUiState::label, label::render)
+        render(ReminderEditorUiState::enabled, enabled::render)
+        render(ReminderEditorUiState::date) { binding.reminderEditorDate.text = ReminderFormat.dateLabel(it) }
+        render({ it.hour to it.minute }) { (hour, minute) -> binding.reminderEditorTime.text = ReminderFormat.timeLabel(hour, minute) }
+        render(ReminderEditorUiState::editing) { binding.reminderEditorDelete.setVisible(it) }
+        render(ReminderEditorUiState::status, ::renderStatus)
     }
 
-    override fun onBindingDestroyed() {
-        label = null
-        enabled = null
-    }
-
-    override fun render(state: ReminderEditorUiState) = with(binding) {
-        label?.render(state.label)
-        enabled?.render(state.enabled)
-        reminderEditorDate.text = ReminderFormat.dateLabel(state.date)
-        reminderEditorTime.text = ReminderFormat.timeLabel(state.hour, state.minute)
-        reminderEditorDelete.setVisible(state.editing)
-        reminderEditorSave.isEnabled = state.status.idle
-        reminderEditorDelete.isEnabled = state.status.idle
-        reminderEditorProgress.setVisible(state.status.busy)
-        reminderEditorError.setVisible(state.status.error != null)
-        reminderEditorError.text = state.status.error?.userMessage(requireContext())
+    private fun renderStatus(status: EditorStatus) = with(binding) {
+        reminderEditorSave.isEnabled = status.idle
+        reminderEditorDelete.isEnabled = status.idle
+        reminderEditorProgress.setVisible(status.busy)
+        reminderEditorError.setVisible(status.error != null)
+        reminderEditorError.text = status.error?.userMessage(requireContext())
     }
 
     override fun onEvent(event: ReminderEditorEvent) {

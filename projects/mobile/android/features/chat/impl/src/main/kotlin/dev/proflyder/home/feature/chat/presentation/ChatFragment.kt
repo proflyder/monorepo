@@ -26,12 +26,14 @@ import dev.proflyder.home.core.designsystem.Components
 import dev.proflyder.home.core.designsystem.HomePopupMenu
 import dev.proflyder.home.core.model.ChatAttachmentKind
 import dev.proflyder.home.core.presentation.ScreenFragment
-import dev.proflyder.home.core.ui.injectedActivityViewModels
+import dev.proflyder.home.core.presentation.tabViewModels
 import dev.proflyder.home.core.ui.pinAboveKeyboard
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.core.ui.userMessage
 import dev.proflyder.home.feature.chat.ChatFocus
 import dev.proflyder.home.feature.chat.data.AttachmentSource
+import dev.proflyder.home.core.model.ChatQuote
+import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.feature.chat.data.LocalAttachment
 import dev.proflyder.home.feature.chat.impl.R
 import dev.proflyder.home.feature.chat.impl.databinding.FragmentChatBinding
@@ -40,10 +42,10 @@ import kotlinx.coroutines.launch
 internal class ChatFragment : ScreenFragment<FragmentChatBinding, ChatUiState, ChatIntent, ChatEvent>(
     FragmentChatBinding.Companion::inflate,
 ) {
-    override val viewModel: ChatViewModel by injectedActivityViewModels()
+    override val viewModel: ChatViewModel by tabViewModels()
 
-    private lateinit var adapter: ChatAdapter
-    private lateinit var layoutManager: LinearLayoutManager
+    private val adapter = ChatAdapter(Callbacks())
+    internal val layoutManager: LinearLayoutManager get() = binding.chatList.layoutManager as LinearLayoutManager
     private var lastCount = 0
 
     private val pickImage = registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
@@ -58,10 +60,7 @@ internal class ChatFragment : ScreenFragment<FragmentChatBinding, ChatUiState, C
         if (!granted) showError(R.string.chat_record_permission)
     }
 
-    override fun onScreenCreated(binding: FragmentChatBinding, savedInstanceState: Bundle?) = with(binding) {
-        adapter = ChatAdapter(Callbacks())
-        layoutManager = LinearLayoutManager(requireContext()).apply { stackFromEnd = true }
-        chatList.layoutManager = layoutManager
+    override fun onViewReady(binding: FragmentChatBinding, savedInstanceState: Bundle?) = with(binding) {
         chatList.adapter = adapter
         chatList.addOnScrollListener(ScrollWatcher())
         ItemTouchHelper(SwipeToReply(::onSwipeReply)).attachToRecyclerView(chatList)
@@ -74,21 +73,29 @@ internal class ChatFragment : ScreenFragment<FragmentChatBinding, ChatUiState, C
         chatReplyCancel.setOnClickListener { dispatch(ChatIntent.CancelReply) }
         chatScrollDown.setOnClickListener { scrollToEnd(smooth = true) }
         chatErrorRetry.setOnClickListener { dispatch(ChatIntent.Refresh) }
+        render({ ChatStatus(it.loaded, it.failure, it.items.isEmpty()) }, ::renderStatus)
+        render({ it.draft to it.canSend }) { (draft, canSend) -> renderComposer(draft, canSend) }
+        render(ChatUiState::replyTo, ::renderReply)
+        render(ChatUiState::pending, ::renderPending)
+        render(ChatUiState::recording, ::renderRecording)
+        render(ChatUiState::items, ::renderItems)
     }
 
-    override fun render(state: ChatUiState) {
-        val empty = state.items.isEmpty()
-        binding.chatProgress.setVisible(!state.loaded && state.failure == null && empty)
-        binding.chatError.setVisible(!state.loaded && state.failure != null && empty)
-        binding.chatErrorText.text = state.failure?.userMessage(requireContext())
-        binding.chatEmpty.setVisible(state.loaded && empty)
-        renderComposer(state)
-        renderReply(state)
-        renderPending(state)
-        renderRecording(state.recording)
-        val follow = isAtEnd() || state.items.size > lastCount && state.items.lastOrNull().isMine()
-        lastCount = state.items.size
-        adapter.submitList(state.items) { afterSubmit(follow) }
+    override fun onBindingDestroyed() {
+        binding.chatList.adapter = null
+    }
+
+    private fun renderStatus(status: ChatStatus) = with(binding) {
+        chatProgress.setVisible(!status.loaded && status.failure == null && status.empty)
+        chatError.setVisible(!status.loaded && status.failure != null && status.empty)
+        chatErrorText.text = status.failure?.userMessage(requireContext())
+        chatEmpty.setVisible(status.loaded && status.empty)
+    }
+
+    private fun renderItems(items: List<ChatItem>) {
+        val follow = isAtEnd() || items.size > lastCount && items.lastOrNull().isMine()
+        lastCount = items.size
+        adapter.submitList(items) { afterSubmit(follow) }
     }
 
     override fun onEvent(event: ChatEvent) {
@@ -121,16 +128,16 @@ internal class ChatFragment : ScreenFragment<FragmentChatBinding, ChatUiState, C
         (it as? ChatItem.Bubble)?.messageId == messageId || (it as? ChatItem.Alert)?.messageId == messageId
     }.takeIf { it >= 0 }
 
-    private fun renderComposer(state: ChatUiState) = with(binding) {
-        if (chatInput.text?.toString() != state.draft) chatInput.setText(state.draft)
-        chatSend.setVisible(state.canSend)
-        chatMic.setVisible(!state.canSend)
+    private fun renderComposer(draft: String, canSend: Boolean) = with(binding) {
+        if (chatInput.text?.toString() != draft) chatInput.setText(draft)
+        chatSend.setVisible(canSend)
+        chatMic.setVisible(!canSend)
     }
 
-    private fun renderPending(state: ChatUiState) {
-        binding.chatPendingScroll.setVisible(state.pending.isNotEmpty())
+    private fun renderPending(pending: List<LocalAttachment>) {
+        binding.chatPendingScroll.setVisible(pending.isNotEmpty())
         binding.chatPending.removeAllViews()
-        state.pending.forEach { binding.chatPending.addView(pendingChip(it)) }
+        pending.forEach { binding.chatPending.addView(pendingChip(it)) }
     }
 
     private fun renderRecording(recording: RecordingState) = with(binding) {
@@ -169,8 +176,7 @@ internal class ChatFragment : ScreenFragment<FragmentChatBinding, ChatUiState, C
         return viewModel.state.value.recording is RecordingState.Active
     }
 
-    private fun renderReply(state: ChatUiState) {
-        val quote = state.replyTo
+    private fun renderReply(quote: ChatQuote?) {
         binding.chatReplyBar.setVisible(quote != null)
         quote ?: return
         binding.chatReplyAuthor.setText(chatAuthor(quote.role))
@@ -286,6 +292,8 @@ internal class ChatFragment : ScreenFragment<FragmentChatBinding, ChatUiState, C
         val FILE_TYPES = arrayOf("text/plain", "text/markdown", "text/csv", "application/json")
     }
 }
+
+internal data class ChatStatus(val loaded: Boolean, val failure: RemoteFailure?, val empty: Boolean)
 
 internal class StatesFollowList(private val states: View) : View.OnLayoutChangeListener {
     override fun onLayoutChange(

@@ -7,14 +7,12 @@ import androidx.activity.OnBackPressedCallback
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.repeatOnLifecycle
+import dev.proflyder.home.core.presentation.deliverEvents
+import dev.proflyder.home.core.presentation.renderSlice
 import dev.proflyder.home.core.ui.injectedViewModels
 import dev.proflyder.home.core.ui.applySystemBarsPadding
 import dev.proflyder.home.feature.call.impl.R
 import dev.proflyder.home.feature.call.impl.databinding.ActivityCallBinding
-import kotlinx.coroutines.launch
 
 internal class CallActivity : AppCompatActivity() {
 
@@ -72,12 +70,8 @@ internal class CallActivity : AppCompatActivity() {
     }
 
     private fun observe() {
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                launch { viewModel.state.collect(::render) }
-                launch { viewModel.events.collect(::onEvent) }
-            }
-        }
+        renderSlice(viewModel.state, { it }, ::render)
+        deliverEvents(viewModel.screenEvents, ::onEvent)
     }
 
     private fun render(state: CallScreenState) {

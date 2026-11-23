@@ -1,4 +1,4 @@
-package dev.proflyder.home.core.designsystem
+package dev.proflyder.home.core.presentation
 
 import android.content.DialogInterface
 import android.os.Bundle
@@ -12,12 +12,21 @@ import androidx.annotation.DrawableRes
 import androidx.core.view.isVisible
 import androidx.fragment.app.FragmentManager
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
+import dev.proflyder.home.core.designsystem.R
+import kotlinx.serialization.Serializable
 
 data class SheetOption(
     val key: String,
     val label: CharSequence,
     @DrawableRes val icon: Int = 0,
 )
+
+@Serializable
+data class SheetChoice(val key: String? = null)
+
+open class OptionsResult : ResultKey<SheetChoice>(SheetChoice.serializer())
+
+private object OptionsCodec : OptionsResult()
 
 class OptionsSheet : BottomSheetDialogFragment() {
     private val args: Bundle get() = requireArguments()
@@ -35,7 +44,7 @@ class OptionsSheet : BottomSheetDialogFragment() {
 
     override fun onCancel(dialog: DialogInterface) {
         super.onCancel(dialog)
-        parentFragmentManager.setFragmentResult(requestKey, Bundle())
+        parentFragmentManager.setFragmentResult(requestKey, OptionsCodec.pack(SheetChoice()))
     }
 
     private fun row(parent: ViewGroup, option: SheetOption, selected: Boolean): View {
@@ -51,7 +60,7 @@ class OptionsSheet : BottomSheetDialogFragment() {
     }
 
     private fun choose(key: String) {
-        parentFragmentManager.setFragmentResult(requestKey, Bundle().apply { putString(RESULT_KEY, key) })
+        parentFragmentManager.setFragmentResult(requestKey, OptionsCodec.pack(SheetChoice(key)))
         dismiss()
     }
 
@@ -62,24 +71,22 @@ class OptionsSheet : BottomSheetDialogFragment() {
         private const val ARG_LABELS = "ds_options_labels"
         private const val ARG_ICONS = "ds_options_icons"
         private const val ARG_SELECTED = "ds_options_selected"
-        private const val RESULT_KEY = "ds_options_result"
 
         fun show(
             manager: FragmentManager,
-            requestKey: String,
+            result: OptionsResult,
             title: CharSequence,
             options: List<SheetOption>,
             selectedKey: String? = null,
         ) {
+            val requestKey = result.requestKey
             if (manager.findFragmentByTag(requestKey) != null) return
             OptionsSheet().apply { arguments = argumentsOf(requestKey, title, options, selectedKey) }.show(manager, requestKey)
         }
 
-        fun dismiss(manager: FragmentManager, requestKey: String) {
-            (manager.findFragmentByTag(requestKey) as? OptionsSheet)?.dismissAllowingStateLoss()
+        fun dismiss(manager: FragmentManager, result: OptionsResult) {
+            (manager.findFragmentByTag(result.requestKey) as? OptionsSheet)?.dismissAllowingStateLoss()
         }
-
-        fun chosenKey(result: Bundle): String? = result.getString(RESULT_KEY)
 
         private fun argumentsOf(requestKey: String, title: CharSequence, options: List<SheetOption>, selectedKey: String?) =
             Bundle().apply {

@@ -19,16 +19,32 @@ abstract class ScreenFragment<VB : ViewBinding, S : Any, I : Any, E : Any>(
 
     override val screenName: String get() = screenNameOf(this)
 
-    final override fun onBindingCreated(binding: VB, savedInstanceState: Bundle?) {
-        onScreenCreated(binding, savedInstanceState)
-        viewLifecycleOwner.connect(viewModel, ::render, ::onEvent)
+    final override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        deliverEvents(viewModel.screenEvents, ::onEvent)
+        onScreenCreate(savedInstanceState)
     }
 
-    protected open fun onScreenCreated(binding: VB, savedInstanceState: Bundle?) = Unit
+    final override fun onBindingCreated(binding: VB, savedInstanceState: Bundle?) {
+        onViewReady(binding, savedInstanceState)
+        bindScreenView(viewModel, ::render)
+    }
 
-    protected abstract fun render(state: S)
+    protected open fun onScreenCreate(savedInstanceState: Bundle?) = Unit
+
+    protected open fun onViewReady(binding: VB, savedInstanceState: Bundle?) = Unit
+
+    protected open fun render(state: S) = Unit
+
+    protected fun <T> render(selector: (S) -> T, block: (T) -> Unit) {
+        viewLifecycleOwner.renderSlice(viewModel.state, selector, block)
+    }
 
     protected open fun onEvent(event: E) = Unit
+
+    protected fun <T : Any> onResult(key: ResultKey<T>, toIntent: (T) -> I?) {
+        childFragmentManager.listenResult(key, this) { value -> toIntent(value)?.let(::dispatch) }
+    }
 
     final override fun dispatch(intent: I) {
         viewModel.dispatch(intent)

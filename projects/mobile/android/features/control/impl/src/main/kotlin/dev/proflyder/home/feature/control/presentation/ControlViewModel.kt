@@ -39,6 +39,8 @@ internal class ControlScreenDependencies(
 internal class ControlViewModel(
     dependencies: ControlScreenDependencies,
 ) : StateViewModel<ControlUiState, ControlIntent, ControlEvent>(ControlUiState()) {
+    override fun derive(previous: ControlUiState, next: ControlUiState): ControlUiState = next.derivedFrom(previous)
+
     private val hubFeed = HomeHubFeed(dependencies.hub, viewModelScope)
     private val tiles = QuickTileLauncher(dependencies.providers)
     private val favorites = ControlFavorites(dependencies.favorites, dependencies.defaultFavoriteScenarios)

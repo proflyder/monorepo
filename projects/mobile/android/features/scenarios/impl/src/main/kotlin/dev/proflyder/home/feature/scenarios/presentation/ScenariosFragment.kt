@@ -1,7 +1,6 @@
 package dev.proflyder.home.feature.scenarios.presentation
 
 import android.os.Bundle
-import androidx.recyclerview.widget.GridLayoutManager
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.presentation.RefreshMode
 import dev.proflyder.home.core.presentation.ScreenFragment
@@ -9,7 +8,7 @@ import dev.proflyder.home.core.ui.ListStateViews
 import dev.proflyder.home.core.ui.Notices
 import dev.proflyder.home.core.ui.applyScrollBottomInset
 import dev.proflyder.home.core.ui.fabClearance
-import dev.proflyder.home.core.ui.injectedActivityViewModels
+import dev.proflyder.home.core.presentation.tabViewModels
 import dev.proflyder.home.core.ui.liftAboveBottomInsets
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.core.ui.setupPullToRefresh
@@ -21,18 +20,15 @@ internal class ScenariosFragment :
     ScreenFragment<FragmentScenariosBinding, ScenariosUiState, ScenariosIntent, ScenariosEvent>(
         FragmentScenariosBinding.Companion::inflate,
     ) {
-    override val viewModel: ScenariosViewModel by injectedActivityViewModels()
+    override val viewModel: ScenariosViewModel by tabViewModels()
 
-    private lateinit var adapter: ScenarioAdapter
-    private lateinit var states: ListStateViews
+    private val adapter = ScenarioAdapter(ScenarioAdapterIntents(::dispatch))
 
-    override fun onScreenCreated(binding: FragmentScenariosBinding, savedInstanceState: Bundle?) = with(binding) {
+    override fun onViewReady(binding: FragmentScenariosBinding, savedInstanceState: Bundle?) = with(binding) {
         scenariosList.applyScrollBottomInset(scenariosList.fabClearance())
         scenariosAdd.liftAboveBottomInsets()
-        adapter = ScenarioAdapter(ScenarioAdapterIntents(::dispatch))
-        scenariosList.layoutManager = GridLayoutManager(requireContext(), resources.getInteger(R.integer.scenarios_columns))
         scenariosList.adapter = adapter
-        states = ListStateViews(
+        val states = ListStateViews(
             progress = scenariosProgress,
             empty = scenariosEmpty,
             error = scenariosError,
@@ -43,18 +39,23 @@ internal class ScenariosFragment :
         scenariosRetry.setOnClickListener { dispatch(ScenariosIntent.Refresh(RefreshMode.HARD)) }
         scenariosOpenConnection.setOnClickListener { dispatch(ScenariosIntent.OpenConnection) }
         scenariosAdd.setOnClickListener { dispatch(ScenariosIntent.Add) }
+        render(::scenariosLoadOf) { load -> renderLoad(states, load) }
+        render(ScenariosUiState::rows, adapter::submitList)
     }
 
-    override fun render(state: ScenariosUiState) {
-        val hasItems = state.scenarios.isNotEmpty()
-        val loadError = state.loadError
+    override fun onBindingDestroyed() {
+        binding.scenariosList.adapter = null
+    }
+
+    private fun renderLoad(states: ListStateViews, load: ScenariosLoad) {
+        val loadError = load.error
         when {
-            state.refreshing && !hasItems -> states.showLoading()
-            loadError != null && !hasItems -> showLoadError(loadError)
-            !hasItems -> states.showEmpty()
-            else -> states.showContent().also { adapter.submitList(state.scenarios.map { ScenarioRow(it, state.busy) }) }
+            load.refreshing && !load.hasItems -> states.showLoading()
+            loadError != null && !load.hasItems -> showLoadError(states, loadError)
+            !load.hasItems -> states.showEmpty()
+            else -> states.showContent()
         }
-        binding.scenariosRefresh.isRefreshing = state.refreshing && hasItems
+        binding.scenariosRefresh.isRefreshing = load.refreshing && load.hasItems
     }
 
     override fun onEvent(event: ScenariosEvent) {
@@ -67,7 +68,7 @@ internal class ScenariosFragment :
         }
     }
 
-    private fun showLoadError(failure: RemoteFailure) {
+    private fun showLoadError(states: ListStateViews, failure: RemoteFailure) {
         states.showError(failure.userMessage(requireContext()))
         binding.scenariosOpenConnection.setVisible(failure == RemoteFailure.NotConfigured)
     }
@@ -84,3 +85,8 @@ internal class ScenariosFragment :
 
     private fun notice(text: String) = Notices.show(binding.root, text)
 }
+
+internal data class ScenariosLoad(val refreshing: Boolean, val error: RemoteFailure?, val hasItems: Boolean)
+
+internal fun scenariosLoadOf(state: ScenariosUiState): ScenariosLoad =
+    ScenariosLoad(state.refreshing, state.loadError, state.scenarios.isNotEmpty())

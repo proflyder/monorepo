@@ -9,7 +9,6 @@ import androidx.fragment.app.DialogFragment
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.presentation.ScreenFragment
-import dev.proflyder.home.core.presentation.SwitchBinder
 import dev.proflyder.home.core.presentation.screenViewModel
 import dev.proflyder.home.core.presentation.showNotice
 import dev.proflyder.home.core.ui.applyScrollBottomInset
@@ -37,49 +36,58 @@ internal class ScenarioEditorFragment : ScreenFragment<
     override val viewModel: ScenarioEditorViewModel by screenViewModel()
 
     private val promptSlot = DialogSlot()
-    private val menus = ScenarioEditorMenus(this, ::dispatch)
-    private lateinit var sections: ScenarioDraftSections
-    private lateinit var enabled: SwitchBinder
-    private lateinit var continueOnError: SwitchBinder
+    private val menus = ScenarioEditorMenus(this)
 
-    override fun onScreenCreated(binding: FragmentScenarioEditorBinding, savedInstanceState: Bundle?) = with(binding) {
+    override fun onScreenCreate(savedInstanceState: Bundle?) {
+        onResult(EditorMenuChosen, ::menuIntent)
+        onResult(EditorActionChosen, ::actionIntent)
+    }
+
+    override fun onViewReady(binding: FragmentScenarioEditorBinding, savedInstanceState: Bundle?) = with(binding) {
         root.applyScrollBottomInset()
         root.keepFocusedVisible()
-        sections = ScenarioDraftSections(binding, ::dispatch)
+        val sections = ScenarioDraftSections(binding, ::dispatch)
         scenarioEditorLabel.doAfterTextChanged { dispatch(ScenarioEditorIntent.SetLabel(it?.toString().orEmpty())) }
         scenarioEditorDescription.doAfterTextChanged { dispatch(ScenarioEditorIntent.SetDescription(it?.toString().orEmpty())) }
-        enabled = bindSwitch(scenarioEditorEnabled, ScenarioEditorIntent::SetEnabled)
-        continueOnError = bindSwitch(scenarioEditorContinueOnError, ScenarioEditorIntent::SetContinueOnError)
-        menus.attach()
+        val enabled = bindSwitch(scenarioEditorEnabled, ScenarioEditorIntent::SetEnabled)
+        val continueOnError = bindSwitch(scenarioEditorContinueOnError, ScenarioEditorIntent::SetContinueOnError)
         scenarioEditorAddTrigger.setOnClickListener { menus.open(EditorMenu.TRIGGER) }
         scenarioEditorAddCondition.setOnClickListener { menus.open(EditorMenu.CONDITION) }
         scenarioEditorAddStep.setOnClickListener { menus.open(EditorMenu.STEP) }
         scenarioEditorSave.setOnClickListener { dispatch(ScenarioEditorIntent.Save) }
         scenarioEditorDelete.setOnClickListener { dispatch(ScenarioEditorIntent.RequestDelete) }
         scenarioEditorCatalogStatus.setOnClickListener { dispatch(ScenarioEditorIntent.ReloadCatalog) }
+        render({ it.draft.label }, scenarioEditorLabel::showText)
+        render({ it.draft.description }, scenarioEditorDescription::showText)
+        render({ it.draft.enabled }, enabled::render)
+        render({ it.draft.continueOnError }, continueOnError::render)
+        render(::editorControlsOf, ::renderControls)
+        render(ScenarioEditorUiState::visibleError, ::renderError)
+        render({ it.catalog.error }, ::renderCatalogStatus)
+        render({ it.draft to it.catalog }) { (draft, catalog) -> sections.render(draft, catalog) }
+        render({ it.prompt to it.catalog }) { (prompt, catalog) -> renderPrompt(prompt, catalog) }
+        render(ScenarioEditorUiState::editor, ::renderEditor)
     }
 
-    override fun render(state: ScenarioEditorUiState) = with(binding) {
-        val draft = state.draft
-        scenarioEditorLabel.showText(draft.label)
-        scenarioEditorDescription.showText(draft.description)
-        enabled.render(draft.enabled)
-        continueOnError.render(draft.continueOnError)
-        scenarioEditorUnsupported.setVisible(state.hasUnsupportedParts)
-        scenarioEditorAddTrigger.isEnabled = state.canAddTrigger
-        scenarioEditorAddCondition.isEnabled = state.canAddCondition
-        scenarioEditorAddStep.isEnabled = state.canAddStep
-        scenarioEditorSave.isEnabled = state.canSave
-        scenarioEditorDelete.isEnabled = state.canDelete
-        scenarioEditorDelete.setVisible(state.isExisting)
-        scenarioEditorProgress.setVisible(state.saving || state.loading)
-        scenarioEditorError.setVisible(state.visibleError != null)
-        scenarioEditorError.text = state.visibleError?.userMessage(requireContext())
-        scenarioEditorCatalogStatus.setVisible(state.catalog.error != null)
-        scenarioEditorCatalogStatus.text = state.catalog.error?.let { getString(R.string.scenarios_catalog_failed, it.userMessage(requireContext())) }
-        sections.render(draft, state.catalog)
-        renderPrompt(state.prompt, state.catalog)
-        renderEditor(state.editor)
+    private fun renderControls(controls: EditorControls) = with(binding) {
+        scenarioEditorUnsupported.setVisible(controls.hasUnsupportedParts)
+        scenarioEditorAddTrigger.isEnabled = controls.canAddTrigger
+        scenarioEditorAddCondition.isEnabled = controls.canAddCondition
+        scenarioEditorAddStep.isEnabled = controls.canAddStep
+        scenarioEditorSave.isEnabled = controls.canSave
+        scenarioEditorDelete.isEnabled = controls.canDelete
+        scenarioEditorDelete.setVisible(controls.isExisting)
+        scenarioEditorProgress.setVisible(controls.busy)
+    }
+
+    private fun renderError(error: RemoteFailure?) {
+        binding.scenarioEditorError.setVisible(error != null)
+        binding.scenarioEditorError.text = error?.userMessage(requireContext())
+    }
+
+    private fun renderCatalogStatus(error: RemoteFailure?) {
+        binding.scenarioEditorCatalogStatus.setVisible(error != null)
+        binding.scenarioEditorCatalogStatus.text = error?.let { getString(R.string.scenarios_catalog_failed, it.userMessage(requireContext())) }
     }
 
     override fun onEvent(event: ScenarioEditorEvent) {

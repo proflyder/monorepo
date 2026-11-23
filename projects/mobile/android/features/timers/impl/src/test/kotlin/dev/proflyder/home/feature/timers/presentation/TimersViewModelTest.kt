@@ -22,7 +22,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.resetMain
@@ -61,13 +60,13 @@ class TimersViewModelTest {
     @Test
     fun theCountdownTicksOnlyWhileTheScreenIsVisible() = runTest(dispatcher) {
         val viewModel = viewModel()
-        val screen = backgroundScope.launch { viewModel.state.collect {} }
+        viewModel.visibility.started()
         runCurrent()
         assertEquals(60L, viewModel.state.value.rows.single().remainingSeconds)
         clock.advanceMillis(5_000)
         advanceTimeBy(1_100)
         assertEquals(55L, viewModel.state.value.rows.single().remainingSeconds)
-        screen.cancel()
+        viewModel.visibility.stopped()
         runCurrent()
         clock.advanceMillis(5_000)
         advanceTimeBy(5_000)
@@ -77,11 +76,13 @@ class TimersViewModelTest {
     @Test
     fun anExpiredTimerTriggersARefresh() = runTest(dispatcher) {
         val viewModel = viewModel()
-        backgroundScope.launch { viewModel.state.collect {} }
+        viewModel.visibility.started()
         runCurrent()
         val loads = repository.listCalls
         clock.advanceMillis(61_000)
         advanceTimeBy(1_100)
+        viewModel.visibility.stopped()
+        runCurrent()
         assertTrue(repository.listCalls > loads)
     }
 
