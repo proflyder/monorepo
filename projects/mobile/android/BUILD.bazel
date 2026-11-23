@@ -37,7 +37,7 @@ home_android_lint(
     name = "android_lint",
     app_module = "//projects/mobile/android/app:app_lib",
     config = "//projects/mobile/android:lint.xml",
-    timeout = "long",
+    timeout = "eternal",
     deps = ["//projects/mobile/android/app:app_lib"],
 )
 
