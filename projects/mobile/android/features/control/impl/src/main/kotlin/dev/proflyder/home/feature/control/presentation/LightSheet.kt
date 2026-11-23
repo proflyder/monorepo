@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.res.ColorStateList
 import android.graphics.drawable.GradientDrawable
 import android.view.LayoutInflater
+import android.view.View
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.slider.Slider
 import dev.proflyder.home.core.model.ControlEntry
@@ -46,6 +47,8 @@ internal class LightSheet(
 
     fun dismiss() = dialog.dismiss()
 
+    internal val content: View get() = views.root
+
     private fun setupBrightness() {
         val range = ranges.brightness
         views.lightBrightnessGroup.setVisible(range != null)
@@ -74,13 +77,12 @@ internal class LightSheet(
         views.lightTemp.valueFrom = range.first.toFloat()
         views.lightTemp.valueTo = range.last.toFloat()
         temperature = ranges.kelvinOf(temperature, 0) ?: range.first
-        views.lightTempBar.background = GradientDrawable(
-            GradientDrawable.Orientation.LEFT_RIGHT,
+        views.lightTemp.setTrackGradient(
             intArrayOf(
                 LightColors.kelvinToArgb(views.lightTemp.valueFrom.toInt()),
                 LightColors.kelvinToArgb(views.lightTemp.valueTo.toInt()),
             ),
-        ).apply { cornerRadius = 100f }
+        )
         views.lightTemp.value = temperature.toFloat()
         showKelvin()
         views.lightTemp.addOnChangeListener { _, value, fromUser ->
@@ -107,10 +109,7 @@ internal class LightSheet(
     private fun setupColor() {
         views.lightColorGroup.setVisible(light.color)
         if (!light.color) return
-        views.lightHueBar.background = GradientDrawable(
-            GradientDrawable.Orientation.LEFT_RIGHT,
-            IntArray(7) { LightColors.hsToArgb(it * 60, 100) },
-        ).apply { cornerRadius = 100f }
+        views.lightHue.setTrackGradient(IntArray(7) { LightColors.hsToArgb(it * 60, 100) })
         views.lightHue.value = hue.coerceIn(0, 360).toFloat()
         views.lightSaturation.value = saturation.coerceIn(0, 100).toFloat()
         showSaturation()
