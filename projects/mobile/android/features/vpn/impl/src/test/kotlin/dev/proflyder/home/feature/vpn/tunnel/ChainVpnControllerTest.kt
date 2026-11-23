@@ -1,6 +1,7 @@
 package dev.proflyder.home.feature.vpn.tunnel
 
 import dev.proflyder.home.core.model.VpnProtocolId
+import dev.proflyder.home.core.testing.FakeAppLogger
 import dev.proflyder.home.feature.vpn.FakeClock
 import dev.proflyder.home.feature.vpn.FakeEnvironment
 import dev.proflyder.home.feature.vpn.FakePermission
@@ -43,6 +44,7 @@ class ChainVpnControllerTest {
         environment,
         permission,
         FakeClock,
+        FakeAppLogger(),
         scope,
     ).also { it.start() }
 
@@ -127,6 +129,62 @@ class ChainVpnControllerTest {
         assertEquals(0, primary.requests.size)
     }
 
+    @Test
+    fun anAutomaticStartAtHomeOrInAnUnknownNetworkIsSkipped() = runTest {
+        val primary = FakeTransport("primary", order = 0, handshake = Handshake.ANSWERS)
+        val home = FakeEnvironment(HomeNetworkState.Home(setOf(1L)))
+        controller(backgroundScope, listOf(primary), profileWith("primary"), home).launch(ConnectOrigin.AUTO_POLICY)
+        settle()
+        val unknown = controller(backgroundScope, listOf(primary), profileWith("primary"), FakeEnvironment())
+        unknown.launch(ConnectOrigin.AUTO_POLICY)
+        settle()
+        assertEquals(VpnConnection.Disconnected, unknown.connection.value)
+        assertEquals(0, primary.requests.size)
+    }
+
+    @Test
+    fun aUserStartWaitsForTheEnvironmentAndUsesTheHomeEndpointAtHome() = runTest {
+        val environment = FakeEnvironment()
+        val primary = FakeTransport("primary", order = 0, handshake = Handshake.ANSWERS)
+        val vpn = controller(backgroundScope, listOf(primary), profileWith("primary"), environment)
+        vpn.connect()
+        advanceTimeBy(4_000)
+        environment.state.value = HomeNetworkState.Home(setOf(1L))
+        runCurrent()
+        assertEquals(listOf(true), primary.requests.map { it.atHome })
+    }
+
+    @Test
+    fun aSilentAutoPolicyStartAwayOffersFallbackButANetworkRestartFailsQuietly() = runTest {
+        val environment = FakeEnvironment(HomeNetworkState.Away(setOf(1L)))
+        val silent = FakeTransport("primary", order = 0, handshake = Handshake.SILENT)
+        val auto = controller(backgroundScope, listOf(silent), profileWith("primary"), environment)
+        auto.launch(ConnectOrigin.AUTO_POLICY)
+        settle()
+        assertEquals(VpnConnection.FallbackRequired(emptyList()), auto.connection.value)
+
+        val home = FakeEnvironment(HomeNetworkState.Home(setOf(1L)))
+        val flaky = FakeTransport("primary", order = 0, handshake = Handshake.ANSWERS, restartOnNetworkChange = true)
+        val vpn = controller(backgroundScope, listOf(flaky), profileWith("primary"), home)
+        vpn.connect()
+        runCurrent()
+        flaky.handshake = Handshake.SILENT
+        home.state.value = HomeNetworkState.Away(setOf(2L))
+        settle()
+        assertEquals(VpnConnection.Disconnected, vpn.connection.value)
+    }
+
+    @Test
+    fun aFailureAfterTheNetworkTurnedOutToBeHomeIsNotReported() = runTest {
+        val environment = FakeEnvironment(HomeNetworkState.Away(setOf(1L)))
+        val silent = FakeTransport("primary", order = 0, handshake = Handshake.SILENT)
+        val vpn = controller(backgroundScope, listOf(silent), profileWith("primary"), environment)
+        vpn.connect()
+        runCurrent()
+        environment.state.value = HomeNetworkState.Home(setOf(1L))
+        settle()
+        assertEquals(VpnConnection.NotNeededAtHome, vpn.connection.value)
+    }
 
     private fun TestScope.settle() {
         advanceTimeBy(SETTLE_MILLIS)

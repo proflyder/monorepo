@@ -272,6 +272,25 @@ platform/android/         Bazel macros, Metro wiring, APK gate, signing, detekt 
   screen, notification) is stored in `UserVpnIntent` (one `StateFlow`, bound
   to the physical networks it was made on). While it holds, the policy does
   nothing; a different network clears it and the policy decides again.
+- Every tunnel start carries a `ConnectOrigin`. `USER` always runs;
+  `AUTO_POLICY` runs only when the network is classified `Away` at start;
+  `NETWORK_RESTART` (endpoint change after a network switch) needs a known
+  network. Only `USER` and `AUTO_POLICY` failures away from home show the
+  "no handshake" fallback; a failure once the network turns out to be home is
+  `NotNeededAtHome`, a failed restart quietly ends as `Disconnected`.
+- Android restarts the WireGuard `VpnService` with an empty intent after the
+  process is killed (sticky service) and for always-on VPN; both arrive as
+  `SystemVpnStarts`. They never connect directly: `AutoConnectCoordinator`
+  waits up to 15 s for the environment and asks the same `AutoConnectPolicy`
+  (background: only "auto-connect away" and only `Away`, a manual off holds).
+- `Unknown` never connects. In the foreground the route shows "checking"
+  for at most 15 s, then the decision is logged as `ENVIRONMENT_TIMEOUT`.
+  A network blocked for the app (Doze, data saver) is `Unknown`, not `Away`,
+  so a failed home probe during sleep does not look like leaving home.
+- Decisions are logged: tag `VpnAutoConnect` (source, action, reason,
+  environment, foreground, settings, manual wish; actions at WARN),
+  `VpnController` (origin, `atHome`, skipped starts, exhausted outcome) and
+  `VpnEnvironment` (classification changes).
   Nothing blocks an OkHttp or main thread; there is no `runBlocking` in core.
 - Network inspection (logcat `HomeHttp`, Chucker) lives in `app/diagnostics`;
   `--define=home_network_inspection=off` drops it.

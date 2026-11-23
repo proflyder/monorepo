@@ -11,6 +11,9 @@ import dev.proflyder.home.feature.vpn.VpnSettings
 import dev.proflyder.home.feature.vpn.VpnSettingsStore
 import dev.proflyder.home.feature.vpn.isActive
 import dev.proflyder.home.feature.vpn.knownProfile
+import dev.proflyder.home.feature.vpn.transport.SystemVpnStarts
+import dev.proflyder.home.feature.vpn.tunnel.ConnectOrigin
+import dev.proflyder.home.feature.vpn.tunnel.TunnelLauncher
 import dev.proflyder.home.feature.vpn.tunnel.VpnPermission
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.Inject
@@ -42,12 +45,15 @@ import kotlinx.coroutines.withTimeoutOrNull
 @Inject
 internal class AutoConnectCoordinator(
     private val controller: VpnController,
+    private val launcher: TunnelLauncher,
     private val permission: VpnPermission,
     private val settings: VpnSettingsStore,
     private val profiles: VpnProfiles,
     private val environment: NetworkEnvironment,
     private val foreground: AppForeground,
     private val userIntent: UserVpnIntent,
+    private val systemStarts: SystemVpnStarts,
+    private val journal: AutoConnectJournal,
     private val scope: CoroutineScope,
 ) : AppStartable {
     private val mutableRoute = MutableStateFlow(HomeRoute.READY)
@@ -60,11 +66,12 @@ internal class AutoConnectCoordinator(
 
     override fun start() {
         scope.launch { triggers().collectLatest(::decide) }
+        scope.launch { systemStarts.starts.collect { onSystemStart() } }
     }
 
     fun connectNow() {
         manual?.cancel()
-        manual = scope.launch { connectAndWait() }
+        manual = scope.launch { connectAndWait(ConnectOrigin.USER) }
     }
 
     fun permissionResult(granted: Boolean) {
@@ -84,27 +91,37 @@ internal class AutoConnectCoordinator(
         .distinctUntilChanged()
 
     private fun withEnvironment(watch: Watch): Flow<AutoConnectTrigger> = when (watch.needsEnvironment) {
-        true -> environment.state.map { AutoConnectTrigger(watch.foreground, watch.autoConnect, it) }
-        false -> flowOf(AutoConnectTrigger(watch.foreground, watch.autoConnect, HomeNetworkState.Unknown))
+        true -> environment.readings(ENVIRONMENT_TIMEOUT).map { watch.trigger(it) }
+        false -> flowOf(watch.trigger(EnvironmentReading(HomeNetworkState.Unknown)))
     }
 
     private suspend fun decide(trigger: AutoConnectTrigger) {
-        when (AutoConnectPolicy.decide(input(trigger))) {
-            AutoConnectAction.CONNECT -> connectAndWait()
+        val input = input(trigger.foreground, trigger.environment)
+        val decision = AutoConnectPolicy.decide(input)
+        journal.decided(trigger.source, decision, input)
+        when (decision.action) {
+            AutoConnectAction.CONNECT -> connectAndWait(ConnectOrigin.AUTO_POLICY)
             AutoConnectAction.ASK_PERMISSION -> askPermission()
             AutoConnectAction.DISCONNECT -> disconnect()
             AutoConnectAction.NONE -> mutableRoute.value = idleRoute(trigger)
         }
     }
 
+    private suspend fun onSystemStart() {
+        val input = input(foreground.state.value.foreground, environment.settledState(ENVIRONMENT_TIMEOUT))
+        val decision = AutoConnectPolicy.decide(input)
+        journal.decided(DecisionSource.SYSTEM_START, decision, input)
+        if (decision.action == AutoConnectAction.CONNECT) launcher.launch(ConnectOrigin.AUTO_POLICY)
+    }
+
     private fun idleRoute(trigger: AutoConnectTrigger): HomeRoute = when {
-        trigger.foreground && trigger.environment == HomeNetworkState.Unknown -> HomeRoute.CHECKING
+        trigger.foreground && trigger.environment == HomeNetworkState.Unknown && !trigger.undetermined -> HomeRoute.CHECKING
         else -> HomeRoute.READY
     }
 
-    private suspend fun connectAndWait() {
+    private suspend fun connectAndWait(origin: ConnectOrigin) {
         mutableRoute.value = HomeRoute.CONNECTING
-        controller.connect()
+        launcher.launch(origin)
         withTimeoutOrNull(ROUTE_WAIT) { controller.connection.dropWhile { it !is VpnConnection.Connecting }.first(::settled) }
         mutableRoute.value = HomeRoute.READY
     }
@@ -121,27 +138,31 @@ internal class AutoConnectCoordinator(
 
     private fun settled(connection: VpnConnection): Boolean = connection !is VpnConnection.Connecting
 
-    private fun input(trigger: AutoConnectTrigger): AutoConnectInput {
+    private fun input(foreground: Boolean, environment: HomeNetworkState): AutoConnectInput {
         val current = settings.settings.value ?: VpnSettings()
         return AutoConnectInput(
-            foreground = trigger.foreground,
+            foreground = foreground,
             autoConnect = current.autoConnect,
             connectOnOpen = current.connectOnOpen,
-            environment = trigger.environment,
+            environment = environment,
             active = controller.connection.value.isActive,
             hasProfile = profiles.state.value.knownProfile != null,
             permissionGranted = permission.granted(),
             permissionAsked = current.permissionAsked,
-            userWish = userIntent.wishOn(trigger.environment),
+            userWish = userIntent.wishOn(environment),
         )
     }
 
     private data class Watch(val foreground: Boolean, val autoConnect: Boolean, val active: Boolean) {
         val needsEnvironment: Boolean get() = foreground || autoConnect || active
+
+        fun trigger(reading: EnvironmentReading) =
+            AutoConnectTrigger(foreground, autoConnect, reading.state, reading.undetermined)
     }
 
     private companion object {
         val ROUTE_WAIT = 20.seconds
+        val ENVIRONMENT_TIMEOUT = 15.seconds
     }
 }
 
@@ -149,4 +170,11 @@ internal data class AutoConnectTrigger(
     val foreground: Boolean,
     val autoConnect: Boolean,
     val environment: HomeNetworkState,
-)
+    val undetermined: Boolean = false,
+) {
+    val source: DecisionSource
+        get() = when (undetermined) {
+            true -> DecisionSource.ENVIRONMENT_TIMEOUT
+            false -> DecisionSource.NETWORK_OR_SETTINGS
+        }
+}

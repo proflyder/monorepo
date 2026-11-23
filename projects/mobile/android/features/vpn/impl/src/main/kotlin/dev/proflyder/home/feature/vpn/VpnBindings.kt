@@ -8,13 +8,16 @@ import dev.proflyder.home.feature.vpn.data.DataStoreVpnSettingsStore
 import dev.proflyder.home.feature.vpn.data.RemoteVpnProfiles
 import dev.proflyder.home.feature.vpn.data.VpnProfileSync
 import dev.proflyder.home.feature.vpn.environment.AndroidNetworkEnvironment
+import dev.proflyder.home.feature.vpn.transport.SystemVpnStarts
 import dev.proflyder.home.feature.vpn.transport.VpnTransport
+import dev.proflyder.home.feature.vpn.transport.VpnTransportChain
 import dev.proflyder.home.feature.vpn.transport.openconnect.AndroidSystemVpnNetwork
 import dev.proflyder.home.feature.vpn.transport.openconnect.ExternalOpenConnectTransport
 import dev.proflyder.home.feature.vpn.transport.openconnect.SystemVpnNetwork
 import dev.proflyder.home.feature.vpn.transport.wireguard.WireGuardTransport
 import dev.proflyder.home.feature.vpn.tunnel.ChainVpnController
 import dev.proflyder.home.feature.vpn.tunnel.SystemVpnPermission
+import dev.proflyder.home.feature.vpn.tunnel.TunnelLauncher
 import dev.proflyder.home.feature.vpn.tunnel.TunnelSwitch
 import dev.proflyder.home.feature.vpn.tunnel.VpnPermission
 import dev.proflyder.home.feature.vpn.tunnel.VpnStatusServiceStarter
@@ -41,6 +44,12 @@ abstract class VpnBindings {
 
     @Binds
     internal abstract fun controller(impl: ChainVpnController): VpnController
+
+    @Binds
+    internal abstract fun launcher(impl: ChainVpnController): TunnelLauncher
+
+    @Binds
+    internal abstract fun systemStarts(impl: VpnTransportChain): SystemVpnStarts
 
     @Binds
     internal abstract fun tunnelSwitch(impl: ChainVpnController): TunnelSwitch

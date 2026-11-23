@@ -56,6 +56,7 @@ home_android_local_test(
         "//projects/mobile/android/core/model",
         "//projects/mobile/android/core/presentation",
         "//projects/mobile/android/core/runtime",
+        "//projects/mobile/android/core/testing",
         "//projects/mobile/android/core/theme",
         "//projects/mobile/android/features/vpn/api",
         "@maven//:androidx_appcompat_appcompat",
