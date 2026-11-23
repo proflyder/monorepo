@@ -3,7 +3,6 @@
     xmlns:tools="http://schemas.android.com/tools"
     tools:ignore="SelectableText"
     xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
@@ -101,26 +100,18 @@
                 android:textColor="?attr/colorPrimary" />
         </LinearLayout>
 
-        <View
-            android:id="@+id/light_temp_bar"
-            android:layout_width="match_parent"
-            android:layout_height="14dp"
-            android:layout_marginStart="10dp"
-            android:layout_marginTop="12dp"
-            android:layout_marginEnd="10dp" />
-
-        <com.google.android.material.slider.Slider
+        <dev.proflyder.home.core.designsystem.GradientSlider
             android:id="@+id/light_temp"
+            style="@style/Widget.Home.Slider.Gradient"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:contentDescription="@string/control_light_temperature"
             android:stepSize="50"
             android:valueFrom="2000"
-            android:valueTo="6500"
-            app:trackColorActive="@android:color/transparent"
-            app:trackColorInactive="@android:color/transparent" />
+            android:valueTo="6500" />
 
         <LinearLayout
+            android:id="@+id/light_temp_scale"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal">
@@ -146,6 +137,7 @@
         android:id="@+id/light_color_group"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/ds_space_l"
         android:orientation="vertical">
 
         <TextView
@@ -155,24 +147,15 @@
             android:textAppearance="?attr/textAppearanceLabelLarge"
             android:textColor="?attr/colorOnSurfaceVariant" />
 
-        <View
-            android:id="@+id/light_hue_bar"
-            android:layout_width="match_parent"
-            android:layout_height="14dp"
-            android:layout_marginTop="12dp"
-            android:layout_marginStart="10dp"
-            android:layout_marginEnd="10dp" />
-
-        <com.google.android.material.slider.Slider
+        <dev.proflyder.home.core.designsystem.GradientSlider
             android:id="@+id/light_hue"
+            style="@style/Widget.Home.Slider.Gradient"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:contentDescription="@string/control_light_hue"
             android:stepSize="1"
             android:valueFrom="0"
-            android:valueTo="360"
-            app:trackColorActive="@android:color/transparent"
-            app:trackColorInactive="@android:color/transparent" />
+            android:valueTo="360" />
 
         <LinearLayout
             android:layout_width="match_parent"

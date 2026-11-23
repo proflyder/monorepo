@@ -16,6 +16,7 @@
         <item name="textAppearanceSmallPopupMenu">@style/TextAppearance.Home.PopupMenuItem</item>
 
         <item name="textInputStyle">@style/Widget.Home.TextInput</item>
+        <item name="sliderStyle">@style/Widget.Home.Slider</item>
         <item name="viewInflaterClass">dev.proflyder.home.core.designsystem.HomeViewInflater</item>
         <item name="materialSwitchStyle">@style/Widget.Home.Switch</item>
     </style>
