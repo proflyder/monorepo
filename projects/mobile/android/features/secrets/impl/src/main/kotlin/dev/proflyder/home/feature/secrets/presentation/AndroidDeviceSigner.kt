@@ -75,6 +75,8 @@ internal interface SecretsDeviceSigner {
 
     fun discardEnrollmentKey()
 
+    fun reconcileEnrollmentKey(serverPublicKey: String?)
+
     fun cancel()
 }
 
@@ -110,23 +112,34 @@ internal class AndroidDeviceSigner(
 ) : SecretsDeviceSigner {
     private var pending: ((DeviceSignatureResult) -> Unit)? = null
     private var signal: CancellationSignal? = null
-    private var stagingAlias: String? = null
+    private val staging = StagingAliasState(context)
 
     override fun isSupported(): Boolean =
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && biometrics() && keyguard()
 
     override fun createEnrollmentKey(attestationChallenge: String): DeviceKeyResult {
         if (!isSupported()) return DeviceKeyResult.Failed(DeviceSignatureFailure.UNSUPPORTED)
+        val staged = staging.staged()
+        if (canReuseStagedKey(staged, staging.stagedChallenge(), attestationChallenge)) {
+            val alias = staged ?: return DeviceKeyResult.Failed(DeviceSignatureFailure.KEYSTORE)
+            val publicKey = publicKey(alias)
+            val chain = certificateChain(alias)
+            if (publicKey != null && chain.isNotEmpty()) {
+                sweepStagingAliases(keep = alias)
+                return DeviceKeyResult.Ready(DeviceKeyMaterial(publicKey, chain))
+            }
+        }
+        staged?.let(::deleteAlias)
+        sweepStagingAliases(keep = activeAlias())
         return try {
-            val store = keyStore()
-            discardEnrollmentKey()
             val alias = STAGING_PREFIX + java.util.UUID.randomUUID()
-            stagingAlias = alias
-            val pair = pair(alias, attestationChallenge)
-            val chain = store.getCertificateChain(alias)?.map { encode(it.encoded) }.orEmpty()
+            val pair = createPair(alias, attestationChallenge)
+            val chain = certificateChain(alias)
             if (chain.isEmpty()) {
+                deleteAlias(alias)
                 DeviceKeyResult.Failed(DeviceSignatureFailure.KEYSTORE)
             } else {
+                staging.stage(alias, attestationChallenge)
                 DeviceKeyResult.Ready(DeviceKeyMaterial(encode(pair.public.encoded), chain))
             }
         } catch (error: GeneralSecurityException) {
@@ -182,17 +195,62 @@ internal class AndroidDeviceSigner(
     }
 
     override fun promoteEnrollmentKey() {
-        val staged = stagingAlias ?: return
+        val staged = staging.staged() ?: return
         val previous = activeAlias()
         preferences().edit(commit = true) { putString(ACTIVE_ALIAS_KEY, staged) }
-        stagingAlias = null
+        staging.clear()
         if (previous != staged) deleteAlias(previous)
+        sweepStagingAliases(keep = staged)
     }
 
     override fun discardEnrollmentKey() {
-        val staged = stagingAlias ?: return
-        stagingAlias = null
+        val staged = staging.staged() ?: return
         deleteAlias(staged)
+        staging.clear()
+        sweepStagingAliases(keep = activeAlias())
+    }
+
+    override fun reconcileEnrollmentKey(serverPublicKey: String?) {
+        val staged = staging.staged()
+        if (staged == null) {
+            sweepStagingAliases(keep = activeAlias())
+            return
+        }
+        if (samePublicKey(publicKey(staged), serverPublicKey)) {
+            promoteEnrollmentKey()
+        } else {
+            discardEnrollmentKey()
+        }
+    }
+
+    private fun sweepStagingAliases(keep: String?) {
+        val aliases = try {
+            keyStore().aliases()
+        } catch (error: GeneralSecurityException) {
+            return
+        } catch (error: IOException) {
+            return
+        }
+        while (aliases.hasMoreElements()) {
+            val alias = aliases.nextElement()
+            if (alias.startsWith(STAGING_PREFIX) && alias != keep) deleteAlias(alias)
+        }
+    }
+
+    private fun publicKey(alias: String): String? = try {
+        keyStore().getCertificate(alias)?.publicKey?.encoded?.let(::encode)
+    } catch (error: GeneralSecurityException) {
+        null
+    } catch (error: IOException) {
+        null
+    }
+
+    private fun certificateChain(alias: String): List<String> = try {
+        keyStore().getCertificateChain(alias)?.map { encode(it.encoded) }.orEmpty()
+    } catch (error: GeneralSecurityException) {
+        emptyList()
+    } catch (error: IOException) {
+        emptyList()
     }
 
     private fun deleteAlias(alias: String) {
@@ -213,23 +271,50 @@ internal class AndroidDeviceSigner(
 
     private fun keyStore(): KeyStore = KeyStore.getInstance(PROVIDER).apply { load(null) }
 
-    private fun pair(alias: String, attestationChallenge: String): KeyPair {
-        val pair = strongBoxPair(alias, attestationChallenge)
-        return pair ?: regularPair(alias, attestationChallenge)
+    private fun createPair(alias: String, attestationChallenge: String): KeyPair {
+        try {
+            return pair(alias, attestationChallenge, unlockedRequired = true)
+        } catch (error: GeneralSecurityException) {
+            deleteAlias(alias)
+        } catch (error: ProviderException) {
+            deleteAlias(alias)
+        }
+        return pair(alias, attestationChallenge, unlockedRequired = false)
     }
 
-    private fun strongBoxPair(alias: String, attestationChallenge: String): KeyPair? = try {
-        generate(alias, attestationChallenge, strongBox = true)
+    private fun pair(
+        alias: String,
+        attestationChallenge: String,
+        unlockedRequired: Boolean,
+    ): KeyPair {
+        val pair = strongBoxPair(alias, attestationChallenge, unlockedRequired)
+        return pair ?: regularPair(alias, attestationChallenge, unlockedRequired)
+    }
+
+    private fun strongBoxPair(
+        alias: String,
+        attestationChallenge: String,
+        unlockedRequired: Boolean,
+    ): KeyPair? = try {
+        generate(alias, attestationChallenge, strongBox = true, unlockedRequired)
     } catch (error: StrongBoxUnavailableException) {
         null
     }
 
-    private fun regularPair(alias: String, attestationChallenge: String): KeyPair =
-        generate(alias, attestationChallenge, strongBox = false)
+    private fun regularPair(
+        alias: String,
+        attestationChallenge: String,
+        unlockedRequired: Boolean,
+    ): KeyPair = generate(alias, attestationChallenge, strongBox = false, unlockedRequired)
 
-    private fun generate(alias: String, attestationChallenge: String, strongBox: Boolean): KeyPair {
+    private fun generate(
+        alias: String,
+        attestationChallenge: String,
+        strongBox: Boolean,
+        unlockedRequired: Boolean,
+    ): KeyPair {
         val generator = KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_EC, PROVIDER)
-        generator.initialize(spec(alias, attestationChallenge, strongBox))
+        generator.initialize(spec(alias, attestationChallenge, strongBox, unlockedRequired))
         return generator.generateKeyPair()
     }
 
@@ -238,14 +323,15 @@ internal class AndroidDeviceSigner(
         alias: String,
         attestationChallenge: String,
         strongBox: Boolean,
+        unlockedRequired: Boolean,
     ): KeyGenParameterSpec {
         val builder = KeyGenParameterSpec.Builder(alias, KeyProperties.PURPOSE_SIGN)
             .setAlgorithmParameterSpec(ECGenParameterSpec(CURVE))
             .setDigests(KeyProperties.DIGEST_SHA256)
             .setAttestationChallenge(attestationChallenge.toByteArray(Charsets.UTF_8))
             .setUserAuthenticationRequired(true)
-            .setUnlockedDeviceRequired(true)
             .setInvalidatedByBiometricEnrollment(true)
+        if (unlockedRequired) builder.setUnlockedDeviceRequired(true)
         when {
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.R -> builder.setUserAuthenticationParameters(
                 0,

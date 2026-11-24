@@ -35,6 +35,7 @@ internal sealed interface SecretsDeviceIntent {
 
 internal sealed interface SecretsDeviceEvent {
     data class CreateKey(val challenge: String) : SecretsDeviceEvent
+    data class ReconcileKey(val serverPublicKey: String?) : SecretsDeviceEvent
     data object Bound : SecretsDeviceEvent
     data class Problem(val problem: SecretProblem) : SecretsDeviceEvent
 }
@@ -75,7 +76,12 @@ internal class SecretsDeviceViewModel(
                             deviceId = device.value.deviceId,
                         )
                     }
-                    if (!device.value.enrolled) requestKey()
+                    when {
+                        !device.value.enrolled -> requestKey()
+                        device.value.publicKey != null -> emit(
+                            SecretsDeviceEvent.ReconcileKey(device.value.publicKey),
+                        )
+                    }
                 }
                 is Outcome.Failure -> updateState { copy(loading = false, failure = device.failure) }
             }

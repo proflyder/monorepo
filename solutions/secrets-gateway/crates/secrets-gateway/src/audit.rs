@@ -135,13 +135,26 @@ fn push_body(event: &Event<'_>) -> PushBody {
     }
 }
 
+fn should_push(event: &Event<'_>) -> bool {
+    match event.action {
+        Action::List | Action::Metadata => false,
+        Action::StepUp => event.outcome != "ok",
+        Action::Reveal
+        | Action::Update
+        | Action::Rollback
+        | Action::Delete
+        | Action::Enroll
+        | Action::DeviceRevoke => true,
+    }
+}
+
 fn deep_link(event: &Event<'_>) -> String {
     match event.action {
         Action::Enroll | Action::DeviceRevoke => "home://secrets/device".to_owned(),
-        _ => match event.path.filter(|path| !path.is_empty()) {
-            Some(path) => format!("home://secrets/path/{}", path.replace('/', "%2F")),
-            None => "home://secrets".to_owned(),
-        },
+        _ => event.path.filter(|path| !path.is_empty()).map_or_else(
+            || "home://secrets".to_owned(),
+            |path| format!("home://secrets/path/{}", path.replace('/', "%2F")),
+        ),
     }
 }
 

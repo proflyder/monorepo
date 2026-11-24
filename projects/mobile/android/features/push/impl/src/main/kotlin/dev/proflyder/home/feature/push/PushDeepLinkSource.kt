@@ -2,6 +2,7 @@ package dev.proflyder.home.feature.push
 
 import android.content.Intent
 import dev.proflyder.home.core.navigation.DeepLinkSource
+import dev.proflyder.home.core.runtime.IntentToken
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesIntoSet
 import dev.zacsweers.metro.Inject
@@ -9,7 +10,7 @@ import dev.zacsweers.metro.binding
 
 @ContributesIntoSet(AppScope::class, binding = binding<DeepLinkSource>())
 @Inject
-class PushDeepLinkSource(private val token: PushIntentToken) : DeepLinkSource {
+class PushDeepLinkSource(private val token: IntentToken) : DeepLinkSource {
     override fun take(intent: Intent): String? {
         val authorized = token.matches(intent.getStringExtra(PushIntents.EXTRA_DEEP_LINK_TOKEN))
         val direct = if (authorized) {

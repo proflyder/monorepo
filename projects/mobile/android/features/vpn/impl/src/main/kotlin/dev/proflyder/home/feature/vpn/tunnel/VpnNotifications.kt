@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import androidx.annotation.ColorInt
 import androidx.core.app.NotificationCompat
+import dev.proflyder.home.core.runtime.IntentToken
 import dev.proflyder.home.feature.push.PushIntents
 import dev.proflyder.home.feature.vpn.VpnConnection
 import dev.proflyder.home.feature.vpn.impl.R
@@ -44,8 +45,13 @@ internal object VpnNotifications {
 
     fun openAppIntent(context: Context): Intent? =
         context.packageManager.getLaunchIntentForPackage(context.packageName)
-            ?.putExtra(PushIntents.EXTRA_DEEP_LINK, VpnDestinationRoute.ROUTE)
-            ?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            ?.let { decorate(context, it) }
+
+    internal fun decorate(context: Context, intent: Intent): Intent =
+        intent
+            .putExtra(PushIntents.EXTRA_DEEP_LINK, VpnDestinationRoute.ROUTE)
+            .putExtra(PushIntents.EXTRA_DEEP_LINK_TOKEN, IntentToken(context).current())
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
 
     private fun openApp(context: Context): PendingIntent? = openAppIntent(context)?.let { activity(context, it) }
 

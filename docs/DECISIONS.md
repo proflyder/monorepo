@@ -415,8 +415,8 @@
     отправляет публичный ключ, цепочку key attestation и код. Сервер проверяет
     цепочку до закреплённых Google Hardware Attestation корней (RSA и ECDSA),
     совпадение `attestationChallenge` с выданным nonce, `securityLevel` TEE или
-    StrongBox, публичный ключ листа и verified boot (проверяется и логируется),
-    затем хранит ключ и device id в
+    StrongBox, публичный ключ листа, verified boot `VERIFIED` и
+    `deviceLocked=true` (иначе отказ), затем хранит ключ и device id в
     `k8s/home-assistant/secrets-gateway-device`. Путь скрыт от HTTP API только
     проверкой в коде: `deny.json` его не покрывает, потому что из него
     генерируется `policy.hcl`, а поду нужен доступ. ESO путь не синхронизирует.

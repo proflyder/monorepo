@@ -66,9 +66,8 @@ Keystore (StrongBox при наличии), с обязательной ауте
 - **Attestation** — цепочка проверяется до закреплённых в коде корней Google
   Hardware Attestation (RSA и ECDSA), `attestationChallenge` должен совпадать с
   выданным nonce, `securityLevel` — TEE или StrongBox, публичный ключ листа —
-  с привязываемым ключом. `verified boot verified/locked` проверяется и
-  логируется; непроверенное состояние попадает в лог и в
-  `device_verified_boot`.
+  с привязываемым ключом. `verified boot` обязателен: `VERIFIED` и
+  `deviceLocked=true`; иначе привязка отклоняется с логом причины.
 - **Challenge** — 32 случайных байта; payload
   `home-secrets-step-up/1` содержит id, `principal`, действие, путь, ключ,
   версию, `cas`, хеш нового значения (`valueSha256`, только update) и
@@ -125,8 +124,9 @@ Push в `phone-push` (`module=secrets`, только owner-устройства)
 каждый запрос: `list` и `metadata` только логируются. Push получают reveal,
 update, rollback и delete, привязка и отзыв телефона, неудачный/запрещённый
 step-up и rate-limit. Каждый push несёт `data {entity:"secrets", path?}` и
-`deepLink home://secrets/path/<percent-encoded-path>` (для привязки —
-`home://secrets/device`), поэтому приложение открывает нужный путь по тапу.
+`deepLink home://secrets/path/<path с %2F вместо />` (без пути —
+`home://secrets`, для привязки — `home://secrets/device`), поэтому
+`NotificationTargets` в приложении открывает нужный экран по тапу.
 Текст содержит действие и путь, но не значение. Push отправляется
 асинхронно и не ломает запрос при недоступном phone-push; `module=secrets`
 уходит в FCM `data`, и приложение показывает его с `VISIBILITY_SECRET`, чтобы

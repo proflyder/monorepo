@@ -12,6 +12,7 @@ metro_android_library(
         "//projects/mobile/android/core/data",
         "//packages/kotlin/core",
         "//projects/mobile/android/core/model",
+        "@maven//:androidx_core_core_ktx",
         "@maven//:androidx_datastore_datastore_preferences",
         "@maven//:androidx_lifecycle_lifecycle_common",
         "@maven//:androidx_lifecycle_lifecycle_process",

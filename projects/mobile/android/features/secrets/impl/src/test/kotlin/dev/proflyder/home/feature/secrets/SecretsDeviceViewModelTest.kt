@@ -69,6 +69,18 @@ class SecretsDeviceViewModelTest {
     }
 
     @Test
+    fun anEnrolledDeviceAsksToReconcileTheStagedKey() = runTest(dispatcher.scheduler) {
+        val repository = FakeSecretsRepository()
+        repository.deviceResult = Outcome.Success(DeviceEnrollment(true, "device-7", 10, "public-key"))
+        val viewModel = SecretsDeviceViewModel(repository)
+        advanceUntilIdle()
+
+        val event = viewModel.screenEvents.next.first()
+        assertEquals(SecretsDeviceEvent.ReconcileKey("public-key"), event.event)
+        assertEquals(0, repository.deviceChallenges)
+    }
+
+    @Test
     fun rebindingStartsOnlyAfterAnExplicitIntent() = runTest(dispatcher.scheduler) {
         val repository = FakeSecretsRepository()
         repository.deviceResult = Outcome.Success(DeviceEnrollment(true, "device-7", 10))

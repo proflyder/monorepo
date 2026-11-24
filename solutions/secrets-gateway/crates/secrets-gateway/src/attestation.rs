@@ -77,6 +77,8 @@ pub enum Error {
     PublicKey,
     #[error("attestation certificate encoding is invalid")]
     Encoding,
+    #[error("verified boot is not verified and locked")]
+    VerifiedBoot,
 }
 
 pub struct Roots {
@@ -84,6 +86,13 @@ pub struct Roots {
 }
 
 impl Roots {
+    pub fn fingerprints(&self) -> Vec<String> {
+        self.der
+            .iter()
+            .map(|der| hex::encode(Sha256::digest(der)))
+            .collect()
+    }
+
     pub fn pinned() -> Self {
         Self::parse_pems(&[GOOGLE_RSA_ROOT, GOOGLE_EC_ROOT]).expect("pinned roots parse")
     }
@@ -195,8 +204,9 @@ pub fn verify(
             security_level = description.security_level,
             verified_boot = %description.verified_boot,
             device_locked = description.device_locked,
-            "key attestation reported an unverified boot state"
+            "key attestation rejected an unverified boot state"
         );
+        return Err(Error::VerifiedBoot);
     }
     let mut hasher = Sha256::new();
     for der in &ders {
@@ -328,9 +338,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_pinned_google_roots_parse() {
+    fn the_pinned_google_roots_have_the_expected_fingerprints() {
         let roots = Roots::pinned();
-        assert_eq!(roots.der.len(), 2);
+        assert_eq!(
+            roots.fingerprints(),
+            vec![
+                "cedb1cb6dc896ae5ec797348bce9286753c2b38ee71ce0fbe34a9a1248800dfc",
+                "6d9db4ce6c5c0b293166d08986e05774a8776ceb525d9e4329520de12ba4bcc0",
+            ]
+        );
     }
 
     #[test]

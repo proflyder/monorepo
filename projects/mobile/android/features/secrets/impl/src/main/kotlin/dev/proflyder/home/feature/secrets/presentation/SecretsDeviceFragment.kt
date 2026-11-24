@@ -89,6 +89,7 @@ internal class SecretsDeviceFragment :
     override fun onEvent(event: SecretsDeviceEvent) {
         when (event) {
             is SecretsDeviceEvent.CreateKey -> createKey(event.challenge)
+            is SecretsDeviceEvent.ReconcileKey -> signer.reconcileEnrollmentKey(event.serverPublicKey)
             SecretsDeviceEvent.Bound -> {
                 signer.promoteEnrollmentKey()
                 showMessage(R.string.secrets_device_bound)
@@ -109,7 +110,6 @@ internal class SecretsDeviceFragment :
     }
 
     override fun onDestroy() {
-        signer.discardEnrollmentKey()
         signer.cancel()
         super.onDestroy()
     }

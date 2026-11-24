@@ -182,6 +182,8 @@ internal class FakeSecretsDeviceSigner(
 
     override fun discardEnrollmentKey() = Unit
 
+    override fun reconcileEnrollmentKey(serverPublicKey: String?) = Unit
+
     override fun cancel() {
         cancellationRequested = true
     }

@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import dev.proflyder.home.core.runtime.IntentToken
 import dev.proflyder.home.core.theme.NotificationAccent
 import dev.proflyder.home.core.ui.NotificationPermission
 import dev.proflyder.home.feature.push.impl.R
@@ -20,7 +21,7 @@ internal class PushNotifier(
     private val context: Context,
     private val accent: NotificationAccent,
     private val permission: NotificationPermission,
-    private val token: PushIntentToken,
+    private val token: IntentToken,
 ) {
     fun notify(message: PushMessage.Notify) {
         val content = openAppIntent(message.deepLink)

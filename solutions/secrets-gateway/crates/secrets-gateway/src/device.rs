@@ -19,8 +19,6 @@ use crate::openbao::{self, OpenBao};
 pub const DEVICE_PATH: &str = "k8s/home-assistant/secrets-gateway-device";
 pub const ENROLLMENT_TTL_SECONDS: u64 = 900;
 pub const ATTESTATION_TTL_SECONDS: u64 = 900;
-pub const MAX_ATTESTATION_CERTIFICATES: usize = 8;
-pub const MAX_ATTESTATION_CERTIFICATE_BYTES: usize = 16 * 1024;
 pub const MAX_PUBLIC_KEY_BYTES: usize = 512;
 pub const MAX_ENROLLMENT_CODE_CHARS: usize = 64;
 pub const MIN_ENROLLMENT_CODE_CHARS: usize = 8;
@@ -56,6 +54,7 @@ pub enum Error {
 pub struct Device {
     pub device_id: String,
     pub enrolled_at: u64,
+    pub public_key: String,
 }
 
 #[derive(Clone)]
@@ -269,7 +268,10 @@ impl DeviceStore {
             &self.roots,
             now_unix,
         )
-        .map_err(|_| Error::AttestationInvalid)?;
+        .map_err(|error| {
+            tracing::warn!(error = %error, "key attestation rejected");
+            Error::AttestationInvalid
+        })?;
         let device_id = home_secret::hex(16)
             .map_err(|_| Error::Unavailable)?
             .expose()
@@ -301,6 +303,7 @@ impl DeviceStore {
         Ok(Device {
             device_id,
             enrolled_at: now_unix,
+            public_key: request.public_key.to_owned(),
         })
     }
 
@@ -349,9 +352,11 @@ fn device_from(data: &BTreeMap<String, String>) -> Option<Device> {
         .get("device_enrolled_at")
         .and_then(|value| value.parse::<u64>().ok())?;
     data.get("device_public_key")?;
+    let public_key = data.get("device_public_key")?.clone();
     Some(Device {
         device_id,
         enrolled_at,
+        public_key,
     })
 }
 

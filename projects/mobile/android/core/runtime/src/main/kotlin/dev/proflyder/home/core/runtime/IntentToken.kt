@@ -1,4 +1,4 @@
-package dev.proflyder.home.feature.push
+package dev.proflyder.home.core.runtime
 
 import android.content.Context
 import androidx.core.content.edit
@@ -10,7 +10,7 @@ import java.util.UUID
 
 @SingleIn(AppScope::class)
 @Inject
-class PushIntentToken(private val context: Context) {
+class IntentToken(private val context: Context) {
     fun current(): String {
         val preferences = context.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
         preferences.getString(KEY, null)?.let { return it }
@@ -25,7 +25,7 @@ class PushIntentToken(private val context: Context) {
     }
 
     private companion object {
-        const val PREFERENCES = "home_push_intent"
+        const val PREFERENCES = "home_internal_intent"
         const val KEY = "token"
     }
 }

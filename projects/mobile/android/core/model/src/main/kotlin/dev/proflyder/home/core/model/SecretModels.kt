@@ -82,6 +82,7 @@ data class DeviceEnrollment(
     val enrolled: Boolean,
     val deviceId: String?,
     val enrolledAt: Long,
+    val publicKey: String? = null,
 )
 
 data class DeviceAttestationChallenge(

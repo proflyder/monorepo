@@ -153,12 +153,9 @@ mise run secrets:exec -- -P kube exec -- \
 # 1. policy + auth/kubernetes/role/secrets-gateway (audience secrets-gateway)
 mise run admin:openbao-bootstrap
 
-# 2. ДО merge: установить APK из PR CI (android-distribute) на телефон,
-#    привязать его и проверить reveal/update. Старый APK после merge не умеет
-#    step-up, поэтому без этого шага телефон останется без секретов.
-# 3. merge; если merge раньше шага 1 — под Pending и Kustomization
-#    app-secrets-gateway NotReady, другие приложения не ломаются
-# 4. после merge: force-sync ESO и проверка Secret
+# 2. merge; Flux выкатывает новый под. Если merge раньше шага 1 — под Pending,
+#    Kustomization app-secrets-gateway NotReady, другие приложения не ломаются
+# 3. force-sync ESO, дождаться пода и проверить Secret
 mise run kubectl -- -n home-assistant annotate externalsecret secrets-gateway \
   force-sync="$(date +%s)" --overwrite
 mise run kubectl -- -n home-assistant wait --for=condition=Ready \
@@ -166,9 +163,14 @@ mise run kubectl -- -n home-assistant wait --for=condition=Ready \
 mise run kubectl -- -n home-assistant get secret secrets-gateway \
   -o go-template='{{range $k, $v := .data}}{{$k}}{{"\n"}}{{end}}'
 
+# 4. установить APK из CI (android-distribute) уже поверх нового сервера:
+#    /v1/device/* существует только после шага 2, поэтому раньше привязка
+#    невозможна. Старый APK после merge не умеет step-up.
+
 # 5. привязать телефон: одноразовый код в файл 0600, действует 15 минут
 mise run admin:secrets-device-enroll
 # приложение: Система → Секреты → Привязать телефон
+# проверить reveal/update, затем удалить файл с кодом
 # повторная привязка — новый код; отзыв без телефона:
 mise run admin:secrets-device-enroll -- --revoke
 
@@ -176,6 +178,9 @@ mise run admin:secrets-device-enroll -- --revoke
 mise run kubectl -- -n home-assistant exec deploy/secrets-gateway -- \
   rm -f /state/last-totp-step
 ```
+
+Только после успешной привязки и проверки reveal/update удалить legacy-путь
+`secret/k8s/home-assistant/secrets-gateway` (TOTP больше не нужен).
 
 В Secret должен быть только `service_token`; в поде — SA `secrets-gateway` с
 projected audience `secrets-gateway` (`automountServiceAccountToken: false`),

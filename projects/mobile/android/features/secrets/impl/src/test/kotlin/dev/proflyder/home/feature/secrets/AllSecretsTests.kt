@@ -7,6 +7,7 @@ import org.junit.runners.Suite
 @Suite.SuiteClasses(
     SecretProblemTest::class,
     AndroidDeviceSignerTest::class,
+    StagingAliasStateTest::class,
     SecretsCatalogViewModelTest::class,
     SecretPathViewModelTest::class,
     SecretsDeviceViewModelTest::class,

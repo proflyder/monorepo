@@ -39,7 +39,8 @@ a typed router. Device acceptance and open work: [STATE](../../../docs/STATE.md)
   update, rollback and soft delete sign that exact operation. The key is bound
   once through **Bind phone** with a one-time code from the server; opening
   that screen never rotates an enrolled key, and **Re-bind** asks for
-  confirmation. Step-up needs Android 9 (API 28); on API 26–27 the screen
+  confirmation. A staged key survives screen recreation and is promoted only
+  after the server accepts it; leftovers are swept on the next open. Step-up needs Android 9 (API 28); on API 26–27 the screen
   reports that key signing is unavailable. `setInvalidatedByBiometricEnrollment`
   does not invalidate keys that allow the device credential, so enrolling a new
   biometric may leave the key usable; `setUnlockedDeviceRequired(true)` is set

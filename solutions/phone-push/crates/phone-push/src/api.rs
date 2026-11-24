@@ -21,7 +21,14 @@ pub const MAX_DEEP_LINK_CHARS: usize = 512;
 pub const MAX_DATA_ENTRIES: usize = 8;
 pub const MAX_DATA_KEY_CHARS: usize = 32;
 pub const MAX_DATA_VALUE_CHARS: usize = 256;
-const RESERVED_DATA_KEYS: [&str; 5] = ["type", "title", "body", "notificationId", "deepLink"];
+const RESERVED_DATA_KEYS: [&str; 6] = [
+    "type",
+    "title",
+    "body",
+    "notificationId",
+    "deepLink",
+    "module",
+];
 
 #[derive(Clone)]
 pub struct PushState {

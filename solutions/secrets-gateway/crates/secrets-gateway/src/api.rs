@@ -1026,6 +1026,7 @@ async fn device_status(State(state): State<GatewayState>, headers: HeaderMap) ->
                 "enrolled": true,
                 "deviceId": device.device_id,
                 "enrolledAt": device.enrolled_at,
+                "publicKey": device.public_key,
             }))
             .into_response(),
         ),

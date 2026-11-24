@@ -1,6 +1,7 @@
 package dev.proflyder.home.feature.push
 
 import android.content.Intent
+import dev.proflyder.home.core.runtime.IntentToken
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -12,7 +13,7 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class PushDeepLinkSourceTest {
-    private val token = PushIntentToken(RuntimeEnvironment.getApplication())
+    private val token = IntentToken(RuntimeEnvironment.getApplication())
     private val source = PushDeepLinkSource(token)
 
     @Test

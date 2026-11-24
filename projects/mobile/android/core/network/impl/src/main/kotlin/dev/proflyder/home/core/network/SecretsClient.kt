@@ -99,6 +99,7 @@ internal data class SecretDeviceDto(
     val enrolled: Boolean = false,
     val deviceId: String? = null,
     val enrolledAt: Long = 0,
+    val publicKey: String? = null,
 )
 
 @Serializable
@@ -226,7 +227,7 @@ class HttpSecretsClient(private val http: HomeHttp) : SecretsApi {
         api.metadata(encodedPath(path)).mapResult(SecretMetadataDto::toModel)
 
     override suspend fun device(): Outcome<DeviceEnrollment> = api.device().mapResult { value ->
-        DeviceEnrollment(value.enrolled, value.deviceId, value.enrolledAt)
+        DeviceEnrollment(value.enrolled, value.deviceId, value.enrolledAt, value.publicKey)
     }
 
     override suspend fun deviceChallenge(): Outcome<DeviceAttestationChallenge> =
@@ -241,7 +242,7 @@ class HttpSecretsClient(private val http: HomeHttp) : SecretsApi {
         attestationChain: List<String>,
     ): Outcome<DeviceEnrollment> =
         api.enroll(SecretDeviceEnrollBody(code.trim(), publicKey, attestationChallenge, attestationChain))
-            .mapResult { value -> DeviceEnrollment(value.enrolled, value.deviceId, value.enrolledAt) }
+            .mapResult { value -> DeviceEnrollment(value.enrolled, value.deviceId, value.enrolledAt, value.publicKey) }
 
     override suspend fun challenge(
         operation: SecretOperation,

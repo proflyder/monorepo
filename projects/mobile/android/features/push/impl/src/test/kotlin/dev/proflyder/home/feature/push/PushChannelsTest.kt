@@ -5,6 +5,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import androidx.core.app.NotificationManagerCompat
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import dev.proflyder.home.core.runtime.IntentToken
 import dev.proflyder.home.core.theme.AppTheme
 import dev.proflyder.home.core.theme.AppearanceController
 import dev.proflyder.home.core.theme.ThemedNotificationAccent
@@ -79,7 +80,7 @@ class PushChannelsTest {
             context,
             ThemedNotificationAccent(context, appearance(context)),
             AndroidNotificationPermission(context),
-            PushIntentToken(context),
+            IntentToken(context),
         )
 
         notifier.notify(PushMessage.Notify("Секреты", "Показ секрета", null, "secrets"))
@@ -99,7 +100,7 @@ class PushChannelsTest {
             context,
             ThemedNotificationAccent(context, appearance(context)),
             AndroidNotificationPermission(context),
-            PushIntentToken(context),
+            IntentToken(context),
         ).ring("Рикардо")
 
         assertEquals(PushChannels.FIND, notification.channelId)

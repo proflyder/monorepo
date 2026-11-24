@@ -39,18 +39,14 @@ LAN/VPN закрыт. Вызывающие в кластере — Traefik, mcp-
    `home-assistant`, TTL 20m/1h, audience `secrets-gateway`, policy
    `secrets-gateway`). Root/operator token в под не попадают.
 
-2. **Установить новый APK до merge.** Сборка PR CI (`android-distribute`)
-   привязывает телефон и проверяет reveal/update. После merge старый APK не
-   умеет step-up, поэтому без этого шага телефон останется без секретов.
-
-3. **Merge PR.** `deploy-home` публикует digest и Flux применяет
+2. **Merge PR.** `deploy-home` публикует digest и Flux применяет
    `app-secrets-gateway`. Если merge случился раньше шага 1, под остаётся
    `Pending` (нет Secret-тома), а Kustomization `app-secrets-gateway` —
    NotReady и ретраится каждую минуту; другие приложения не зависят от неё и
    не ломаются. Scheduler-часть обратно совместима: owner получает `secrets`
    неявно, миграция не нужна.
 
-4. **Синхронизировать ESO и дождаться пода.** ESO обновляет
+3. **Синхронизировать ESO и дождаться пода.** ESO обновляет
    `ExternalSecret/secrets-gateway` раз в час; после merge форсировать:
 
    ```bash
@@ -65,6 +61,10 @@ LAN/VPN закрыт. Вызывающие в кластере — Traefik, mcp-
    В Secret должен быть только `service_token`. Проверить, что под
    `secrets-gateway` Ready: `readyz` требует свежий snapshot доступа и
    доступный OpenBao.
+
+4. **Установить новый APK.** `/v1/device/*` существует только после шага 2,
+   поэтому APK из CI (`android-distribute`) ставится после rollout. Старый APK
+   после merge не умеет step-up.
 
 5. **Привязать телефон.** Одноразовый код создаётся в OpenBao, в файл 0600
    пишется только код; stdout печатает путь файла, не код:
@@ -92,7 +92,9 @@ LAN/VPN закрыт. Вызывающие в кластере — Traefik, mcp-
    новые step-up и reveal прекращаются без рестарта пода (уже открытые
    5-минутные сессии тоже перестают проходить). Отзыв оставляет в OpenBao
    маркер, который сервис замечает опросом (не чаще раза в 30 секунд) и
-   присылает один push «Отзыв телефона».
+   присылает один push «Отзыв телефона». Только после успешной привязки и
+   проверки reveal/update удалить legacy-путь
+   `secret/k8s/home-assistant/secrets-gateway`.
 
 6. **Удалить legacy-состояние.** Файл последнего TOTP-шага больше не нужен:
 
