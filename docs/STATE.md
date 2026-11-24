@@ -199,8 +199,10 @@
   `/v1/chat/*`. Мост в bb — SSH forced command на CT 103.
 - phone-push (`solutions/phone-push`): FCM HTTP v1; телефоны хранит scheduler.
 - secrets-gateway (`solutions/secrets-gateway`): owner-only API секретов
-  приложения поверх OpenBao KV v2 (роль `secrets-gateway`), модуль `secrets`,
-  TOTP step-up, audit в лог и phone-push; значения не хранит и не логирует.
+  приложения поверх OpenBao KV v2 (роль `secrets-gateway`, audience
+  `secrets-gateway`), модуль `secrets`, TOTP step-up с durable last-step на
+  PVC, audit в лог и phone-push; значения не хранит и не логирует. Каталог и
+  deny-список приходят из ConfigMap, `readyz` проверяет OpenBao.
 - Чат приложения с Hermes — отдельная сессия `home-app` через chat relay
   voice-proxy `:8644`.
 

@@ -1,5 +1,5 @@
 path "secret/data/*" {
-  capabilities = ["read", "update"]
+  capabilities = ["read", "update", "delete"]
 }
 
 path "secret/metadata/*" {
@@ -8,86 +8,6 @@ path "secret/metadata/*" {
 
 path "secret/metadata" {
   capabilities = ["list"]
-}
-
-path "secret/data/ci" {
-  capabilities = ["deny"]
-}
-
-path "secret/data/ci/*" {
-  capabilities = ["deny"]
-}
-
-path "secret/metadata/ci/*" {
-  capabilities = ["deny"]
-}
-
-path "secret/metadata/ci" {
-  capabilities = ["deny"]
-}
-
-path "secret/data/infra" {
-  capabilities = ["deny"]
-}
-
-path "secret/data/infra/*" {
-  capabilities = ["deny"]
-}
-
-path "secret/metadata/infra/*" {
-  capabilities = ["deny"]
-}
-
-path "secret/metadata/infra" {
-  capabilities = ["deny"]
-}
-
-path "secret/data/k8s/flux-system" {
-  capabilities = ["deny"]
-}
-
-path "secret/data/k8s/flux-system/*" {
-  capabilities = ["deny"]
-}
-
-path "secret/metadata/k8s/flux-system/*" {
-  capabilities = ["deny"]
-}
-
-path "secret/metadata/k8s/flux-system" {
-  capabilities = ["deny"]
-}
-
-path "secret/data/k8s/home-assistant/scheduler-auth" {
-  capabilities = ["deny"]
-}
-
-path "secret/metadata/k8s/home-assistant/scheduler-auth" {
-  capabilities = ["deny"]
-}
-
-path "secret/data/k8s/home-assistant/secrets-gateway" {
-  capabilities = ["deny"]
-}
-
-path "secret/metadata/k8s/home-assistant/secrets-gateway" {
-  capabilities = ["deny"]
-}
-
-path "secret/data/openbao" {
-  capabilities = ["deny"]
-}
-
-path "secret/data/openbao/*" {
-  capabilities = ["deny"]
-}
-
-path "secret/metadata/openbao/*" {
-  capabilities = ["deny"]
-}
-
-path "secret/metadata/openbao" {
-  capabilities = ["deny"]
 }
 
 path "secret/destroy/*" {
@@ -119,5 +39,85 @@ path "auth/*" {
 }
 
 path "identity/*" {
+  capabilities = ["deny"]
+}
+
+path "secret/data/openbao" {
+  capabilities = ["deny"]
+}
+
+path "secret/data/openbao/*" {
+  capabilities = ["deny"]
+}
+
+path "secret/metadata/openbao" {
+  capabilities = ["deny"]
+}
+
+path "secret/metadata/openbao/*" {
+  capabilities = ["deny"]
+}
+
+path "secret/data/infra/vpn/client-ca" {
+  capabilities = ["deny"]
+}
+
+path "secret/data/infra/vpn/client-ca/*" {
+  capabilities = ["deny"]
+}
+
+path "secret/metadata/infra/vpn/client-ca" {
+  capabilities = ["deny"]
+}
+
+path "secret/metadata/infra/vpn/client-ca/*" {
+  capabilities = ["deny"]
+}
+
+path "secret/data/k8s/flux-system" {
+  capabilities = ["deny"]
+}
+
+path "secret/data/k8s/flux-system/*" {
+  capabilities = ["deny"]
+}
+
+path "secret/metadata/k8s/flux-system" {
+  capabilities = ["deny"]
+}
+
+path "secret/metadata/k8s/flux-system/*" {
+  capabilities = ["deny"]
+}
+
+path "secret/data/k8s/home-assistant/scheduler-auth" {
+  capabilities = ["deny"]
+}
+
+path "secret/data/k8s/home-assistant/scheduler-auth/*" {
+  capabilities = ["deny"]
+}
+
+path "secret/metadata/k8s/home-assistant/scheduler-auth" {
+  capabilities = ["deny"]
+}
+
+path "secret/metadata/k8s/home-assistant/scheduler-auth/*" {
+  capabilities = ["deny"]
+}
+
+path "secret/data/k8s/home-assistant/secrets-gateway" {
+  capabilities = ["deny"]
+}
+
+path "secret/data/k8s/home-assistant/secrets-gateway/*" {
+  capabilities = ["deny"]
+}
+
+path "secret/metadata/k8s/home-assistant/secrets-gateway" {
+  capabilities = ["deny"]
+}
+
+path "secret/metadata/k8s/home-assistant/secrets-gateway/*" {
   capabilities = ["deny"]
 }

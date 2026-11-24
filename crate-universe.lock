@@ -1,5 +1,5 @@
 {
-  "checksum": "cc6611863786a124527108d15913c6df534ea9f4b310949f3205817071cc126a",
+  "checksum": "8a230fb9d06c427bf9427c0af3db8bc8028492c735fa4627703c5017ce4f7cd2",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -17487,6 +17487,10 @@
           {
             "id": "http-body-util 0.1.5",
             "target": "http_body_util"
+          },
+          {
+            "id": "tempfile 3.27.0",
+            "target": "tempfile"
           },
           {
             "id": "tower 0.5.3",

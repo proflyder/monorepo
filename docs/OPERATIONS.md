@@ -156,10 +156,12 @@ mise run admin:secrets-totp-init
 # rollout restart deploy/secrets-gateway (сервис читает TOTP при старте)
 mise run admin:secrets-totp-init -- --rotate
 
-# 2. policy + auth/kubernetes/role/secrets-gateway
+# 2. policy + auth/kubernetes/role/secrets-gateway (audience secrets-gateway)
 mise run admin:openbao-bootstrap
 
-# 3. после merge: force-sync ESO и проверка Secret
+# 3. merge; если merge раньше шагов 1-2 — под Pending и Kustomization
+#    app-secrets-gateway NotReady, другие приложения не ломаются
+# 4. после merge: force-sync ESO и проверка Secret
 mise run kubectl -- -n home-assistant annotate externalsecret secrets-gateway \
   force-sync="$(date +%s)" --overwrite
 mise run kubectl -- -n home-assistant wait --for=condition=Ready \
@@ -169,8 +171,10 @@ mise run kubectl -- -n home-assistant get secret secrets-gateway \
 ```
 
 В Secret должны быть `service_token` и `totp_secret`; в поде — SA
-`secrets-gateway` (`automountServiceAccountToken: true`), без root/operator
-token. Импортировать URI в аутентификатор и удалить файл. Проверка и откат —
+`secrets-gateway` с projected audience `secrets-gateway`
+(`automountServiceAccountToken: false`), без root/operator token. PVC
+`secrets-gateway-state` хранит только последний TOTP-шаг. Импортировать URI в
+аутентификатор и удалить файл. Проверка и откат —
 `projects/home/kubernetes/secrets-gateway/README.md`; API и step-up —
 `solutions/secrets-gateway/README.md`.
 

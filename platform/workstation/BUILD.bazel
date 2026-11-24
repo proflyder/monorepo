@@ -1,8 +1,0 @@
-package(default_visibility = ["//visibility:public"])
-
-exports_files(["catalog.json"])
-
-filegroup(
-    name = "catalog",
-    srcs = ["catalog.json"],
-)

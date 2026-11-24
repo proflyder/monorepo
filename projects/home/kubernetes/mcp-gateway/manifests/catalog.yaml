@@ -655,7 +655,7 @@ services:
     title: Secrets Gateway
     group: Приложения
     aliases:
-      ru: [секреты приложения, хранилище секретов]
+      ru: [секреты приложения]
       en: [secrets-gateway, secrets gateway, app secrets]
     kind: k8s
     namespace: home-assistant

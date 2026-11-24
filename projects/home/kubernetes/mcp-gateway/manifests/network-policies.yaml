@@ -81,6 +81,13 @@ spec:
         - protocol: TCP
           port: 8098
     - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: secrets-gateway
+      ports:
+        - protocol: TCP
+          port: 8096
+    - to:
         - ipBlock:
             cidr: ${LAN_CIDR}
       ports:

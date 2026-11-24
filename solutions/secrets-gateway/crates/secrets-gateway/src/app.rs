@@ -1,5 +1,7 @@
+use std::path::Path;
 use std::process::ExitCode;
 use std::sync::Arc;
+use std::time::Duration;
 
 use anyhow::Context as _;
 use home_app_auth::{AccessClient, snapshot_url};
@@ -11,6 +13,7 @@ use crate::api::{self, GatewayState};
 use crate::audit::{Auditor, PushClient};
 use crate::catalog::Catalog;
 use crate::config::Config;
+use crate::deny::Deny;
 use crate::openbao::OpenBao;
 use crate::stepup::StepUp;
 
@@ -18,6 +21,7 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 const SHUTDOWN_GRACE: u64 = 5;
 const BODY_LIMIT: usize = 128 * 1024;
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
 
 pub async fn run() -> anyhow::Result<()> {
     let config = Config::load().context("configuration")?;
@@ -26,14 +30,16 @@ pub async fn run() -> anyhow::Result<()> {
         .init()
         .context("telemetry")?;
 
-    let catalog = Arc::new(Catalog::embedded().map_err(anyhow::Error::msg)?);
+    let catalog =
+        Arc::new(Catalog::load(Path::new(&config.catalog_file)).map_err(anyhow::Error::msg)?);
+    let deny = Arc::new(Deny::load(Path::new(&config.deny_file)).map_err(anyhow::Error::msg)?);
     let access = AccessClient::new(
         snapshot_url(&config.scheduler_url),
         config.service_token.expose(),
     )
     .map_err(|error| anyhow::anyhow!("access client: {error}"))?;
     let stepup = Arc::new(
-        StepUp::new(config.totp_secret.expose())
+        StepUp::with_state(config.totp_secret.expose(), Path::new(&config.state_file))
             .map_err(|error| anyhow::anyhow!("step-up: {error}"))?,
     );
     let openbao = Arc::new(
@@ -53,16 +59,20 @@ pub async fn run() -> anyhow::Result<()> {
     .map_err(anyhow::Error::msg)?;
     let audit = Arc::new(Auditor::new(push));
 
-    let router = api::router(GatewayState {
+    let state = GatewayState {
         access: Arc::clone(&access),
         openbao,
         catalog,
+        deny,
         stepup,
         audit,
         max_list_entries: config.max_list_entries,
-    })
-    .merge(crate::health::router());
-    let router = home_http::with_body_limit(router, BODY_LIMIT);
+    };
+    let router = api::router(state.clone()).merge(crate::health::router(state));
+    let router = home_http::with_timeout(
+        home_http::with_body_limit(router, BODY_LIMIT),
+        REQUEST_TIMEOUT,
+    );
 
     let listener = TcpListener::bind(&config.listen)
         .await
@@ -88,7 +98,7 @@ pub async fn run() -> anyhow::Result<()> {
     };
     cancel.cancel();
     let unfinished = supervisor
-        .shutdown(std::time::Duration::from_secs(SHUTDOWN_GRACE))
+        .shutdown(Duration::from_secs(SHUTDOWN_GRACE))
         .await;
     if !unfinished.is_empty() {
         tracing::warn!(?unfinished, "tasks did not stop before the shutdown grace");

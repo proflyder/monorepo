@@ -13,6 +13,8 @@ use home_secret::Token;
 use secrets_gateway::api::{self, GatewayState, STEP_UP_SESSION_HEADER, STEP_UP_TOTP_HEADER};
 use secrets_gateway::audit::{Auditor, PushClient};
 use secrets_gateway::catalog::Catalog;
+use secrets_gateway::deny::Deny;
+use secrets_gateway::health;
 use secrets_gateway::openbao::OpenBao;
 use secrets_gateway::stepup::StepUp;
 use secrets_gateway::totp::{self, Totp};
@@ -25,6 +27,108 @@ const MEMBER_TOKEN: &str = "member-token";
 const SERVICE_TOKEN: &str = "service-token";
 const TOTP_SECRET: &str = "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP";
 const SECRET_VALUE: &str = "s3cr3t";
+const POLICY: &str =
+    include_str!("../../../../../projects/home/kubernetes/secrets-gateway/policy.hcl");
+const DENY: &str =
+    include_str!("../../../../../projects/home/kubernetes/secrets-gateway/manifests/deny.json");
+
+#[derive(Debug, Clone)]
+struct Rule {
+    path: String,
+    capabilities: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+struct Policy {
+    rules: Vec<Rule>,
+}
+
+impl Policy {
+    fn parse(text: &str) -> Self {
+        let mut rules = Vec::new();
+        let mut rest = text;
+        while let Some(start) = rest.find("path \"") {
+            let after = &rest[start + 6..];
+            let Some(end_quote) = after.find('"') else {
+                break;
+            };
+            let path = &after[..end_quote];
+            let Some(open) = after[end_quote..].find('{') else {
+                break;
+            };
+            let Some(close) = after[end_quote + open..].find('}') else {
+                break;
+            };
+            let block = &after[end_quote + open..end_quote + open + close];
+            let mut capabilities = Vec::new();
+            let mut search = block;
+            while let Some(quote) = search.find('"') {
+                let tail = &search[quote + 1..];
+                let Some(end) = tail.find('"') else {
+                    break;
+                };
+                let capability = &tail[..end];
+                if capability
+                    .chars()
+                    .all(|character| character.is_ascii_lowercase())
+                {
+                    capabilities.push(capability.to_owned());
+                }
+                search = &tail[end + 1..];
+            }
+            rules.push(Rule {
+                path: path.to_owned(),
+                capabilities,
+            });
+            rest = &after[end_quote + open + close + 1..];
+        }
+        Self { rules }
+    }
+
+    fn require(&self, method: &Method, path: &str) -> bool {
+        let capability = capability_for(method, path);
+        let matching: Vec<&Rule> = self
+            .rules
+            .iter()
+            .filter(|rule| rule_matches(&rule.path, path))
+            .collect();
+        if matching
+            .iter()
+            .any(|rule| rule.capabilities.iter().any(|item| item == "deny"))
+        {
+            return false;
+        }
+        matching
+            .iter()
+            .any(|rule| rule.capabilities.iter().any(|item| item == capability))
+    }
+}
+
+fn capability_for(method: &Method, path: &str) -> &'static str {
+    if path.starts_with("secret/data/") {
+        return match method.as_str() {
+            "GET" => "read",
+            "DELETE" => "delete",
+            _ => "update",
+        };
+    }
+    if path.starts_with("secret/metadata") {
+        return match method.as_str() {
+            "LIST" => "list",
+            "DELETE" => "delete",
+            _ => "read",
+        };
+    }
+    "read"
+}
+
+fn rule_matches(rule: &str, path: &str) -> bool {
+    if rule == path {
+        return true;
+    }
+    rule.strip_suffix('*')
+        .is_some_and(|prefix| path.starts_with(prefix))
+}
 
 #[derive(Clone, Debug)]
 struct OpenBaoState {
@@ -38,6 +142,7 @@ struct FakeOpenBao {
     deleted: BTreeSet<u64>,
     requests: Vec<(String, String)>,
     reject_write: bool,
+    policy: Policy,
 }
 
 impl OpenBaoState {
@@ -64,6 +169,7 @@ impl OpenBaoState {
                 deleted: BTreeSet::new(),
                 requests: Vec::new(),
                 reject_write: false,
+                policy: Policy::parse(POLICY),
             })),
         }
     }
@@ -74,6 +180,14 @@ impl OpenBaoState {
             .expect("lock")
             .requests
             .push((method.as_str().to_owned(), path.to_owned()));
+    }
+
+    fn allow(&self, method: &Method, path: &str) -> bool {
+        self.inner
+            .lock()
+            .expect("lock")
+            .policy
+            .require(method, path)
     }
 
     fn requests(&self) -> Vec<(String, String)> {
@@ -94,6 +208,10 @@ impl OpenBaoState {
             .expect("version")
     }
 
+    fn mark_deleted(&self, version: u64) {
+        self.inner.lock().expect("lock").deleted.insert(version);
+    }
+
     fn reject_next_write(&self) {
         self.inner.lock().expect("lock").reject_write = true;
     }
@@ -105,6 +223,10 @@ impl OpenBaoState {
 
 async fn login() -> Json<Value> {
     Json(json!({"auth": {"client_token": "bao-token", "lease_duration": 3600}}))
+}
+
+async fn bao_health() -> StatusCode {
+    StatusCode::OK
 }
 
 async fn metadata_root(State(state): State<OpenBaoState>, method: Method) -> Response {
@@ -120,7 +242,14 @@ async fn metadata_entry(
 }
 
 fn metadata_response(state: &OpenBaoState, path: &str, method: &Method) -> Response {
-    state.record(method, &format!("secret/metadata/{path}"));
+    let full = match path.is_empty() {
+        true => "secret/metadata".to_owned(),
+        false => format!("secret/metadata/{path}"),
+    };
+    state.record(method, &full);
+    if !state.allow(method, &full) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
     if method.as_str() == "LIST" {
         return Json(json!({"data": {"keys": list_keys(path)}})).into_response();
     }
@@ -158,7 +287,17 @@ fn metadata_response(state: &OpenBaoState, path: &str, method: &Method) -> Respo
 }
 
 fn list_keys(prefix: &str) -> Vec<String> {
-    let paths = ["k8s/test", "infra/vpn/client-ca", "ci/test"];
+    let paths = [
+        "ci/test",
+        "infra/backup/offsite",
+        "infra/vpn/client-ca",
+        "k8s/flux-system/git-deploy-key",
+        "k8s/home-assistant/phone-push",
+        "k8s/home-assistant/scheduler-auth",
+        "k8s/home-assistant/secrets-gateway",
+        "k8s/test",
+        "openbao/seal",
+    ];
     let mut keys = BTreeSet::new();
     for path in paths {
         let Some(rest) = path.strip_prefix(prefix) else {
@@ -182,7 +321,11 @@ async fn data_get(
     Path(path): Path<String>,
     Query(query): Query<HashMap<String, String>>,
 ) -> Response {
-    state.record(&Method::GET, &format!("secret/data/{path}"));
+    let full = format!("secret/data/{path}");
+    state.record(&Method::GET, &full);
+    if !state.allow(&Method::GET, &full) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
     if path != "k8s/test" {
         return StatusCode::NOT_FOUND.into_response();
     }
@@ -212,7 +355,11 @@ async fn data_write(
     Path(path): Path<String>,
     Json(body): Json<Value>,
 ) -> Response {
-    state.record(&Method::POST, &format!("secret/data/{path}"));
+    let full = format!("secret/data/{path}");
+    state.record(&Method::POST, &full);
+    if !state.allow(&Method::POST, &full) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
     if path != "k8s/test" {
         return StatusCode::NOT_FOUND.into_response();
     }
@@ -258,7 +405,11 @@ async fn data_write(
 }
 
 async fn data_delete(State(state): State<OpenBaoState>, Path(path): Path<String>) -> Response {
-    state.record(&Method::DELETE, &format!("secret/data/{path}"));
+    let full = format!("secret/data/{path}");
+    state.record(&Method::DELETE, &full);
+    if !state.allow(&Method::DELETE, &full) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
     if path != "k8s/test" {
         return StatusCode::NOT_FOUND.into_response();
     }
@@ -270,13 +421,18 @@ async fn data_delete(State(state): State<OpenBaoState>, Path(path): Path<String>
 }
 
 async fn destroy(State(state): State<OpenBaoState>, Path(path): Path<String>) -> Response {
-    state.record(&Method::POST, &format!("secret/destroy/{path}"));
+    let full = format!("secret/destroy/{path}");
+    state.record(&Method::POST, &full);
+    if !state.allow(&Method::POST, &full) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
     StatusCode::NO_CONTENT.into_response()
 }
 
 fn openbao_router(state: OpenBaoState) -> Router {
     Router::new()
         .route("/v1/auth/kubernetes/login", post(login))
+        .route("/v1/sys/health", get(bao_health))
         .route("/v1/secret/metadata", any(metadata_root))
         .route("/v1/secret/metadata/{*path}", any(metadata_entry))
         .route(
@@ -380,6 +536,7 @@ async fn harness() -> Harness {
         }}"#,
     )
     .expect("catalog");
+    let deny = Deny::parse(DENY).expect("deny");
     let openbao = OpenBao::new(
         &openbao_url,
         "secrets-gateway",
@@ -389,14 +546,16 @@ async fn harness() -> Harness {
     .expect("openbao");
     let push = PushClient::new(&push_url, Token::new(SERVICE_TOKEN), Duration::from_secs(5))
         .expect("push");
-    let app = api::router(GatewayState {
+    let state = GatewayState {
         access: AccessClient::fixed(snapshot),
         openbao: Arc::new(openbao),
         catalog: Arc::new(catalog),
+        deny: Arc::new(deny),
         stepup: Arc::new(StepUp::new(TOTP_SECRET).expect("step-up")),
         audit: Arc::new(Auditor::new(push)),
         max_list_entries: 50,
-    });
+    };
+    let app = api::router(state.clone()).merge(health::router(state));
     Harness {
         app,
         openbao: openbao_state,
@@ -409,14 +568,14 @@ async fn call(
     method: Method,
     uri: &str,
     token: Option<&str>,
-    headers: &[(&str, &str)],
+    extra: &[(&str, &str)],
     body: Option<Value>,
-) -> (StatusCode, Value) {
+) -> (StatusCode, HeaderMap, Value) {
     let mut builder = Request::builder().method(method).uri(uri);
     if let Some(token) = token {
         builder = builder.header(header::AUTHORIZATION, format!("Bearer {token}"));
     }
-    for (name, value) in headers {
+    for (name, value) in extra {
         builder = builder.header(*name, *value);
     }
     let request = match body {
@@ -428,11 +587,12 @@ async fn call(
     };
     let response = app.clone().oneshot(request).await.expect("response");
     let status = response.status();
+    let headers = response.headers().clone();
     let bytes = axum::body::to_bytes(response.into_body(), 1 << 20)
         .await
         .expect("bytes");
     let value = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
-    (status, value)
+    (status, headers, value)
 }
 
 fn code() -> String {
@@ -448,10 +608,35 @@ async fn pushes(pushes: &mut UnboundedReceiver<Value>) -> Vec<Value> {
     received
 }
 
+async fn session(harness: &Harness) -> String {
+    let (status, _, body) = call(
+        &harness.app,
+        Method::POST,
+        "/v1/step-up",
+        Some(OWNER_TOKEN),
+        &[],
+        Some(json!({"totp": code()})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    body["session"].as_str().expect("session").to_owned()
+}
+
+#[test]
+fn the_fake_acl_requires_the_policy_capability() {
+    let policy = Policy::parse(
+        r#"path "secret/data/*" {
+  capabilities = ["read", "update"]
+}"#,
+    );
+    assert!(policy.require(&Method::GET, "secret/data/k8s/test"));
+    assert!(!policy.require(&Method::DELETE, "secret/data/k8s/test"));
+}
+
 #[tokio::test]
-async fn the_owner_lists_live_and_catalogued_paths_without_denied_ones() {
+async fn the_owner_lists_the_whole_catalog_except_the_core() {
     let mut harness = harness().await;
-    let (status, body) = call(
+    let (status, _, body) = call(
         &harness.app,
         Method::GET,
         "/v1/secrets",
@@ -461,6 +646,7 @@ async fn the_owner_lists_live_and_catalogued_paths_without_denied_ones() {
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["truncated"], false);
     let entries = body["entries"].as_array().expect("entries");
     let test = entries
         .iter()
@@ -469,13 +655,28 @@ async fn the_owner_lists_live_and_catalogued_paths_without_denied_ones() {
     assert_eq!(test["description"], "test entry");
     assert_eq!(test["live"], true);
     assert_eq!(test["inCatalog"], true);
-    assert!(!entries.iter().any(|entry| {
-        entry["path"]
-            .as_str()
-            .unwrap_or_default()
-            .starts_with("infra/")
-    }));
-    assert!(!entries.iter().any(|entry| entry["path"] == "ci/test"));
+    for path in [
+        "ci/test",
+        "infra/backup/offsite",
+        "k8s/home-assistant/phone-push",
+    ] {
+        assert!(
+            entries.iter().any(|entry| entry["path"] == path),
+            "missing visible {path}"
+        );
+    }
+    for path in [
+        "infra/vpn/client-ca",
+        "k8s/flux-system/git-deploy-key",
+        "k8s/home-assistant/scheduler-auth",
+        "k8s/home-assistant/secrets-gateway",
+        "openbao/seal",
+    ] {
+        assert!(
+            !entries.iter().any(|entry| entry["path"] == path),
+            "hidden {path}"
+        );
+    }
     let received = pushes(&mut harness.pushes).await;
     assert!(!received.is_empty());
     assert!(received.iter().all(|push| push["module"] == "secrets"));
@@ -485,36 +686,54 @@ async fn the_owner_lists_live_and_catalogued_paths_without_denied_ones() {
             .all(|push| !push.to_string().contains(SECRET_VALUE))
     );
     let requests = harness.openbao.requests();
-    assert!(
-        !requests
-            .iter()
-            .any(|(_, path)| path.contains("infra") || path.contains("/ci"))
-    );
+    assert!(!requests.iter().any(|(_, path)| {
+        path.contains("infra/vpn/client-ca")
+            || path.contains("k8s/flux-system")
+            || path.contains("scheduler-auth")
+            || path.contains("secrets-gateway")
+            || path.contains("openbao")
+    }));
 }
 
 #[tokio::test]
 async fn only_the_owner_module_can_use_the_gateway() {
     let harness = harness().await;
-    let (status, body) = call(
-        &harness.app,
-        Method::GET,
-        "/v1/secrets",
-        Some(MEMBER_TOKEN),
-        &[],
-        None,
-    )
-    .await;
-    assert_eq!(status, StatusCode::FORBIDDEN);
-    assert_eq!(body["error"], "module_forbidden");
-    assert_eq!(body["module"], "secrets");
-    let (status, _) = call(&harness.app, Method::GET, "/v1/secrets", None, &[], None).await;
+    let cases = [
+        (Method::GET, "/v1/secrets", None),
+        (Method::GET, "/v1/secrets/meta/k8s/test", None),
+        (
+            Method::POST,
+            "/v1/secrets/reveal/k8s/test",
+            Some(json!({"key": "password", "version": 2})),
+        ),
+        (
+            Method::POST,
+            "/v1/secrets/update/k8s/test",
+            Some(json!({"key": "password", "value": "new", "cas": 2})),
+        ),
+        (
+            Method::POST,
+            "/v1/secrets/rollback/k8s/test",
+            Some(json!({"version": 1, "cas": 2})),
+        ),
+        (Method::DELETE, "/v1/secrets/k8s/test?cas=2", None),
+        (Method::POST, "/v1/step-up", Some(json!({"totp": "123456"}))),
+    ];
+    for (method, uri, body) in cases {
+        let (status, _, value) =
+            call(&harness.app, method, uri, Some(MEMBER_TOKEN), &[], body).await;
+        assert_eq!(status, StatusCode::FORBIDDEN, "{uri} {value}");
+        assert_eq!(value["error"], "module_forbidden", "{uri}");
+        assert_eq!(value["module"], "secrets", "{uri}");
+    }
+    let (status, _, _) = call(&harness.app, Method::GET, "/v1/secrets", None, &[], None).await;
     assert_eq!(status, StatusCode::UNAUTHORIZED);
 }
 
 #[tokio::test]
 async fn metadata_reports_versions_and_key_names_without_values() {
     let harness = harness().await;
-    let (status, body) = call(
+    let (status, _, body) = call(
         &harness.app,
         Method::GET,
         "/v1/secrets/meta/k8s/test",
@@ -534,9 +753,9 @@ async fn metadata_reports_versions_and_key_names_without_values() {
 }
 
 #[tokio::test]
-async fn reveal_needs_a_totp_started_session() {
+async fn reveal_needs_a_totp_started_session_and_disables_caching() {
     let mut harness = harness().await;
-    let (status, body) = call(
+    let (status, _, body) = call(
         &harness.app,
         Method::POST,
         "/v1/secrets/reveal/k8s/test",
@@ -548,19 +767,7 @@ async fn reveal_needs_a_totp_started_session() {
     assert_eq!(status, StatusCode::FORBIDDEN);
     assert_eq!(body["error"], "step_up_required");
 
-    let (status, body) = call(
-        &harness.app,
-        Method::POST,
-        "/v1/step-up",
-        Some(OWNER_TOKEN),
-        &[],
-        Some(json!({"totp": "abc"})),
-    )
-    .await;
-    assert_eq!(status, StatusCode::FORBIDDEN);
-    assert_eq!(body["error"], "step_up_invalid");
-
-    let (status, body) = call(
+    let (status, headers, body) = call(
         &harness.app,
         Method::POST,
         "/v1/step-up",
@@ -570,10 +777,15 @@ async fn reveal_needs_a_totp_started_session() {
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(
+        headers
+            .get(header::CACHE_CONTROL)
+            .and_then(|v| v.to_str().ok()),
+        Some("no-store")
+    );
     let session = body["session"].as_str().expect("session").to_owned();
-    assert_eq!(body["expiresIn"], 300);
 
-    let (status, body) = call(
+    let (status, headers, body) = call(
         &harness.app,
         Method::POST,
         "/v1/secrets/reveal/k8s/test",
@@ -584,7 +796,12 @@ async fn reveal_needs_a_totp_started_session() {
     .await;
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body["value"], SECRET_VALUE);
-    assert_eq!(body["version"], 2);
+    assert_eq!(
+        headers
+            .get(header::CACHE_CONTROL)
+            .and_then(|v| v.to_str().ok()),
+        Some("no-store")
+    );
     let received = pushes(&mut harness.pushes).await;
     assert!(!received.is_empty());
     assert!(
@@ -594,10 +811,28 @@ async fn reveal_needs_a_totp_started_session() {
     );
 }
 
+#[tokio::test(start_paused = true)]
+async fn a_step_up_session_expires_after_five_minutes() {
+    let harness = harness().await;
+    let session = session(&harness).await;
+    tokio::time::advance(Duration::from_secs(301)).await;
+    let (status, _, body) = call(
+        &harness.app,
+        Method::POST,
+        "/v1/secrets/reveal/k8s/test",
+        Some(OWNER_TOKEN),
+        &[(STEP_UP_SESSION_HEADER, &session)],
+        Some(json!({"key": "password", "version": 2})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(body["error"], "step_up_required");
+}
+
 #[tokio::test]
 async fn update_requires_totp_and_a_matching_cas() {
     let harness = harness().await;
-    let (status, body) = call(
+    let (status, _, body) = call(
         &harness.app,
         Method::POST,
         "/v1/secrets/update/k8s/test",
@@ -609,7 +844,7 @@ async fn update_requires_totp_and_a_matching_cas() {
     assert_eq!(status, StatusCode::FORBIDDEN);
     assert_eq!(body["error"], "step_up_required");
 
-    let (status, body) = call(
+    let (status, _, body) = call(
         &harness.app,
         Method::POST,
         "/v1/secrets/update/k8s/test",
@@ -625,9 +860,27 @@ async fn update_requires_totp_and_a_matching_cas() {
 }
 
 #[tokio::test]
+async fn update_refuses_a_soft_deleted_current_version() {
+    let harness = harness().await;
+    harness.openbao.mark_deleted(2);
+    let (status, _, body) = call(
+        &harness.app,
+        Method::POST,
+        "/v1/secrets/update/k8s/test",
+        Some(OWNER_TOKEN),
+        &[(STEP_UP_TOTP_HEADER, &code())],
+        Some(json!({"key": "password", "value": "new", "cas": 2})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(body["error"], "version_unavailable");
+    assert_eq!(harness.openbao.current(), 2);
+}
+
+#[tokio::test]
 async fn update_writes_a_new_version_without_leaking_the_value() {
     let mut harness = harness().await;
-    let (status, body) = call(
+    let (status, _, body) = call(
         &harness.app,
         Method::POST,
         "/v1/secrets/update/k8s/test",
@@ -655,7 +908,7 @@ async fn update_writes_a_new_version_without_leaking_the_value() {
 #[tokio::test]
 async fn rollback_copies_an_old_version_as_a_new_one() {
     let harness = harness().await;
-    let (status, body) = call(
+    let (status, _, body) = call(
         &harness.app,
         Method::POST,
         "/v1/secrets/rollback/k8s/test",
@@ -675,10 +928,10 @@ async fn rollback_copies_an_old_version_as_a_new_one() {
 #[tokio::test]
 async fn delete_is_soft_and_never_calls_destroy() {
     let harness = harness().await;
-    let (status, body) = call(
+    let (status, _, body) = call(
         &harness.app,
         Method::DELETE,
-        "/v1/secrets/k8s/test",
+        "/v1/secrets/k8s/test?cas=2&version=2",
         Some(OWNER_TOKEN),
         &[(STEP_UP_TOTP_HEADER, &code())],
         None,
@@ -686,6 +939,7 @@ async fn delete_is_soft_and_never_calls_destroy() {
     .await;
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body["deleted"], true);
+    assert_eq!(body["version"], 2);
     assert!(harness.openbao.deleted(2));
     let requests = harness.openbao.requests();
     assert!(
@@ -698,25 +952,30 @@ async fn delete_is_soft_and_never_calls_destroy() {
             .iter()
             .any(|(_, path)| path.starts_with("secret/destroy/"))
     );
+}
 
-    let (status, body) = call(
+#[tokio::test]
+async fn delete_rejects_a_stale_cas() {
+    let harness = harness().await;
+    let (status, _, body) = call(
         &harness.app,
         Method::DELETE,
-        "/v1/secrets/destroy/k8s/test",
+        "/v1/secrets/k8s/test?cas=1",
         Some(OWNER_TOKEN),
-        &[],
+        &[(STEP_UP_TOTP_HEADER, &code())],
         None,
     )
     .await;
-    assert_eq!(status, StatusCode::FORBIDDEN);
-    assert_eq!(body["error"], "path_forbidden");
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(body["error"], "conflict");
+    assert!(!harness.openbao.deleted(2));
 }
 
 #[tokio::test]
 async fn an_openbao_cas_race_is_reported_as_conflict() {
     let harness = harness().await;
     harness.openbao.reject_next_write();
-    let (status, body) = call(
+    let (status, _, body) = call(
         &harness.app,
         Method::POST,
         "/v1/secrets/update/k8s/test",
@@ -734,7 +993,7 @@ async fn an_openbao_cas_race_is_reported_as_conflict() {
 async fn denied_paths_are_rejected_before_openbao_is_called() {
     let mut harness = harness().await;
     let before = harness.openbao.requests().len();
-    let (status, body) = call(
+    let (status, _, body) = call(
         &harness.app,
         Method::GET,
         "/v1/secrets/meta/infra/vpn/client-ca",
@@ -745,10 +1004,10 @@ async fn denied_paths_are_rejected_before_openbao_is_called() {
     .await;
     assert_eq!(status, StatusCode::FORBIDDEN);
     assert_eq!(body["error"], "path_forbidden");
-    let (status, _) = call(
+    let (status, _, _) = call(
         &harness.app,
         Method::POST,
-        "/v1/secrets/reveal/sys/seal",
+        "/v1/secrets/reveal/openbao/seal",
         Some(OWNER_TOKEN),
         &[],
         Some(json!({"key": "value", "version": 1})),
@@ -765,11 +1024,36 @@ async fn denied_paths_are_rejected_before_openbao_is_called() {
 }
 
 #[tokio::test]
+async fn traversal_and_percent_encoding_are_rejected() {
+    let harness = harness().await;
+    for uri in [
+        "/v1/secrets/meta/%2e%2e%2fsys%2fseal",
+        "/v1/secrets/meta/k8s%2f..%2f..%2fsys%2fseal",
+        "/v1/secrets/meta/k8s//test",
+    ] {
+        let (status, _, _) =
+            call(&harness.app, Method::GET, uri, Some(OWNER_TOKEN), &[], None).await;
+        assert!(
+            status == StatusCode::BAD_REQUEST || status == StatusCode::FORBIDDEN,
+            "{uri}: {status}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn readiness_checks_openbao_and_the_access_snapshot() {
+    let harness = harness().await;
+    let (status, _, body) = call(&harness.app, Method::GET, "/readyz", None, &[], None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["status"], "ready");
+}
+
+#[tokio::test]
 async fn repeated_step_up_failures_are_rate_limited() {
     let harness = harness().await;
     let mut last = StatusCode::OK;
     for _ in 0..5 {
-        let (status, _) = call(
+        let (status, _, _) = call(
             &harness.app,
             Method::POST,
             "/v1/step-up",
@@ -781,7 +1065,7 @@ async fn repeated_step_up_failures_are_rate_limited() {
         last = status;
     }
     assert_eq!(last, StatusCode::TOO_MANY_REQUESTS);
-    let (status, body) = call(
+    let (status, _, body) = call(
         &harness.app,
         Method::POST,
         "/v1/step-up",

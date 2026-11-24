@@ -132,6 +132,8 @@ fn outcome_label(outcome: &str) -> &'static str {
         "version_required" => " — нужна версия",
         "version_not_found" => " — версия не найдена",
         "version_unavailable" => " — версия недоступна",
+        "version_not_current" => " — версия не последняя",
+        "state_unavailable" => " — состояние недоступно",
         "key_not_found" => " — ключ не найден",
         "error" => " — ошибка",
         _ => " — отказ",

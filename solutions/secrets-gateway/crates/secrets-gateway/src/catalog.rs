@@ -1,8 +1,7 @@
 use std::collections::BTreeMap;
+use std::path::Path;
 
 use serde::Deserialize;
-
-const EMBEDDED_CATALOG: &str = include_str!("../../../../../platform/workstation/catalog.json");
 
 #[derive(Debug, Deserialize)]
 struct CatalogFile {
@@ -30,8 +29,10 @@ pub struct Catalog {
 }
 
 impl Catalog {
-    pub fn embedded() -> Result<Self, String> {
-        Self::parse(EMBEDDED_CATALOG)
+    pub fn load(path: &Path) -> Result<Self, String> {
+        let data = std::fs::read_to_string(path)
+            .map_err(|error| format!("catalog {}: {error}", path.display()))?;
+        Self::parse(&data)
     }
 
     pub fn parse(json: &str) -> Result<Self, String> {
@@ -75,14 +76,6 @@ impl Catalog {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn the_embedded_catalog_describes_the_application_paths() {
-        let catalog = Catalog::embedded().expect("catalog");
-        assert!(!catalog.is_empty());
-        assert!(catalog.get("k8s/home-assistant/phone-push").is_some());
-        assert!(catalog.get("infra/vpn/client-ca").is_some());
-    }
 
     #[test]
     fn descriptions_come_from_the_purpose_field() {

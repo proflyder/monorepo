@@ -946,6 +946,7 @@ export const config = {
       paths: [
         "projects/home/kubernetes/openbao/**",
         "projects/home/kubernetes/secrets-gateway/policy.hcl",
+        "projects/home/kubernetes/secrets-gateway/manifests/deny.json",
       ],
       python: {
         suites: ["projects/home/kubernetes/openbao"],

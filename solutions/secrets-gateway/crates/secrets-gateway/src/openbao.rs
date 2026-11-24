@@ -9,6 +9,8 @@ use tokio::sync::Mutex;
 
 const MIN_TOKEN_LIFETIME: u64 = 30;
 const TOKEN_SKEW: u64 = 60;
+const MAX_LIST_DIRECTORIES: usize = 64;
+const MAX_LIST_DEPTH: usize = 5;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
 pub enum Error {
@@ -46,6 +48,12 @@ pub struct Metadata {
 pub struct SecretVersion {
     pub version: u64,
     pub data: BTreeMap<String, String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ListResult {
+    pub paths: Vec<String>,
+    pub truncated: bool,
 }
 
 impl std::fmt::Debug for SecretVersion {
@@ -99,33 +107,63 @@ impl OpenBao {
         })
     }
 
-    pub async fn list_all(&self, max_entries: usize) -> Result<Vec<String>, Error> {
+    pub async fn list_all(
+        &self,
+        deny: &crate::deny::Deny,
+        max_entries: usize,
+    ) -> Result<ListResult, Error> {
         let mut paths = Vec::new();
         let mut queue = vec![String::new()];
-        let max_directories = max_entries.saturating_mul(4).max(64);
+        let max_directories = MAX_LIST_DIRECTORIES.min(max_entries.saturating_mul(4).max(16));
         let mut visited = 0;
+        let mut truncated = false;
         while let Some(prefix) = queue.pop() {
             visited += 1;
             if visited > max_directories {
+                truncated = true;
                 break;
             }
             let keys = self.list_metadata(&prefix).await?;
             for key in keys {
                 let full = format!("{prefix}{key}");
-                if crate::deny::is_denied(&full) {
+                if deny.is_denied(&full) {
                     continue;
                 }
                 if key.ends_with('/') {
+                    if prefix_depth(&full) >= MAX_LIST_DEPTH {
+                        truncated = true;
+                        continue;
+                    }
                     queue.push(full);
                     continue;
                 }
                 paths.push(full);
                 if paths.len() >= max_entries {
-                    return Ok(sorted(paths));
+                    truncated = true;
+                    return Ok(ListResult {
+                        paths: sorted(paths),
+                        truncated,
+                    });
                 }
             }
         }
-        Ok(sorted(paths))
+        Ok(ListResult {
+            paths: sorted(paths),
+            truncated,
+        })
+    }
+
+    pub async fn health(&self) -> Result<(), Error> {
+        let response = self
+            .http
+            .get(format!("{}/v1/sys/health", self.base_url))
+            .send()
+            .await
+            .map_err(|_| Error::Unavailable)?;
+        if response.status().is_success() || response.status().as_u16() == 429 {
+            return Ok(());
+        }
+        Err(Error::Unavailable)
     }
 
     pub async fn list_metadata(&self, prefix: &str) -> Result<Vec<String>, Error> {
@@ -377,6 +415,14 @@ fn text(value: &Value, field: &str) -> String {
         .and_then(Value::as_str)
         .unwrap_or_default()
         .to_owned()
+}
+
+fn prefix_depth(prefix: &str) -> usize {
+    prefix
+        .trim_end_matches('/')
+        .split('/')
+        .filter(|segment| !segment.is_empty())
+        .count()
 }
 
 fn sorted(mut paths: Vec<String>) -> Vec<String> {

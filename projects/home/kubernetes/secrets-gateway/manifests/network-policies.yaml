@@ -17,6 +17,9 @@ spec:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: traefik
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: mcp-gateway
         - ipBlock:
             cidr: ${NODE_LAN_IP}/32
       ports:

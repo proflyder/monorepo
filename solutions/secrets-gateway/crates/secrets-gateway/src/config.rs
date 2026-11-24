@@ -6,10 +6,11 @@ use thiserror::Error;
 pub const DEFAULT_LISTEN: &str = "0.0.0.0:8096";
 pub const DEFAULT_OPENBAO_URL: &str = "http://openbao.openbao.svc:8200";
 pub const DEFAULT_OPENBAO_ROLE: &str = "secrets-gateway";
-pub const DEFAULT_SA_TOKEN: &str = "/var/run/secrets/kubernetes.io/serviceaccount/token";
+pub const DEFAULT_SA_TOKEN: &str = "/var/run/secrets/tokens/token";
+pub const DEFAULT_STATE_FILE: &str = "/state/last-totp-step";
 pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(10);
-pub const DEFAULT_MAX_LIST_ENTRIES: usize = 500;
-pub const MAX_LIST_ENTRIES: usize = 2_000;
+pub const DEFAULT_MAX_LIST_ENTRIES: usize = 200;
+pub const MAX_LIST_ENTRIES: usize = 1_000;
 
 #[derive(Clone)]
 pub struct Config {
@@ -20,6 +21,9 @@ pub struct Config {
     pub openbao_role: String,
     pub sa_token: Token,
     pub totp_secret: Token,
+    pub catalog_file: String,
+    pub deny_file: String,
+    pub state_file: String,
     pub phone_push_url: String,
     pub phone_push_token: Token,
     pub timeout: Duration,
@@ -34,6 +38,9 @@ impl std::fmt::Debug for Config {
             .field("scheduler_url", &self.scheduler_url)
             .field("openbao_url", &self.openbao_url)
             .field("openbao_role", &self.openbao_role)
+            .field("catalog_file", &self.catalog_file)
+            .field("deny_file", &self.deny_file)
+            .field("state_file", &self.state_file)
             .field("phone_push_url", &self.phone_push_url)
             .field("timeout", &self.timeout)
             .field("max_list_entries", &self.max_list_entries)
@@ -75,6 +82,12 @@ impl Config {
             .unwrap_or_else(|| DEFAULT_OPENBAO_ROLE.to_owned());
         let sa_token = secret(read_file, getenv, "SECRETS_GATEWAY_SA_TOKEN_FILE")?;
         let totp_secret = secret(read_file, getenv, "SECRETS_GATEWAY_TOTP_FILE")?;
+        let catalog_file = value(getenv, "SECRETS_GATEWAY_CATALOG_FILE")
+            .ok_or(ConfigError::Required("SECRETS_GATEWAY_CATALOG_FILE"))?;
+        let deny_file = value(getenv, "SECRETS_GATEWAY_DENY_FILE")
+            .ok_or(ConfigError::Required("SECRETS_GATEWAY_DENY_FILE"))?;
+        let state_file = value(getenv, "SECRETS_GATEWAY_STATE_FILE")
+            .unwrap_or_else(|| DEFAULT_STATE_FILE.to_owned());
         let phone_push_url = value(getenv, "SECRETS_GATEWAY_PHONE_PUSH_URL")
             .ok_or(ConfigError::Required("SECRETS_GATEWAY_PHONE_PUSH_URL"))?;
         let phone_push_token = match value(getenv, "SECRETS_GATEWAY_PHONE_PUSH_TOKEN_FILE") {
@@ -106,6 +119,9 @@ impl Config {
             openbao_role,
             sa_token,
             totp_secret,
+            catalog_file,
+            deny_file,
+            state_file,
             phone_push_url: phone_push_url.trim_end_matches('/').to_owned(),
             phone_push_token,
             timeout,
@@ -176,15 +192,19 @@ mod tests {
         match path {
             "/totp" => Ok(b"JBSWY3DPEHPK3PXP\n".to_vec()),
             "/push" => Ok(b"push-secret\n".to_vec()),
+            "/catalog" => Ok(b"{\"paths\":{}}".to_vec()),
+            "/deny" => Ok(b"{\"prefixes\":[]}".to_vec()),
             _ => Ok(b"secret\n".to_vec()),
         }
     }
 
-    fn complete() -> [(&'static str, &'static str); 6] {
+    fn complete() -> [(&'static str, &'static str); 8] {
         [
             ("SECRETS_GATEWAY_SCHEDULER_URL", "http://scheduler:8098/"),
             ("SECRETS_GATEWAY_SERVICE_TOKEN_FILE", "/service"),
             ("SECRETS_GATEWAY_TOTP_FILE", "/totp"),
+            ("SECRETS_GATEWAY_CATALOG_FILE", "/catalog"),
+            ("SECRETS_GATEWAY_DENY_FILE", "/deny"),
             ("SECRETS_GATEWAY_PHONE_PUSH_URL", "http://phone-push:8095/"),
             ("SECRETS_GATEWAY_SA_TOKEN_FILE", "/sa"),
             ("SECRETS_GATEWAY_MAX_LIST_ENTRIES", "100"),
@@ -200,6 +220,9 @@ mod tests {
         assert_eq!(config.openbao_role, DEFAULT_OPENBAO_ROLE);
         assert_eq!(config.timeout, DEFAULT_TIMEOUT);
         assert_eq!(config.max_list_entries, 100);
+        assert_eq!(config.catalog_file, "/catalog");
+        assert_eq!(config.deny_file, "/deny");
+        assert_eq!(config.state_file, DEFAULT_STATE_FILE);
         assert_eq!(config.totp_secret.expose(), "JBSWY3DPEHPK3PXP");
         assert!(config.service_token.ct_eq("secret"));
         assert!(config.phone_push_token.ct_eq("secret"));

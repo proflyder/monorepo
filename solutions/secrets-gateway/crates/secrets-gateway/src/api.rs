@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
@@ -13,7 +13,7 @@ use tokio::time::Instant;
 
 use crate::audit::{Action, Auditor, Event};
 use crate::catalog::Catalog;
-use crate::deny;
+use crate::deny::Deny;
 use crate::openbao::{self, OpenBao};
 use crate::path;
 use crate::stepup::{Failure, StepUp};
@@ -29,6 +29,7 @@ pub struct GatewayState {
     pub access: Arc<AccessClient>,
     pub openbao: Arc<OpenBao>,
     pub catalog: Arc<Catalog>,
+    pub deny: Arc<Deny>,
     pub stepup: Arc<StepUp>,
     pub audit: Arc<Auditor>,
     pub max_list_entries: usize,
@@ -83,6 +84,14 @@ struct StepUpBody {
     totp: String,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct DeleteQuery {
+    cas: u64,
+    #[serde(default)]
+    version: Option<u64>,
+}
+
 pub fn router(state: GatewayState) -> Router {
     Router::new()
         .route("/v1/secrets", get(list))
@@ -115,8 +124,12 @@ async fn list(State(state): State<GatewayState>, headers: HeaderMap) -> Response
         Ok(principal) => principal,
         Err(response) => return response,
     };
-    let live = match state.openbao.list_all(state.max_list_entries).await {
-        Ok(paths) => paths,
+    let listing = match state
+        .openbao
+        .list_all(&state.deny, state.max_list_entries)
+        .await
+    {
+        Ok(listing) => listing,
         Err(failure) => {
             state.audit.record(&Event {
                 action: Action::List,
@@ -132,7 +145,7 @@ async fn list(State(state): State<GatewayState>, headers: HeaderMap) -> Response
     };
     let mut entries: BTreeMap<String, EntryView> = BTreeMap::new();
     for (path, catalog) in state.catalog.iter() {
-        if deny::is_denied(path) {
+        if state.deny.is_denied(path) {
             continue;
         }
         if path::normalize(path).is_err() {
@@ -150,8 +163,9 @@ async fn list(State(state): State<GatewayState>, headers: HeaderMap) -> Response
             },
         );
     }
-    for path in live {
-        if deny::is_denied(&path) {
+    let openbao::ListResult { paths, truncated } = listing;
+    for path in paths {
+        if state.deny.is_denied(&path) {
             continue;
         }
         if path::normalize(&path).is_err() {
@@ -175,7 +189,11 @@ async fn list(State(state): State<GatewayState>, headers: HeaderMap) -> Response
         outcome: "ok",
         detail: None,
     });
-    Json(json!({"entries": entries.into_values().collect::<Vec<_>>()})).into_response()
+    Json(json!({
+        "entries": entries.into_values().collect::<Vec<_>>(),
+        "truncated": truncated,
+    }))
+    .into_response()
 }
 
 async fn metadata(
@@ -265,7 +283,7 @@ async fn reveal(
         &principal,
         Action::Reveal,
         &raw,
-        Some(&body.key),
+        Some(audit_key(&body.key)),
         body.version,
     ) {
         Ok(path) => path,
@@ -281,7 +299,7 @@ async fn reveal(
             action: Action::Reveal,
             principal: &principal.id,
             path: Some(&path),
-            key: Some(&body.key),
+            key: Some(audit_key(&body.key)),
             version: body.version,
             outcome: "step_up_required",
             detail: None,
@@ -294,7 +312,7 @@ async fn reveal(
             &principal,
             Action::Reveal,
             &path,
-            Some(&body.key),
+            Some(audit_key(&body.key)),
             body.version,
             "invalid_key",
         );
@@ -306,7 +324,7 @@ async fn reveal(
             &principal,
             Action::Reveal,
             &path,
-            Some(&body.key),
+            Some(audit_key(&body.key)),
             None,
             "version_required",
         );
@@ -320,7 +338,7 @@ async fn reveal(
                 &principal,
                 Action::Reveal,
                 &path,
-                Some(&body.key),
+                Some(audit_key(&body.key)),
                 Some(version),
                 "error",
             );
@@ -333,7 +351,7 @@ async fn reveal(
             &principal,
             Action::Reveal,
             &path,
-            Some(&body.key),
+            Some(audit_key(&body.key)),
             Some(version),
             "version_not_found",
         );
@@ -345,7 +363,7 @@ async fn reveal(
             &principal,
             Action::Reveal,
             &path,
-            Some(&body.key),
+            Some(audit_key(&body.key)),
             Some(version),
             "version_unavailable",
         );
@@ -359,7 +377,7 @@ async fn reveal(
                 &principal,
                 Action::Reveal,
                 &path,
-                Some(&body.key),
+                Some(audit_key(&body.key)),
                 Some(version),
                 "error",
             );
@@ -372,7 +390,7 @@ async fn reveal(
             &principal,
             Action::Reveal,
             &path,
-            Some(&body.key),
+            Some(audit_key(&body.key)),
             Some(version),
             "key_not_found",
         );
@@ -382,22 +400,20 @@ async fn reveal(
         action: Action::Reveal,
         principal: &principal.id,
         path: Some(&path),
-        key: Some(&body.key),
+        key: Some(audit_key(&body.key)),
         version: Some(version),
         outcome: "ok",
         detail: None,
     });
-    let mut response = Json(json!({
-        "path": path,
-        "version": version,
-        "key": body.key,
-        "value": value,
-    }))
-    .into_response();
-    response
-        .headers_mut()
-        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
-    response
+    no_store(
+        Json(json!({
+            "path": path,
+            "version": version,
+            "key": body.key,
+            "value": value,
+        }))
+        .into_response(),
+    )
 }
 
 async fn update(
@@ -415,7 +431,7 @@ async fn update(
         &principal,
         Action::Update,
         &raw,
-        Some(&body.key),
+        Some(audit_key(&body.key)),
         Some(body.cas),
     ) {
         Ok(path) => path,
@@ -427,7 +443,7 @@ async fn update(
         &headers,
         Action::Update,
         &path,
-        Some(&body.key),
+        Some(audit_key(&body.key)),
         None,
     ) {
         return response;
@@ -438,7 +454,7 @@ async fn update(
             &principal,
             Action::Update,
             &path,
-            Some(&body.key),
+            Some(audit_key(&body.key)),
             Some(body.cas),
             "invalid_key",
         );
@@ -450,7 +466,7 @@ async fn update(
             &principal,
             Action::Update,
             &path,
-            Some(&body.key),
+            Some(audit_key(&body.key)),
             Some(body.cas),
             "value_too_large",
         );
@@ -464,7 +480,7 @@ async fn update(
                 &principal,
                 Action::Update,
                 &path,
-                Some(&body.key),
+                Some(audit_key(&body.key)),
                 Some(body.cas),
                 "error",
             );
@@ -477,21 +493,48 @@ async fn update(
             &principal,
             Action::Update,
             &path,
-            &body.key,
+            audit_key(&body.key),
             meta.current_version,
         );
         return conflict(meta.current_version);
     }
+    let current = meta
+        .versions
+        .iter()
+        .find(|item| item.version == meta.current_version);
+    if current.is_none_or(|item| item.destroyed || !item.deletion_time.is_empty()) {
+        audit_outcome(
+            &state,
+            &principal,
+            Action::Update,
+            &path,
+            Some(audit_key(&body.key)),
+            Some(body.cas),
+            "version_unavailable",
+        );
+        return error(StatusCode::CONFLICT, "version_unavailable");
+    }
     let mut data = match state.openbao.read(&path, Some(body.cas)).await {
         Ok(secret) => secret.data,
-        Err(openbao::Error::NotFound) => BTreeMap::new(),
+        Err(openbao::Error::NotFound) => {
+            audit_outcome(
+                &state,
+                &principal,
+                Action::Update,
+                &path,
+                Some(audit_key(&body.key)),
+                Some(body.cas),
+                "version_unavailable",
+            );
+            return error(StatusCode::CONFLICT, "version_unavailable");
+        }
         Err(failure) => {
             audit_outcome(
                 &state,
                 &principal,
                 Action::Update,
                 &path,
-                Some(&body.key),
+                Some(audit_key(&body.key)),
                 Some(body.cas),
                 "error",
             );
@@ -507,7 +550,7 @@ async fn update(
                 &principal,
                 Action::Update,
                 &path,
-                &body.key,
+                audit_key(&body.key),
                 meta.current_version,
             );
             return conflict(meta.current_version);
@@ -518,7 +561,7 @@ async fn update(
                 &principal,
                 Action::Update,
                 &path,
-                Some(&body.key),
+                Some(audit_key(&body.key)),
                 Some(body.cas),
                 "error",
             );
@@ -529,7 +572,7 @@ async fn update(
         action: Action::Update,
         principal: &principal.id,
         path: Some(&path),
-        key: Some(&body.key),
+        key: Some(audit_key(&body.key)),
         version: Some(version),
         outcome: "ok",
         detail: None,
@@ -686,6 +729,7 @@ async fn rollback(
 async fn delete_latest(
     State(state): State<GatewayState>,
     Path(raw): Path<String>,
+    Query(query): Query<DeleteQuery>,
     headers: HeaderMap,
 ) -> Response {
     let principal = match authorized(&state, &headers).await {
@@ -703,9 +747,51 @@ async fn delete_latest(
         Action::Delete,
         &path,
         None,
-        None,
+        Some(query.cas),
     ) {
         return response;
+    }
+    let meta = match state.openbao.metadata(&path).await {
+        Ok(meta) => meta,
+        Err(failure) => {
+            audit_outcome(
+                &state,
+                &principal,
+                Action::Delete,
+                &path,
+                None,
+                Some(query.cas),
+                "error",
+            );
+            return openbao_error(failure);
+        }
+    };
+    if meta.current_version != query.cas {
+        audit_outcome(
+            &state,
+            &principal,
+            Action::Delete,
+            &path,
+            None,
+            Some(meta.current_version),
+            "conflict",
+        );
+        return conflict(meta.current_version);
+    }
+    if query
+        .version
+        .is_some_and(|version| version != meta.current_version)
+    {
+        audit_outcome(
+            &state,
+            &principal,
+            Action::Delete,
+            &path,
+            None,
+            query.version,
+            "version_not_current",
+        );
+        return error(StatusCode::CONFLICT, "version_not_current");
     }
     match state.openbao.delete_latest(&path).await {
         Ok(()) => {
@@ -714,11 +800,16 @@ async fn delete_latest(
                 principal: &principal.id,
                 path: Some(&path),
                 key: None,
-                version: None,
+                version: Some(meta.current_version),
                 outcome: "ok",
                 detail: None,
             });
-            Json(json!({"path": path, "deleted": true})).into_response()
+            Json(json!({
+                "path": path,
+                "deleted": true,
+                "version": meta.current_version,
+            }))
+            .into_response()
         }
         Err(failure) => {
             audit_outcome(
@@ -727,7 +818,7 @@ async fn delete_latest(
                 Action::Delete,
                 &path,
                 None,
-                None,
+                Some(meta.current_version),
                 "error",
             );
             openbao_error(failure)
@@ -758,7 +849,7 @@ async fn step_up(
                 outcome: "ok",
                 detail: None,
             });
-            Json(json!({"session": session, "expiresIn": expires_in})).into_response()
+            no_store(Json(json!({"session": session, "expiresIn": expires_in})).into_response())
         }
         Err(Failure::RateLimited { retry_after }) => {
             state.audit.record(&Event {
@@ -826,6 +917,18 @@ fn require_mutation(
                 detail: None,
             });
             Err(rate_limited(retry_after))
+        }
+        Err(Failure::State) => {
+            state.audit.record(&Event {
+                action,
+                principal: &principal.id,
+                path: Some(path),
+                key,
+                version,
+                outcome: "state_unavailable",
+                detail: None,
+            });
+            Err(error(StatusCode::SERVICE_UNAVAILABLE, "state_unavailable"))
         }
         Err(_) => {
             state.audit.record(&Event {
@@ -902,7 +1005,7 @@ fn resolve(
         );
         return Err(error(StatusCode::BAD_REQUEST, "invalid_path"));
     };
-    if deny::is_denied(&path) {
+    if state.deny.is_denied(&path) {
         audit_outcome(
             state,
             principal,
@@ -915,6 +1018,10 @@ fn resolve(
         return Err(error(StatusCode::FORBIDDEN, "path_forbidden"));
     }
     Ok(path)
+}
+
+fn audit_key(key: &str) -> &str {
+    if valid_key(key) { key } else { "<invalid>" }
 }
 
 fn header_value<'a>(headers: &'a HeaderMap, name: &str) -> &'a str {
@@ -943,6 +1050,13 @@ fn forbidden_response(forbidden: Forbidden) -> Response {
 
 fn error(status: StatusCode, code: &'static str) -> Response {
     (status, Json(json!({"error": code}))).into_response()
+}
+
+fn no_store(mut response: Response) -> Response {
+    response
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    response
 }
 
 fn conflict(current_version: u64) -> Response {

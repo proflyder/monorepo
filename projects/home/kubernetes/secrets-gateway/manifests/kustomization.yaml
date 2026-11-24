@@ -4,6 +4,11 @@ resources:
   - secrets-gateway.yaml
   - network-policies.yaml
   - external-secrets.yaml
+configMapGenerator:
+  - name: secrets-gateway-config
+    files:
+      - catalog.json
+      - deny.json
 patches:
   - target:
       kind: Deployment
@@ -12,3 +17,11 @@ patches:
       - op: replace
         path: /spec/template/metadata/annotations/proflyder.dev~1rollout
         value: ${SECRETS_GATEWAY_IMAGE}
+  - target:
+      kind: PersistentVolumeClaim
+      name: secrets-gateway-state
+    patch: |-
+      - op: add
+        path: /metadata/annotations
+        value:
+          kustomize.toolkit.fluxcd.io/prune: disabled

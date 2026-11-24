@@ -1,10 +1,11 @@
 # secrets-gateway (home deployment)
 
 Owner-only API секретов приложения. Flux (`Kustomization/app-secrets-gateway`,
-образ `SECRETS_GATEWAY_IMAGE` из pins). Один stateless Deployment в namespace
-`home-assistant`, ClusterIP `:8096`. Наружу не публикуется: маршрут для
-телефона и Android-экран — PR B. Вызывающие в кластере — Traefik (после
-IngressRoute) и owner с узла через port-forward.
+образ `SECRETS_GATEWAY_IMAGE` из pins). Один Deployment в namespace
+`home-assistant`, ClusterIP `:8096`; PVC `secrets-gateway-state` хранит только
+последний TOTP-шаг. Наружу не публикуется: маршрут для телефона и
+Android-экран — PR B. Вызывающие в кластере — Traefik (после IngressRoute),
+mcp-gateway (health-check) и owner с узла через port-forward.
 
 ## Что нужно от владельца (один раз)
 
@@ -41,11 +42,18 @@ IngressRoute) и owner с узла через port-forward.
 
    Создаются `policy: secrets-gateway` и
    `auth/kubernetes/role/secrets-gateway` (SA `secrets-gateway` в namespace
-   `home-assistant`, TTL 20m/1h, policy `secrets-gateway`). Root/operator
-   token в под не попадают.
+   `home-assistant`, TTL 20m/1h, audience `secrets-gateway`, policy
+   `secrets-gateway`). Root/operator token в под не попадают.
 
-3. **Синхронизировать ESO и дождаться пода.** ESO обновляет
-   `ExternalSecret/secrets-gateway` раз в час; после init форсировать:
+3. **Merge PR.** `deploy-home` публикует digest и Flux применяет
+   `app-secrets-gateway`. Если merge случился раньше шагов 1–2, под остаётся
+   `Pending` (нет Secret-тома), а Kustomization `app-secrets-gateway` —
+   NotReady и ретраится каждую минуту; другие приложения не зависят от неё и
+   не ломаются. Scheduler-часть обратно совместима: owner получает `secrets`
+   неявно, миграция не нужна.
+
+4. **Синхронизировать ESO и дождаться пода.** ESO обновляет
+   `ExternalSecret/secrets-gateway` раз в час; после merge форсировать:
 
    ```bash
    mise run kubectl -- -n home-assistant annotate externalsecret secrets-gateway \
@@ -56,9 +64,9 @@ IngressRoute) и owner с узла через port-forward.
      -o go-template='{{range $k, $v := .data}}{{$k}}{{"\n"}}{{end}}'
    ```
 
-   В Secret должны быть `service_token` и `totp_secret`. Деплой — merge PR:
-   `deploy-home` публикует digest и Flux применяет
-   `app-secrets-gateway`.
+   В Secret должны быть `service_token` и `totp_secret`. Проверить, что под
+   `secrets-gateway` Ready: `readyz` требует свежий snapshot доступа и
+   доступный OpenBao.
 
 ## Проверка после merge
 
@@ -84,9 +92,15 @@ curl -fsS http://127.0.0.1:8096/v1/secrets -H "Authorization: Bearer $TOKEN"
   (snapshot доступа и bearer в phone-push).
 - `secret/k8s/home-assistant/secrets-gateway#totp_secret` → `totp_secret`
   (step-up); путь закрыт для самого gateway политикой и кодом.
-- NetworkPolicy: ingress только от Traefik и узла (port-forward); egress —
-  OpenBao `:8200`, scheduler `:8098`, phone-push `:8095`, DNS `:53`. Интернета
-  нет.
+- ConfigMap `secrets-gateway-config` собирается kustomize из
+  `manifests/catalog.json` и `manifests/deny.json`; тест сверяет каталог с
+  `platform/workstation/catalog.json`, а `policy.hcl` генерируется из того же
+  `deny.json`.
+- SA-токен проецируется с audience `secrets-gateway` (не дефолтный);
+  `automountServiceAccountToken: false`.
+- NetworkPolicy: ingress от Traefik, mcp-gateway (health-check) и узла
+  (port-forward); egress — OpenBao `:8200`, scheduler `:8098`, phone-push
+  `:8095`, DNS `:53`. Интернета нет.
 - Откат — revert pins-коммита `SECRETS_GATEWAY_IMAGE` или `flux suspend`
-  Kustomization `app-secrets-gateway`; состояния у сервиса нет, TOTP-секрет
-  остаётся в OpenBao.
+  Kustomization `app-secrets-gateway`; TOTP-секрет остаётся в OpenBao, PVC
+  `secrets-gateway-state` (last TOTP step) сохраняется и не удаляется Flux.
