@@ -188,10 +188,11 @@
   модули и отзывает; plaintext показывается один раз и не попадает в
   сетевые инспекторы. «Система → Секреты» (`secrets`, только owner) ходит в
   secrets-gateway через Traefik `secrets.<domain>`: биометрия/пароль
-  устройства на сеанс процесса, TOTP step-up (5 минут для просмотра, свежий
-  код для update/rollback/delete), авто-маскировка значения через 30 секунд,
-  очистка буфера обмена через 30 секунд, `FLAG_SECURE` и исключение клиента
-  из сетевых инспекторов. Адреса и таймауты — Firebase Remote Config
+  устройства на сеанс процесса, step-up подписью ключа телефона (5 минут для
+  просмотра, подпись каждой операции для update/rollback/delete), привязка
+  одноразовым кодом, авто-маскировка значения через 30 секунд, очистка
+  буфера обмена через 30 секунд, `FLAG_SECURE` и исключение клиента из
+  сетевых инспекторов. Адреса и таймауты — Firebase Remote Config
   `home_connection` (`schedulerBaseUrl`, `controlBaseUrl`, `intercomBaseUrl`,
   `secretsBaseUrl`); выкладка — Firebase App Distribution из CI. Живая
   приёмка большинства экранов не пройдена (`PENDING.md`).
@@ -207,9 +208,10 @@
 - phone-push (`solutions/phone-push`): FCM HTTP v1; телефоны хранит scheduler.
 - secrets-gateway (`solutions/secrets-gateway`): owner-only API секретов
   приложения поверх OpenBao KV v2 (роль `secrets-gateway`, audience
-  `secrets-gateway`), модуль `secrets`, TOTP step-up с durable last-step на
-  PVC, audit в лог и phone-push; значения не хранит и не логирует. Каталог и
-  deny-список приходят из ConfigMap, `readyz` проверяет OpenBao.
+  `secrets-gateway`), модуль `secrets`, step-up подписью EC P-256 ключа
+  телефона (одноразовая привязка кодом, использованные nonce на PVC), audit в
+  лог и phone-push; значения не хранит и не логирует. Каталог и deny-список
+  приходят из ConfigMap, `readyz` проверяет OpenBao.
 - Чат приложения с Hermes — отдельная сессия `home-app` через chat relay
   voice-proxy `:8644`.
 

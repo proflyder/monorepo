@@ -157,7 +157,11 @@
   `k8s/home-assistant/secrets-gateway`. Остальные `infra/*` и `ci/*` открыты;
   список один для кода и политики
   (`manifests/deny.json` → `policy.hcl`). Root и operator token в под не
-  попадают.
+  попадают. Step-up — подпись EC P-256 ключа в Android Keystore: публичный
+  ключ, device id и хеш одноразового кода лежат в
+  `secret/k8s/home-assistant/secrets-gateway-device`; путь скрыт от HTTP API.
+  `admin:secrets-device-enroll` создаёт код на 15 минут и пишет его в файл
+  0600, `--revoke` удаляет ключ; сервис читает ключ на каждый запрос.
 - Audit — декларативный девайс `stdout/`: kubelet ротирует лог, Alloy
   отправляет его в Loki (7 дней). Значения в записях HMAC-хэшированы, но пути
   и metadata запросов видны — Loki доступен только из LAN/VPN.
@@ -254,6 +258,7 @@ Wi-Fi/BLE станции). Файл, который читает локальн�
 |---|---|---|
 | `secrets/NETWORK.md` | реальные LAN IP, порты, VPN/HTTPS | карта сети |
 | `secrets/openbao/` | operator token, адрес, TOTP method id | постоянный KV-доступ агентов |
+| `secrets/local/secrets-gateway/` | одноразовые коды привязки телефона (0600, 15 минут) | доступ к секретам до истечения кода |
 | `~/.ssh/home-lab/` | ключи PVE/K3s/HAOS, Комп, VPS + known_hosts | рабочий SSH; копии в `secret/infra/ssh/*` |
 | `local-data/local/backups/`, `local-data/proxmox-install/*.tar*` | бэкапы станции/HA/Wi-Fi | внутри исторические токены/ключи |
 | `/data/quasar/ble-gateway/token`, `control-token` | BLE и HTTP control токены | смена Wi-Fi, управление gateway |

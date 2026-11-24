@@ -9,6 +9,7 @@ OpenBao KV v2 (`secret/`), доступ — Kubernetes auth ролью `secrets-
 ```
 app token ──▶ secrets-gateway ──Kubernetes auth──▶ OpenBao KV v2
                    │  list / meta / reveal / update / rollback / delete
+                   │  device enroll / step-up challenge
                    ├──▶ scheduler  GET /v1/access/snapshot (service-token)
                    ├──▶ phone-push POST /v1/push/notify  module=secrets
                    └──▶ structured audit log (без значений)
@@ -25,13 +26,17 @@ Bearer — app-токен из snapshot scheduler'а, модуль `secrets`. Б
 
 | Метод | Назначение |
 |---|---|
-| `GET /v1/secrets` | каталог: `manifests/catalog.json` (`purpose`/`consumer`) + live-листинг KV; core-пути скрыты, ответ содержит `truncated` |
+| `GET /v1/secrets` | каталог: `manifests/catalog.json` (`purpose`/`consumer`) + live-листинг KV; core-пути и состояние устройства скрыты, ответ содержит `truncated` |
 | `GET /v1/secrets/meta/{path}` | метаданные: `currentVersion`, `oldestVersion`, версии (`createdTime`, `deletionTime`, `destroyed`) и имена ключей текущей версии — **без значений** |
 | `POST /v1/secrets/reveal/{path}` `{key,version}` | значение одного ключа одной версии; нужен step-up session |
-| `POST /v1/secrets/update/{path}` `{key,value,cas}` | CAS-запись одного ключа в новую версию (остальные ключи сохраняются); soft-deleted текущая версия → `409 version_unavailable`; нужен свежий TOTP |
-| `POST /v1/secrets/rollback/{path}` `{version,cas}` | читает старую версию и пишет её как новую (CAS); нужен свежий TOTP |
-| `DELETE /v1/secrets/{path}?cas=N&version=N` | soft-delete последней версии (`DELETE secret/data/…`); `cas`/`version` обязаны совпасть с текущей; нужен свежий TOTP; **destroy/metadata-delete/undelete недоступны** |
-| `POST /v1/step-up` `{totp}` | открывает 5-минутную сессию для reveal; `Cache-Control: no-store` |
+| `POST /v1/secrets/update/{path}` `{key,value,cas}` | CAS-запись одного ключа в новую версию (остальные ключи сохраняются); soft-deleted текущая версия → `409 version_unavailable`; нужна подпись операции |
+| `POST /v1/secrets/rollback/{path}` `{version,cas}` | читает старую версию и пишет её как новую (CAS); нужна подпись операции |
+| `DELETE /v1/secrets/{path}?cas=N&version=N` | soft-delete последней версии (`DELETE secret/data/…`); `cas`/`version` обязаны совпасть с текущей; нужна подпись операции; **destroy/metadata-delete/undelete недоступны** |
+| `GET /v1/device` | привязан ли телефон: `{enrolled, deviceId, enrolledAt}` |
+| `POST /v1/device/challenge` | одноразовый nonce для key attestation: `{challenge, expiresIn}` (15 минут) |
+| `POST /v1/device/enroll` `{code,publicKey,attestationChallenge,attestationChain}` | одноразовый код привязки + публичный ключ P-256; сервер сохраняет ключ и device id, старый ключ перестаёт работать |
+| `POST /v1/step-up/challenge` `{action,path?,key?,version?,cas?}` | nonce, привязанный к token id, действию, пути/ключу/версии и сроку 60 секунд: `{challenge,payload,expiresIn}` |
+| `POST /v1/step-up` `{challenge,signature}` | проверяет подпись `action=session` и открывает 5-минутную сессию; `Cache-Control: no-store` |
 | `GET /healthz`, `GET /readyz` | пробы без токена; `readyz` проверяет свежесть snapshot и доступность OpenBao |
 
 `cas` — ожидаемая текущая версия. Несовпадение с OpenBao — `409
@@ -41,23 +46,39 @@ KiB. Ответ reveal `Cache-Control: no-store`; значения никогд�
 логи, audit-push и тексты ошибок. Request timeout — 15 секунд, body limit —
 128 KiB, live-листинг ограничен 200 записями и 64 каталогами.
 
-## Step-up
+## Step-up: ключ, привязанный к телефону
 
-TOTP: RFC 6238, SHA-1, 30 с, 6 цифр, окно ±1 шаг. Секрет (`totp_secret`,
-base32) хранится в OpenBao `k8s/home-assistant/secrets-gateway` и приходит в
-под через ESO. Enrollment — `mise run admin:secrets-totp-init` (otpauth URI
-пишется в файл 0600, не в stdout).
+TOTP удалён. Приложение создаёт неэкспортируемый EC P-256 ключ в Android
+Keystore (StrongBox при наличии), с обязательной аутентификацией на каждое
+использование (`timeout 0`, `BIOMETRIC_STRONG | DEVICE_CREDENTIAL` на Android
+11+), и подписывает серверные challenge через `BiometricPrompt.CryptoObject`.
+Публичный ключ и device id хранятся в OpenBao
+`k8s/home-assistant/secrets-gateway-device`; путь скрыт из HTTP API
+(`deny.json` + reserved path в коде) и не синхронизируется ESO.
 
-- reveal требует `X-Step-Up-Session`, полученный из `POST /v1/step-up`;
-  сессия живёт 5 минут, привязана к `token_id` и не переживает рестарт пода.
-- update/rollback/delete требуют `X-Step-Up-Totp` на каждом запросе; повтор
-  того же шага отклоняется. Успешный шаг пишется в `/state/last-totp-step`
-  (PVC), поэтому рестарт пода не позволяет повторно использовать код.
-  Код, использованный для сессии, можно один раз использовать для мутации в
-  том же окне.
-- 5 ошибок включают экспоненциальную блокировку `60s, 120s, 240s, …` до
-  часа; после 10 ошибок за 60 с глобальный лимитер блокирует все токены на
-  5 минут. Ответ — `429` c `Retry-After`.
+- **Привязка** — `mise run admin:secrets-device-enroll`: генерирует 16 байт
+  (base32, 26 символов), пишет хеш SHA-256 и срок 15 минут в OpenBao, а сам код
+  — в файл 0600 (stdout печатает путь). Код одноразовый, сравнение
+  constant-time, ошибки дают backoff. `--revoke` удаляет ключ и код.
+- **Challenge** — 32 случайных байта; payload
+  `home-secrets-step-up/1` содержит id, `principal`, действие, путь, ключ,
+  версию, `cas` и `expires`. Клиент подписывает payload как есть
+  (`SHA256withECDSA`, DER), сервер проверяет ECDSA-P256 (`p256`) и сверяет
+  операцию с запросом. Подпись нельзя переиспользовать на другом пути,
+  действии, версии или после рестарта: использованные nonce пишутся на PVC
+  (`/state/step-up.json`) на 60 секунд.
+- reveal требует `X-Step-Up-Session`, полученный обменом подписи
+  `action=session` на `POST /v1/step-up`; сессия живёт 5 минут, привязана к
+  `token_id` и отпечатку ключа, не переживает рестарт.
+- update/rollback/delete требуют `X-Step-Up-Challenge` и
+  `X-Step-Up-Signature`; nonce одноразовый и связан с точной операцией.
+- 5 ошибок подписи/кода включают экспоненциальную блокировку
+  `60s, 120s, 240s, …` до часа; после 10 ошибок за 60 с глобальный лимитер
+  блокирует все токены на 5 минут. Ответ — `429` c `Retry-After`.
+- Ошибки: `step_up_required`, `step_up_invalid`, `step_up_expired`,
+  `device_not_enrolled`, `device_unavailable`, `enrollment_invalid`,
+  `enrollment_closed`, `enrollment_expired`, `enrollment_conflict`,
+  `attestation_challenge_invalid`, `attestation_invalid`, `public_key_invalid`.
 
 ## Denylist
 
@@ -69,8 +90,11 @@ base32) хранится в OpenBao `k8s/home-assistant/secrets-gateway` и пр
 - `infra/vpn/client-ca` — приватный ключ клиентского CA;
 - `k8s/flux-system/*` — GitOps deploy key и служебные данные Flux;
 - `k8s/home-assistant/scheduler-auth` — app-токены и service-token;
-- `k8s/home-assistant/secrets-gateway` — собственный TOTP.
+- `k8s/home-assistant/secrets-gateway` — legacy TOTP-секрет.
 
+Дополнительно код скрывает и запрещает собственный путь состояния
+`k8s/home-assistant/secrets-gateway-device`, даже если он появится в
+live-листинге: публичный ключ и хеш кода не должен отдавать HTTP API.
 `infra/*` и `ci/*` вне этих пяти префиксов доступны (например,
 `infra/backup/offsite`, `ci/test`). Список задан в
 [`manifests/deny.json`](../../projects/home/kubernetes/secrets-gateway/manifests/deny.json),
@@ -84,10 +108,19 @@ subkeys; metadata-delete не выдан. Capability `delete` есть толь�
 ## Audit
 
 Каждый запрос пишет structured-строку `event=secrets.access` (`action`,
-`principal`, `path`, `key`, `version`, `outcome`) без значений. Дополнительно
-`phone-push` получает уведомление `module=secrets` (только owner-устройства);
-текст содержит действие и путь, но не значение. Push отправляется
-асинхронно и не ломает запрос при недоступном phone-push.
+`principal`, `path`, `key`, `version`, `outcome`) без значений; привязка
+телефона — `action=device_enroll`, отзыв — `action=device_revoke`.
+
+Push в `phone-push` (`module=secrets`, только owner-устройства) уходит не на
+каждый запрос: `list` и `metadata` только логируются. Push получают reveal,
+update, rollback и delete, привязка и отзыв телефона, неудачный/запрещённый
+step-up и rate-limit. Каждый push несёт `data {entity:"secrets", path?}` и
+`deepLink home://secrets/path/<percent-encoded-path>` (для привязки —
+`home://secrets/device`), поэтому приложение открывает нужный путь по тапу.
+Текст содержит действие и путь, но не значение. Push отправляется
+асинхронно и не ломает запрос при недоступном phone-push. Отзыв, сделанный
+`admin:secrets-device-enroll -- --revoke`, сервис замечает опросом OpenBao
+(не чаще раза в 30 секунд) и присылает один push.
 
 ## Переменные окружения
 
@@ -99,10 +132,10 @@ subkeys; metadata-delete не выдан. Capability `delete` есть толь�
 | `SECRETS_GATEWAY_OPENBAO_URL` | нет | `http://openbao.openbao.svc:8200` | OpenBao |
 | `SECRETS_GATEWAY_OPENBAO_ROLE` | нет | `secrets-gateway` | Kubernetes auth роль |
 | `SECRETS_GATEWAY_SA_TOKEN_FILE` | нет | `/var/run/secrets/tokens/token` | projected JWT пода с audience `secrets-gateway` |
-| `SECRETS_GATEWAY_TOTP_FILE` | да | — | base32 TOTP-секрет |
 | `SECRETS_GATEWAY_CATALOG_FILE` | да | — | `catalog.json` из ConfigMap |
 | `SECRETS_GATEWAY_DENY_FILE` | да | — | `deny.json` из ConfigMap |
-| `SECRETS_GATEWAY_STATE_FILE` | нет | `/state/last-totp-step` | durable последний TOTP-шаг на PVC |
+| `SECRETS_GATEWAY_STATE_FILE` | нет | `/state/step-up.json` | durable использованные nonce на PVC |
+| `SECRETS_GATEWAY_DEVICE_PATH` | нет | `k8s/home-assistant/secrets-gateway-device` | путь ключа устройства в OpenBao |
 | `SECRETS_GATEWAY_PHONE_PUSH_URL` | да | — | база phone-push |
 | `SECRETS_GATEWAY_PHONE_PUSH_TOKEN_FILE` | нет | service-token | bearer для phone-push |
 | `SECRETS_GATEWAY_TIMEOUT` | нет | `10s` | таймаут OpenBao (0.5–60 с) |
@@ -117,10 +150,12 @@ bazel build //solutions/secrets-gateway:secrets-gateway_image
 ```
 
 Тесты герметичны: fake OpenBao HTTP server (auth login, list, metadata, data,
-CAS, soft delete) и fake phone-push. Fake OpenBao проверяет capability по
-`policy.hcl` для каждого запроса, поэтому пропавший `delete`/`read`/`list`
-ломает тест. Покрыты deny-list, owner-only на всех ручках, истечение сессии,
-persisted TOTP replay, CAS conflict, soft-deleted update, отсутствие destroy,
+CAS, soft delete, состояние устройства) и fake phone-push. Fake OpenBao
+проверяет capability по `policy.hcl` для каждого запроса, поэтому пропавший
+`delete`/`read`/`list` ломает тест. Покрыты deny-list, скрытие пути
+устройства, owner-only на всех ручках, истечение сессии, привязка challenge к
+операции, replay, чужая подпись, отзыв ключа, одноразовость/срок/лимит кода
+привязки, CAS conflict, soft-deleted update, отсутствие destroy,
 traversal/percent-encoding и audit-push без значений. Реальный OpenBao и
 кластер не нужны.
 
@@ -129,9 +164,12 @@ traversal/percent-encoding и audit-push без значений. Реальны
 - `openbao.rs` держит Kubernetes-auth токен в памяти до `lease_duration - 60s`;
   на `403` один раз логинится заново и повторяет запрос. Мьютекс удерживается
   во время login, чтобы параллельные запросы не открывали несколько сессий.
-- `stepup.rs` держит сессии и счётчики ошибок в памяти; последний успешный
-  TOTP-шаг пишется в `/state/last-totp-step` до мутации, поэтому рестарт не
-  позволяет replay. Нет состояния — сервис не стартует.
+- `stepup.rs` держит сессии в памяти; выданные challenge — 60 секунд, а
+  отметки об использованных nonce пишутся в `/state/step-up.json` до ответа,
+  поэтому рестарт не позволяет replay. Нет состояния — сервис не стартует.
+- `device.rs` читает публичный ключ из OpenBao на каждый challenge/проверку
+  сессии, поэтому `--revoke` действует сразу. Код привязки сравнивается
+  constant-time по SHA-256, аттестация сохраняется только хешем.
 - `audit.rs` создаёт `PushBody` только из action/path; значения не входят в
   тип события, поэтому не могут утечь в push по ошибке.
 - `catalog.rs` и `deny.rs` читают файлы из ConfigMap (`SECRETS_GATEWAY_*_FILE`),
@@ -145,6 +183,6 @@ traversal/percent-encoding и audit-push без значений. Реальны
 
 ## Деплой
 
-Манифесты, роль OpenBao, политика и TOTP enrollment —
+Манифесты, роль OpenBao, политика и привязка телефона —
 [`projects/home/kubernetes/secrets-gateway/README.md`](../../projects/home/kubernetes/secrets-gateway/README.md)
 и `docs/OPERATIONS.md`.

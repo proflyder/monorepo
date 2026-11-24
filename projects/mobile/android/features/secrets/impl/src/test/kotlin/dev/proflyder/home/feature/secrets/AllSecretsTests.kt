@@ -8,6 +8,7 @@ import org.junit.runners.Suite
     SecretProblemTest::class,
     SecretsCatalogViewModelTest::class,
     SecretPathViewModelTest::class,
+    SecretsDeviceViewModelTest::class,
     RemoteSecretsRepositoryTest::class,
     SecretClipboardTest::class,
     SecretsScreenSecureTest::class,

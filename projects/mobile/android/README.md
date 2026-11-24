@@ -33,11 +33,14 @@ a typed router. Device acceptance and open work: [STATE](../../../docs/STATE.md)
   `secrets-gateway` catalog: paths grouped by the first segment with their
   descriptions and a local search. The path screen shows versions and key
   names with masked values. A device biometric or credential unlocks the
-  module once per process; TOTP opens a 5-minute reveal session, while update,
-  rollback and soft delete ask for a fresh code every time. A tapped value
-  re-masks after 30 s; copying also clears the sensitive clipboard entry after
-  30 s. Every secrets screen sets `FLAG_SECURE`, the client is excluded from
-  network inspection and values are never cached on disk.
+  module once per process. A non-exportable P-256 key in Android Keystore
+  (StrongBox when available) signs every step-up challenge behind a per-use
+  biometric or device credential; a reveal session lasts 5 minutes, while
+  update, rollback and soft delete sign that exact operation. The key is bound
+  once through **Bind phone** with a one-time code from the server. A tapped
+  value re-masks after 30 s; copying also clears the sensitive clipboard entry
+  after 30 s. Every secrets screen sets `FLAG_SECURE`, the client is excluded
+  from network inspection and values are never cached on disk.
 - Push over FCM: ordinary notifications with a `home://` deep link and the
   loud find-phone ring. Built-in VPN home (WireGuard, OpenConnect hand-off).
 - No offline cache and no generic task UI. `EnqueueTask` is one-shot; the

@@ -6,7 +6,17 @@ import dev.proflyder.home.core.model.RemoteFailure
 internal sealed interface SecretProblem {
     data object StepUpRequired : SecretProblem
 
-    data object InvalidTotp : SecretProblem
+    data object InvalidSignature : SecretProblem
+
+    data object DeviceNotEnrolled : SecretProblem
+
+    data object StepUpExpired : SecretProblem
+
+    data object DeviceUnavailable : SecretProblem
+
+    data object EnrollmentRejected : SecretProblem
+
+    data object EnrollmentConflict : SecretProblem
 
     data object VersionUnavailable : SecretProblem
 
@@ -29,7 +39,17 @@ internal fun secretProblem(failure: RemoteFailure): SecretProblem {
     val retryAfter = server.textArgs["retryAfter"]?.toLongOrNull()
     return when {
         server.reason == "step_up_required" -> SecretProblem.StepUpRequired
-        server.reason == "step_up_invalid" -> SecretProblem.InvalidTotp
+        server.reason == "step_up_invalid" -> SecretProblem.InvalidSignature
+        server.reason == "step_up_expired" -> SecretProblem.StepUpExpired
+        server.reason == "device_not_enrolled" -> SecretProblem.DeviceNotEnrolled
+        server.reason == "device_unavailable" -> SecretProblem.DeviceUnavailable
+        server.reason == "enrollment_invalid" ||
+            server.reason == "enrollment_closed" ||
+            server.reason == "enrollment_expired" ||
+            server.reason == "public_key_invalid" ||
+            server.reason == "attestation_invalid" ||
+            server.reason == "attestation_challenge_invalid" -> SecretProblem.EnrollmentRejected
+        server.reason == "enrollment_conflict" -> SecretProblem.EnrollmentConflict
         server.reason == "version_unavailable" -> SecretProblem.VersionUnavailable
         server.reason == "version_not_current" -> SecretProblem.Conflict(currentVersion)
         server.reason == "conflict" || server.httpStatus == 409 -> SecretProblem.Conflict(currentVersion)
@@ -41,4 +61,12 @@ internal fun secretProblem(failure: RemoteFailure): SecretProblem {
         server.code == ConnectCode.PERMISSION_DENIED -> SecretProblem.Forbidden
         else -> SecretProblem.Other(failure)
     }
+}
+
+internal fun signatureProblem(reason: DeviceSignatureFailure): SecretProblem = when (reason) {
+    DeviceSignatureFailure.KEY_MISSING -> SecretProblem.DeviceNotEnrolled
+    DeviceSignatureFailure.UNSUPPORTED,
+    DeviceSignatureFailure.KEYSTORE,
+    DeviceSignatureFailure.AUTHENTICATION,
+    -> SecretProblem.DeviceUnavailable
 }

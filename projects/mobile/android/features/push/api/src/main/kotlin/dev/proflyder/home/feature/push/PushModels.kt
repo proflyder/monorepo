@@ -100,6 +100,6 @@ data class PushDeepLink(val route: String) {
             return PushDeepLink(route)
         }
 
-        internal const val MAX_ROUTE_CHARS = 256
+        internal const val MAX_ROUTE_CHARS = 512
     }
 }

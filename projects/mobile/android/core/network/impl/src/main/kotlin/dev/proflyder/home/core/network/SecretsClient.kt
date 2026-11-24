@@ -1,13 +1,17 @@
 package dev.proflyder.home.core.network
 
+import dev.proflyder.home.core.model.DeviceAttestationChallenge
+import dev.proflyder.home.core.model.DeviceEnrollment
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.SecretCatalog
 import dev.proflyder.home.core.model.SecretEntry
 import dev.proflyder.home.core.model.SecretMetadata
+import dev.proflyder.home.core.model.SecretOperation
 import dev.proflyder.home.core.model.SecretRollback
 import dev.proflyder.home.core.model.SecretValue
 import dev.proflyder.home.core.model.SecretVersion
 import dev.proflyder.home.core.model.SecretVersionRef
+import dev.proflyder.home.core.model.StepUpChallenge
 import dev.proflyder.home.core.model.StepUpSession
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
@@ -91,7 +95,44 @@ internal data class SecretDeleteDto(
 )
 
 @Serializable
-internal data class SecretStepUpBody(val totp: String)
+internal data class SecretDeviceDto(
+    val enrolled: Boolean = false,
+    val deviceId: String? = null,
+    val enrolledAt: Long = 0,
+)
+
+@Serializable
+internal data class SecretDeviceChallengeDto(
+    val challenge: String = "",
+    val expiresIn: Long = 0,
+)
+
+@Serializable
+internal data class SecretDeviceEnrollBody(
+    val code: String,
+    val publicKey: String,
+    val attestationChallenge: String,
+    val attestationChain: List<String>,
+)
+
+@Serializable
+internal data class SecretChallengeBody(
+    val action: String,
+    val path: String? = null,
+    val key: String? = null,
+    val version: Long? = null,
+    val cas: Long? = null,
+)
+
+@Serializable
+internal data class SecretChallengeDto(
+    val challenge: String = "",
+    val payload: String = "",
+    val expiresIn: Long = 0,
+)
+
+@Serializable
+internal data class SecretStepUpBody(val challenge: String, val signature: String)
 
 @Serializable
 internal data class SecretRevealBody(val key: String, val version: Long)
@@ -112,6 +153,22 @@ internal interface SecretsHttpApi {
     suspend fun metadata(@Path(value = "path", encoded = true) path: String): Outcome<SecretMetadataDto>
 
     @DetailedServerErrors
+    @GET("v1/device")
+    suspend fun device(): Outcome<SecretDeviceDto>
+
+    @DetailedServerErrors
+    @POST("v1/device/challenge")
+    suspend fun deviceChallenge(): Outcome<SecretDeviceChallengeDto>
+
+    @DetailedServerErrors
+    @POST("v1/device/enroll")
+    suspend fun enroll(@Body body: SecretDeviceEnrollBody): Outcome<SecretDeviceDto>
+
+    @DetailedServerErrors
+    @POST("v1/step-up/challenge")
+    suspend fun challenge(@Body body: SecretChallengeBody): Outcome<SecretChallengeDto>
+
+    @DetailedServerErrors
     @POST("v1/step-up")
     suspend fun stepUp(@Body body: SecretStepUpBody): Outcome<SecretStepUpDto>
 
@@ -127,7 +184,8 @@ internal interface SecretsHttpApi {
     @POST("v1/secrets/update/{path}")
     suspend fun update(
         @Path(value = "path", encoded = true) path: String,
-        @Header("X-Step-Up-Totp") totp: String,
+        @Header("X-Step-Up-Challenge") challenge: String,
+        @Header("X-Step-Up-Signature") signature: String,
         @Body body: SecretUpdateBody,
     ): Outcome<SecretUpdateDto>
 
@@ -135,7 +193,8 @@ internal interface SecretsHttpApi {
     @POST("v1/secrets/rollback/{path}")
     suspend fun rollback(
         @Path(value = "path", encoded = true) path: String,
-        @Header("X-Step-Up-Totp") totp: String,
+        @Header("X-Step-Up-Challenge") challenge: String,
+        @Header("X-Step-Up-Signature") signature: String,
         @Body body: SecretRollbackBody,
     ): Outcome<SecretRollbackDto>
 
@@ -145,7 +204,8 @@ internal interface SecretsHttpApi {
         @Path(value = "path", encoded = true) path: String,
         @Query("cas") cas: Long,
         @Query("version") version: Long,
-        @Header("X-Step-Up-Totp") totp: String,
+        @Header("X-Step-Up-Challenge") challenge: String,
+        @Header("X-Step-Up-Signature") signature: String,
     ): Outcome<SecretDeleteDto>
 }
 
@@ -164,8 +224,37 @@ class HttpSecretsClient(private val http: HomeHttp) : SecretsApi {
     override suspend fun metadata(path: String): Outcome<SecretMetadata> =
         api.metadata(encodedPath(path)).mapResult(SecretMetadataDto::toModel)
 
-    override suspend fun stepUp(totp: String): Outcome<StepUpSession> =
-        api.stepUp(SecretStepUpBody(totp.trim())).mapResult { StepUpSession(it.session, it.expiresIn) }
+    override suspend fun device(): Outcome<DeviceEnrollment> = api.device().mapResult { value ->
+        DeviceEnrollment(value.enrolled, value.deviceId, value.enrolledAt)
+    }
+
+    override suspend fun deviceChallenge(): Outcome<DeviceAttestationChallenge> =
+        api.deviceChallenge().mapResult { value ->
+            DeviceAttestationChallenge(value.challenge, value.expiresIn)
+        }
+
+    override suspend fun enroll(
+        code: String,
+        publicKey: String,
+        attestationChallenge: String,
+        attestationChain: List<String>,
+    ): Outcome<DeviceEnrollment> =
+        api.enroll(SecretDeviceEnrollBody(code.trim(), publicKey, attestationChallenge, attestationChain))
+            .mapResult { value -> DeviceEnrollment(value.enrolled, value.deviceId, value.enrolledAt) }
+
+    override suspend fun challenge(
+        operation: SecretOperation,
+        path: String?,
+        key: String?,
+        version: Long?,
+        cas: Long?,
+    ): Outcome<StepUpChallenge> =
+        api.challenge(SecretChallengeBody(operation.wire, path, key, version, cas))
+            .mapResult { value -> StepUpChallenge(value.challenge, value.payload, value.expiresIn) }
+
+    override suspend fun stepUp(challenge: String, signature: String): Outcome<StepUpSession> =
+        api.stepUp(SecretStepUpBody(challenge, signature))
+            .mapResult { StepUpSession(it.session, it.expiresIn) }
 
     override suspend fun reveal(
         path: String,
@@ -180,24 +269,30 @@ class HttpSecretsClient(private val http: HomeHttp) : SecretsApi {
         key: String,
         value: String,
         cas: Long,
-        totp: String,
-    ): Outcome<SecretVersionRef> = api.update(encodedPath(path), totp.trim(), SecretUpdateBody(key, value, cas))
-        .mapResult { SecretVersionRef(it.path, it.version, it.key) }
+        challenge: String,
+        signature: String,
+    ): Outcome<SecretVersionRef> =
+        api.update(encodedPath(path), challenge, signature, SecretUpdateBody(key, value, cas))
+            .mapResult { SecretVersionRef(it.path, it.version, it.key) }
 
     override suspend fun rollback(
         path: String,
         version: Long,
         cas: Long,
-        totp: String,
-    ): Outcome<SecretRollback> = api.rollback(encodedPath(path), totp.trim(), SecretRollbackBody(version, cas))
-        .mapResult { SecretRollback(it.path, it.fromVersion, it.version) }
+        challenge: String,
+        signature: String,
+    ): Outcome<SecretRollback> =
+        api.rollback(encodedPath(path), challenge, signature, SecretRollbackBody(version, cas))
+            .mapResult { SecretRollback(it.path, it.fromVersion, it.version) }
 
     override suspend fun delete(
         path: String,
         cas: Long,
         version: Long,
-        totp: String,
-    ): Outcome<Unit> = api.delete(encodedPath(path), cas, version, totp.trim()).mapResult { }
+        challenge: String,
+        signature: String,
+    ): Outcome<Unit> =
+        api.delete(encodedPath(path), cas, version, challenge, signature).mapResult { }
 }
 
 private fun SecretEntryDto.toModel(): SecretEntry = SecretEntry(

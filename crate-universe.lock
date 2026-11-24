@@ -1,5 +1,5 @@
 {
-  "checksum": "8a230fb9d06c427bf9427c0af3db8bc8028492c735fa4627703c5017ce4f7cd2",
+  "checksum": "982c20f636549ef39b3d83fb173c798002c98f4f40c3aec53845c65df766c59d",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -17439,12 +17439,20 @@
             "target": "axum"
           },
           {
-            "id": "hmac 0.13.0",
-            "target": "hmac"
+            "id": "base64 0.23.1",
+            "target": "base64"
+          },
+          {
+            "id": "hex 0.4.3",
+            "target": "hex"
           },
           {
             "id": "http 1.5.0",
             "target": "http"
+          },
+          {
+            "id": "p256 0.14.0",
+            "target": "p256"
           },
           {
             "id": "reqwest 0.13.5",
@@ -17459,8 +17467,8 @@
             "target": "serde_json"
           },
           {
-            "id": "sha1 0.11.0",
-            "target": "sha1"
+            "id": "sha2 0.11.1",
+            "target": "sha2"
           },
           {
             "id": "subtle 2.6.1",
@@ -25495,6 +25503,7 @@
     "libc 0.2.191",
     "libloading 0.9.0",
     "log 0.4.35",
+    "p256 0.14.0",
     "prometheus-client 0.25.2",
     "prost 0.14.4",
     "rand 0.10.3",

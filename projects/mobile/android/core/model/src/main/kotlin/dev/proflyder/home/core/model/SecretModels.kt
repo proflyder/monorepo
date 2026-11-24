@@ -60,7 +60,31 @@ data class SecretRollback(
     val version: Long,
 )
 
+enum class SecretOperation(val wire: String) {
+    SESSION("session"),
+    UPDATE("update"),
+    ROLLBACK("rollback"),
+    DELETE("delete"),
+}
+
 data class StepUpSession(
     val session: String,
+    val expiresInSeconds: Long,
+)
+
+data class StepUpChallenge(
+    val challenge: String,
+    val payload: String,
+    val expiresInSeconds: Long,
+)
+
+data class DeviceEnrollment(
+    val enrolled: Boolean,
+    val deviceId: String?,
+    val enrolledAt: Long,
+)
+
+data class DeviceAttestationChallenge(
+    val challenge: String,
     val expiresInSeconds: Long,
 )

@@ -7,6 +7,7 @@ import dev.proflyder.home.core.endpoint.EndpointParseResult
 import dev.proflyder.home.core.endpoint.ServerEndpoint
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RemoteFailure
+import dev.proflyder.home.core.model.SecretOperation
 import dev.proflyder.home.core.testing.TestFixtures
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -102,25 +103,87 @@ class SecretsClientTest {
     }
 
     @Test
-    fun stepUpReturnsTheSessionAndItsLifetime() = runBlocking {
-        respond(200, "stepup.json")
+    fun theDeviceStatusAndAttestationChallengeAreFetchedFromTheGateway() = runBlocking {
+        respond(200, "device.json")
+        val device = (client().device() as Outcome.Success).value
+        assertEquals(true, device.enrolled)
+        assertEquals("device-1", device.deviceId)
+        assertEquals("/v1/device", server.takeRequest().path)
 
-        val session = (client().stepUp(" 123456 ") as Outcome.Success).value
-
-        assertEquals("step-up-session-value", session.session)
-        assertEquals(300, session.expiresInSeconds)
-        assertEquals("/v1/step-up", server.takeRequest().path)
+        respond(200, "device_challenge.json")
+        val challenge = (client().deviceChallenge() as Outcome.Success).value
+        assertEquals("attestation-nonce", challenge.challenge)
+        assertEquals(900, challenge.expiresInSeconds)
+        assertEquals("/v1/device/challenge", server.takeRequest().path)
     }
 
     @Test
-    fun updateSendsTheKeyValueCasAndTotp() = runBlocking {
+    fun enrollmentSendsTheCodePublicKeyAttestationAndChain() = runBlocking {
+        respond(200, "device.json")
+
+        val device = (
+            client().enroll(" ABCD-2345 ", "public-key", "attestation-nonce", listOf("cert-1", "cert-2"))
+                as Outcome.Success
+            ).value
+
+        assertEquals("device-1", device.deviceId)
+        val request = server.takeRequest()
+        assertEquals("/v1/device/enroll", request.path)
+        val body = request.body.readUtf8()
+        assertTrue(body.contains("\"code\":\"ABCD-2345\""))
+        assertTrue(body.contains("\"publicKey\":\"public-key\""))
+        assertTrue(body.contains("\"attestationChallenge\":\"attestation-nonce\""))
+        assertTrue(body.contains("\"attestationChain\":[\"cert-1\",\"cert-2\"]"))
+    }
+
+    @Test
+    fun aChallengeBindsTheOperationAndReturnsItsSignedPayload() = runBlocking {
+        respond(200, "stepup_challenge.json")
+
+        val challenge = (
+            client().challenge(SecretOperation.UPDATE, "k8s/home-assistant/phone-push", "service_token", null, 3)
+                as Outcome.Success
+            ).value
+
+        assertEquals("challenge-1", challenge.challenge)
+        assertEquals("payload-1", challenge.payload)
+        val request = server.takeRequest()
+        assertEquals("/v1/step-up/challenge", request.path)
+        val body = request.body.readUtf8()
+        assertTrue(body.contains("\"action\":\"update\""))
+        assertTrue(body.contains("\"path\":\"k8s/home-assistant/phone-push\""))
+        assertTrue(body.contains("\"key\":\"service_token\""))
+        assertTrue(body.contains("\"cas\":3"))
+    }
+
+    @Test
+    fun stepUpReturnsTheSessionAndItsLifetime() = runBlocking {
+        respond(200, "stepup.json")
+
+        val session = (client().stepUp("challenge-1", "signature-1") as Outcome.Success).value
+
+        assertEquals("step-up-session-value", session.session)
+        assertEquals(300, session.expiresInSeconds)
+        val request = server.takeRequest()
+        assertEquals("/v1/step-up", request.path)
+        val body = request.body.readUtf8()
+        assertTrue(body.contains("\"challenge\":\"challenge-1\""))
+        assertTrue(body.contains("\"signature\":\"signature-1\""))
+    }
+
+    @Test
+    fun updateSendsTheKeyValueCasAndTheSignedChallenge() = runBlocking {
         respond(200, "update.json")
 
-        val result = (client().update("k8s/home-assistant/phone-push", "service_token", "new", 3, "654321") as Outcome.Success).value
+        val result = (
+            client().update("k8s/home-assistant/phone-push", "service_token", "new", 3, "challenge-1", "signature-1")
+                as Outcome.Success
+            ).value
 
         assertEquals(4, result.version)
         val request = server.takeRequest()
-        assertEquals("654321", request.getHeader("X-Step-Up-Totp"))
+        assertEquals("challenge-1", request.getHeader("X-Step-Up-Challenge"))
+        assertEquals("signature-1", request.getHeader("X-Step-Up-Signature"))
         val body = request.body.readUtf8()
         assertTrue(body.contains("\"cas\":3"))
         assertTrue(body.contains("\"value\":\"new\""))
@@ -130,34 +193,42 @@ class SecretsClientTest {
     fun rollbackSendsTheSourceAndCurrentVersions() = runBlocking {
         respond(200, "rollback.json")
 
-        val result = (client().rollback("k8s/home-assistant/phone-push", 1, 3, "111111") as Outcome.Success).value
+        val result = (
+            client().rollback("k8s/home-assistant/phone-push", 1, 3, "challenge-1", "signature-1")
+                as Outcome.Success
+            ).value
 
         assertEquals(1, result.fromVersion)
         assertEquals(4, result.version)
         val request = server.takeRequest()
-        assertEquals("111111", request.getHeader("X-Step-Up-Totp"))
+        assertEquals("challenge-1", request.getHeader("X-Step-Up-Challenge"))
+        assertEquals("signature-1", request.getHeader("X-Step-Up-Signature"))
         val body = request.body.readUtf8()
         assertTrue(body.contains("\"version\":1"))
         assertTrue(body.contains("\"cas\":3"))
     }
 
     @Test
-    fun deleteCarriesCasVersionAndTotp() = runBlocking {
+    fun deleteCarriesCasVersionAndTheSignedChallenge() = runBlocking {
         respond(200, "delete.json")
 
-        assertEquals(Outcome.Success(Unit), client().delete("k8s/home-assistant/phone-push", 3, 3, "222222"))
+        assertEquals(
+            Outcome.Success(Unit),
+            client().delete("k8s/home-assistant/phone-push", 3, 3, "challenge-1", "signature-1"),
+        )
 
         val request = server.takeRequest()
         assertEquals("DELETE", request.method)
         assertEquals("/v1/secrets/k8s/home-assistant/phone-push?cas=3&version=3", request.path)
-        assertEquals("222222", request.getHeader("X-Step-Up-Totp"))
+        assertEquals("challenge-1", request.getHeader("X-Step-Up-Challenge"))
+        assertEquals("signature-1", request.getHeader("X-Step-Up-Signature"))
     }
 
     @Test
     fun aConflictKeepsTheCurrentVersion() = runBlocking {
         respond(409, "conflict.json")
 
-        val failure = client().update("k8s/home-assistant/phone-push", "k", "v", 3, "1") as Outcome.Failure
+        val failure = client().update("k8s/home-assistant/phone-push", "k", "v", 3, "c", "s") as Outcome.Failure
 
         assertEquals("conflict", (failure.failure as RemoteFailure.Server).reason)
         assertEquals("4", (failure.failure as RemoteFailure.Server).textArgs["currentVersion"])
@@ -167,7 +238,7 @@ class SecretsClientTest {
     fun aDeletedVersionIsAConflictWithItsCode() = runBlocking {
         respond(409, "version_unavailable.json")
 
-        val failure = client().update("k8s/home-assistant/phone-push", "k", "v", 3, "1") as Outcome.Failure
+        val failure = client().update("k8s/home-assistant/phone-push", "k", "v", 3, "c", "s") as Outcome.Failure
 
         assertEquals("version_unavailable", (failure.failure as RemoteFailure.Server).reason)
     }
@@ -180,7 +251,7 @@ class SecretsClientTest {
                 .setBody(TestFixtures.read("secrets/rate_limited.json")),
         )
 
-        val failure = client().stepUp("123456") as Outcome.Failure
+        val failure = client().challenge(SecretOperation.SESSION, null, null, null, null) as Outcome.Failure
         val serverFailure = failure.failure as RemoteFailure.Server
 
         assertEquals(429, serverFailure.httpStatus)
@@ -196,7 +267,7 @@ class SecretsClientTest {
         assertEquals("step_up_required", (required.failure as RemoteFailure.Server).reason)
 
         respond(403, "step_up_invalid.json")
-        val invalid = client().update("k8s/test", "key", "value", 3, "000000") as Outcome.Failure
+        val invalid = client().update("k8s/test", "key", "value", 3, "c", "s") as Outcome.Failure
         assertEquals("step_up_invalid", (invalid.failure as RemoteFailure.Server).reason)
 
         respond(403, "path_forbidden.json")

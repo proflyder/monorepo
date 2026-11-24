@@ -226,8 +226,12 @@
    "consumer": "ESO → home-assistant"
   },
   "k8s/home-assistant/secrets-gateway": {
-   "purpose": "TOTP secret (base32) for secrets-gateway step-up; created by admin:secrets-totp-init",
-   "consumer": "ESO → home-assistant"
+   "purpose": "legacy secrets-gateway TOTP secret; unused after the device-key migration, safe to delete",
+   "consumer": "none"
+  },
+  "k8s/home-assistant/secrets-gateway-device": {
+   "purpose": "device-bound step-up key, device id and one-time enrollment code hash (hidden from the API); managed by admin:secrets-device-enroll",
+   "consumer": "secrets-gateway"
   },
   "k8s/home-assistant/wakegrant": {
    "purpose": "wakegrant issuer token and per-machine keys",

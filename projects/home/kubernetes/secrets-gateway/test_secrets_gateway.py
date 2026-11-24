@@ -5,15 +5,11 @@ import stat
 import sys
 import tempfile
 import unittest
-import urllib.parse
 
 import yaml
 
 HERE = pathlib.Path(__file__).resolve().parent
 ROOT = HERE.parents[3]
-sys.path.insert(0, str(HERE))
-
-import totp_init
 
 
 def documents(name):
@@ -32,51 +28,6 @@ def policy_rules():
         capabilities = re.findall(r'"([a-z]+)"', match.group(2))
         rules[match.group(1)] = set(capabilities)
     return rules
-
-
-class TotpSecret(unittest.TestCase):
-    def test_known_base32_vector(self):
-        secret = totp_init.base32_encode(b"12345678901234567890")
-        expected = "".join(
-            ("GEZD", "GNBV", "GY3T", "QOJQ", "GEZD", "GNBV", "GY3T", "QOJQ"))
-        self.assertEqual(secret, expected)
-
-    def test_generated_secrets_are_base32_and_not_printed(self):
-        secret = totp_init.generate_secret()
-        self.assertEqual(len(secret), 32)
-        self.assertTrue(set(secret) <= set(totp_init.ALPHABET))
-        self.assertNotEqual(secret, totp_init.generate_secret())
-
-    def test_otpauth_uri_has_the_expected_parameters(self):
-        uri = totp_init.otpauth_uri("ABC234", "Home", "owner")
-        parsed = urllib.parse.urlparse(uri)
-        self.assertEqual(parsed.scheme, "otpauth")
-        self.assertEqual(parsed.netloc, "totp")
-        self.assertEqual(parsed.path, "/Home:owner")
-        query = urllib.parse.parse_qs(parsed.query)
-        self.assertEqual(query["secret"], ["ABC234"])
-        self.assertEqual(query["issuer"], ["Home"])
-        self.assertEqual(query["digits"], ["6"])
-        self.assertEqual(query["period"], ["30"])
-        self.assertEqual(query["algorithm"], ["SHA1"])
-
-    def test_plan_is_idempotent_until_rotation(self):
-        updated, secret = totp_init.plan({}, rotate=False)
-        self.assertIsNotNone(secret)
-        again, secret_again = totp_init.plan(updated, rotate=False)
-        self.assertIsNone(secret_again)
-        self.assertEqual(again, updated)
-        rotated, secret_rotated = totp_init.plan(updated, rotate=True)
-        self.assertIsNotNone(secret_rotated)
-        self.assertNotEqual(rotated["totp_secret"], updated["totp_secret"])
-
-    def test_the_uri_file_is_private(self):
-        with tempfile.TemporaryDirectory() as directory:
-            path = pathlib.Path(directory) / "nested" / "totp.txt"
-            totp_init.write_private(path, "otpauth://totp/x\n")
-            self.assertEqual(path.read_text(), "otpauth://totp/x\n")
-            self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
-            self.assertEqual(stat.S_IMODE(path.parent.stat().st_mode), 0o700)
 
 
 class Config(unittest.TestCase):
@@ -123,8 +74,9 @@ class Manifests(unittest.TestCase):
         self.assertTrue(container["securityContext"]["readOnlyRootFilesystem"])
         self.assertEqual(container["securityContext"]["capabilities"]["drop"], ["ALL"])
         env = {item["name"]: item.get("value") for item in container["env"]}
-        self.assertEqual(env["SECRETS_GATEWAY_TOTP_FILE"],
-                         "/run/secrets/secrets-gateway/totp_secret")
+        self.assertNotIn("SECRETS_GATEWAY_TOTP_FILE", env)
+        self.assertEqual(env["SECRETS_GATEWAY_DEVICE_PATH"],
+                         "k8s/home-assistant/secrets-gateway-device")
         self.assertEqual(env["SECRETS_GATEWAY_SERVICE_TOKEN_FILE"],
                          "/run/secrets/secrets-gateway/service_token")
         self.assertEqual(env["SECRETS_GATEWAY_SA_TOKEN_FILE"],
@@ -135,13 +87,13 @@ class Manifests(unittest.TestCase):
         self.assertEqual(env["SECRETS_GATEWAY_DENY_FILE"],
                          "/etc/secrets-gateway/deny.json")
         self.assertEqual(env["SECRETS_GATEWAY_STATE_FILE"],
-                         "/state/last-totp-step")
+                         "/state/step-up.json")
         self.assertEqual(services[0]["spec"]["type"], "ClusterIP")
         self.assertEqual(services[0]["spec"]["ports"][0]["port"], 8096)
         self.assertEqual(len(volumes), 1)
         self.assertEqual(volumes[0]["metadata"]["name"], "secrets-gateway-state")
 
-    def test_external_secret_reads_the_service_token_and_totp(self):
+    def test_external_secret_reads_only_the_service_token(self):
         docs = documents("external-secrets.yaml")
         self.assertEqual(len(docs), 1)
         spec = docs[0]["spec"]
@@ -152,7 +104,6 @@ class Manifests(unittest.TestCase):
                 for item in spec["data"]}
         self.assertEqual(refs, {
             ("k8s/home-assistant/scheduler-auth", "service_token"),
-            ("k8s/home-assistant/secrets-gateway", "totp_secret"),
         })
 
     def test_network_policy_limits_ingress_and_egress(self):
@@ -205,6 +156,29 @@ class Policy(unittest.TestCase):
         for path in ("secret/destroy/*", "secret/delete/*",
                      "secret/undelete/*", "sys/*", "auth/*", "identity/*"):
             self.assertIn("deny", rules[path], path)
+
+    def test_policy_reaches_the_device_state_path_but_denies_the_core(self):
+        rules = policy_rules()
+
+        def matches(rule, path):
+            if rule.endswith("*"):
+                return path.startswith(rule[:-1])
+            return rule == path
+
+        for kind in ("data", "metadata"):
+            target = f"secret/{kind}/k8s/home-assistant/secrets-gateway-device"
+            denied = {
+                rule for rule, capabilities in rules.items()
+                if "deny" in capabilities and matches(rule, target)
+            }
+            self.assertEqual(denied, set(), target)
+        for kind in ("data", "metadata"):
+            target = f"secret/{kind}/k8s/home-assistant/secrets-gateway"
+            denied = {
+                rule for rule, capabilities in rules.items()
+                if "deny" in capabilities and matches(rule, target)
+            }
+            self.assertTrue(denied, target)
 
     def test_policy_grants_soft_delete_only(self):
         rules = policy_rules()

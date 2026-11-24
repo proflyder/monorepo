@@ -2,10 +2,13 @@ package dev.proflyder.home.feature.secrets
 
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RemoteFailure
+import dev.proflyder.home.core.model.SecretOperation
+import dev.proflyder.home.feature.secrets.presentation.SecretAction
 import dev.proflyder.home.feature.secrets.presentation.SecretActionKind
 import dev.proflyder.home.feature.secrets.presentation.SecretDialog
 import dev.proflyder.home.feature.secrets.presentation.SecretPathIntent
 import dev.proflyder.home.feature.secrets.presentation.SecretPathViewModel
+import dev.proflyder.home.feature.secrets.presentation.SecretProblem
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -38,6 +41,10 @@ class SecretPathViewModelTest {
         return viewModel
     }
 
+    private fun sign(viewModel: SecretPathViewModel, signature: String = "signature-1") {
+        viewModel.dispatch(SecretPathIntent.StepUpSigned(signature))
+    }
+
     @Test
     fun aRevealedValueIsMaskedAfterThirtySeconds() = runTest(dispatcher.scheduler) {
         val repository = FakeSecretsRepository()
@@ -59,7 +66,7 @@ class SecretPathViewModelTest {
     }
 
     @Test
-    fun revealWithoutASessionAsksForATotpCodeFirst() = runTest(dispatcher.scheduler) {
+    fun revealWithoutASessionAsksToConfirmThePhoneFirst() = runTest(dispatcher.scheduler) {
         val repository = FakeSecretsRepository()
         val viewModel = viewModel(repository)
         advanceUntilIdle()
@@ -71,17 +78,20 @@ class SecretPathViewModelTest {
         assertEquals(SecretActionKind.REVEAL, dialog.action.kind)
         assertTrue(repository.revealed.isEmpty())
 
-        viewModel.dispatch(SecretPathIntent.StepUpDigits("123456"))
         viewModel.dispatch(SecretPathIntent.StepUpSubmit)
+        advanceUntilIdle()
+        assertEquals(listOf(SecretOperation.SESSION), repository.challenges)
+
+        sign(viewModel)
         runCurrent()
 
-        assertEquals("123456", repository.lastTotp)
+        assertEquals("signature-1", repository.lastSignature)
         assertEquals("token", viewModel.state.value.revealedKey)
         assertEquals(1, repository.revealed.size)
     }
 
     @Test
-    fun anExpiredSessionStopsAllowingRevealAndAsksForACodeAgain() = runTest(dispatcher.scheduler) {
+    fun anExpiredSessionStopsAllowingRevealAndAsksForConfirmationAgain() = runTest(dispatcher.scheduler) {
         val repository = FakeSecretsRepository()
         repository.stepUpState.value = true
         val viewModel = viewModel(repository)
@@ -100,7 +110,7 @@ class SecretPathViewModelTest {
     }
 
     @Test
-    fun updateNeedsAFreshCodeEveryTimeAndSendsTheCurrentVersionAsCas() = runTest(dispatcher.scheduler) {
+    fun updateSignsTheOperationAndSendsTheCurrentVersionAsCas() = runTest(dispatcher.scheduler) {
         val repository = FakeSecretsRepository()
         val viewModel = viewModel(repository)
         advanceUntilIdle()
@@ -109,36 +119,46 @@ class SecretPathViewModelTest {
         viewModel.dispatch(SecretPathIntent.EditValue("new-value"))
         viewModel.dispatch(SecretPathIntent.EditSubmit)
         runCurrent()
-        viewModel.dispatch(SecretPathIntent.StepUpDigits("654321"))
         viewModel.dispatch(SecretPathIntent.StepUpSubmit)
         advanceUntilIdle()
 
+        assertEquals(listOf(SecretOperation.UPDATE), repository.challenges)
+        assertEquals(emptyList<Triple<String, String, Long>>(), repository.updates)
+
+        sign(viewModel)
+        advanceUntilIdle()
+
         assertEquals(listOf(Triple("token", "new-value", 3L)), repository.updates)
-        assertEquals("654321", repository.lastTotp)
         assertNull(viewModel.state.value.dialog)
     }
 
     @Test
-    fun rollbackConfirmsBeforeItAsksForACodeAndUsesTheSelectedVersion() = runTest(dispatcher.scheduler) {
+    fun rollbackConfirmsThenSignsTheSelectedVersion() = runTest(dispatcher.scheduler) {
         val repository = FakeSecretsRepository()
         val viewModel = viewModel(repository)
         advanceUntilIdle()
 
         viewModel.dispatch(SecretPathIntent.RollbackRequest(1))
         runCurrent()
-        assertEquals(SecretDialog.Confirm(dev.proflyder.home.feature.secrets.presentation.SecretAction(SecretActionKind.ROLLBACK, version = 1)), viewModel.state.value.dialog)
+        assertEquals(
+            SecretDialog.Confirm(SecretAction(SecretActionKind.ROLLBACK, version = 1)),
+            viewModel.state.value.dialog,
+        )
 
         viewModel.dispatch(SecretPathIntent.ConfirmAccept)
         runCurrent()
-        viewModel.dispatch(SecretPathIntent.StepUpDigits("111111"))
         viewModel.dispatch(SecretPathIntent.StepUpSubmit)
+        advanceUntilIdle()
+        assertEquals(listOf(SecretOperation.ROLLBACK), repository.challenges)
+
+        sign(viewModel)
         advanceUntilIdle()
 
         assertEquals(listOf(1L to 3L), repository.rollbacks)
     }
 
     @Test
-    fun deleteSendsTheCurrentAndExpectedVersion() = runTest(dispatcher.scheduler) {
+    fun deleteSignsTheCurrentAndExpectedVersion() = runTest(dispatcher.scheduler) {
         val repository = FakeSecretsRepository()
         val viewModel = viewModel(repository)
         advanceUntilIdle()
@@ -147,15 +167,18 @@ class SecretPathViewModelTest {
         runCurrent()
         viewModel.dispatch(SecretPathIntent.ConfirmAccept)
         runCurrent()
-        viewModel.dispatch(SecretPathIntent.StepUpDigits("222222"))
         viewModel.dispatch(SecretPathIntent.StepUpSubmit)
+        advanceUntilIdle()
+        assertEquals(listOf(SecretOperation.DELETE), repository.challenges)
+
+        sign(viewModel)
         advanceUntilIdle()
 
         assertEquals(listOf(3L to 3L), repository.deletions)
     }
 
     @Test
-    fun anInvalidCodeKeepsTheDialogAndShowsItsProblem() = runTest(dispatcher.scheduler) {
+    fun aRejectedSignatureKeepsTheDialogAndShowsItsProblem() = runTest(dispatcher.scheduler) {
         val repository = FakeSecretsRepository()
         repository.updateResult = Outcome.Failure(
             RemoteFailure.Server(403, dev.proflyder.home.core.model.ConnectCode.UNKNOWN, "step_up_invalid", "step_up_invalid"),
@@ -166,12 +189,48 @@ class SecretPathViewModelTest {
         viewModel.dispatch(SecretPathIntent.EditRequest("token"))
         viewModel.dispatch(SecretPathIntent.EditSubmit)
         runCurrent()
-        viewModel.dispatch(SecretPathIntent.StepUpDigits("999999"))
         viewModel.dispatch(SecretPathIntent.StepUpSubmit)
+        advanceUntilIdle()
+        sign(viewModel)
         advanceUntilIdle()
 
         val dialog = viewModel.state.value.dialog as SecretDialog.StepUp
-        assertEquals(dev.proflyder.home.feature.secrets.presentation.SecretProblem.InvalidTotp, dialog.problem)
-        assertEquals("", dialog.digits)
+        assertEquals(SecretProblem.InvalidSignature, dialog.problem)
+        assertEquals(false, dialog.busy)
+    }
+
+    @Test
+    fun cancellingTheSystemPromptKeepsTheDialogForAnotherAttempt() = runTest(dispatcher.scheduler) {
+        val repository = FakeSecretsRepository()
+        val viewModel = viewModel(repository)
+        advanceUntilIdle()
+
+        viewModel.dispatch(SecretPathIntent.Reveal("token"))
+        runCurrent()
+        viewModel.dispatch(SecretPathIntent.StepUpSubmit)
+        advanceUntilIdle()
+        viewModel.dispatch(SecretPathIntent.StepUpCancelled)
+        runCurrent()
+
+        val dialog = viewModel.state.value.dialog as SecretDialog.StepUp
+        assertEquals(false, dialog.busy)
+        assertTrue(repository.revealed.isEmpty())
+    }
+
+    @Test
+    fun anUnsupportedPhoneClosesTheDialogWithADeviceProblem() = runTest(dispatcher.scheduler) {
+        val repository = FakeSecretsRepository()
+        val viewModel = viewModel(repository)
+        advanceUntilIdle()
+
+        viewModel.dispatch(SecretPathIntent.Reveal("token"))
+        runCurrent()
+        viewModel.dispatch(
+            SecretPathIntent.StepUpFailed(dev.proflyder.home.feature.secrets.presentation.DeviceSignatureFailure.UNSUPPORTED),
+        )
+        runCurrent()
+
+        val dialog = viewModel.state.value.dialog as SecretDialog.StepUp
+        assertEquals(SecretProblem.DeviceUnavailable, dialog.problem)
     }
 }

@@ -363,10 +363,10 @@ export const config = {
     {
       id: "secrets-gateway-deploy",
       platform: "python",
-      title: "projects/home/kubernetes/secrets-gateway (policy, manifests, TOTP init)",
+      title: "projects/home/kubernetes/secrets-gateway (policy, manifests, device enrollment)",
       paths: [
         "projects/home/kubernetes/secrets-gateway/**",
-        "platform/mise-tasks/admin/secrets-totp-init.sh",
+        "platform/mise-tasks/admin/secrets-device-enroll.sh",
       ],
       python: {
         suites: ["projects/home/kubernetes/secrets-gateway"],

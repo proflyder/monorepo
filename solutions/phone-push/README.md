@@ -34,7 +34,7 @@ Bearer — service-token (`PUSH_SERVICE_TOKEN_FILE`, обязателен, бе�
 | Метод | Назначение |
 |---|---|
 | `POST /v1/push/find` `{reason?, deviceId?}` | data-only сообщение высокого приоритета, без `notification`: приложение включает громкий звонок (`USAGE_ALARM`, обход DND, full-screen intent), стоп по «Нашёл» или через 60 с |
-| `POST /v1/push/notify` `{title, body, deepLink?, deviceId?, module?}` | обычное уведомление (data-only): заголовок/текст/deep link; приложение рисует его в канале `home_notifications` в цвете темы |
+| `POST /v1/push/notify` `{title, body, deepLink?, data?, deviceId?, module?}` | обычное уведомление (data-only): заголовок/текст/deep link и до 8 пар `data` (ключ до 32, значение до 256 символов; служебные `type`, `title`, `body`, `notificationId`, `deepLink` занять нельзя); приложение рисует его в канале `home_notifications` в цвете темы |
 | `GET /v1/push/devices` | идентификаторы, имена и платформы зарегистрированных телефонов — **без токенов**; gateway сопоставляет по ним имя |
 | `GET /healthz`, `GET /readyz` | пробы без токена |
 
@@ -76,8 +76,8 @@ Bearer — service-token (`PUSH_SERVICE_TOKEN_FILE`, обязателен, бе�
 обычного уведомления): `notification`-блок не ставится. Иначе, пока
 приложение в фоне, трей рисует FCM SDK с иконкой приложения и без цвета, а не
 приложение — с иконкой и цветом текущей темы, каналом и deep link. Текст
-(`title`, `body`, `deepLink`) приходит в `data`; все подписи и действия на
-телефоне — из ресурсов приложения.
+(`title`, `body`, `deepLink`) и дополнительные пары `data` приходят в FCM
+`data`; все подписи и действия на телефоне — из ресурсов приложения.
 
 ## Переменные окружения
 

@@ -8,16 +8,23 @@ use axum::http::{HeaderMap, Method, Request, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{any, get, post};
 use axum::{Json, Router};
+use base64::Engine as _;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use home_app_auth::{AccessClient, AccessSnapshot, Modules, TokenRecord, sha256_hex};
 use home_secret::Token;
-use secrets_gateway::api::{self, GatewayState, STEP_UP_SESSION_HEADER, STEP_UP_TOTP_HEADER};
+use p256::ecdsa::SigningKey;
+use p256::ecdsa::signature::Signer as _;
+use p256::pkcs8::EncodePublicKey as _;
+use secrets_gateway::api::{
+    self, GatewayState, STEP_UP_CHALLENGE_HEADER, STEP_UP_SESSION_HEADER, STEP_UP_SIGNATURE_HEADER,
+};
 use secrets_gateway::audit::{Auditor, PushClient};
 use secrets_gateway::catalog::Catalog;
 use secrets_gateway::deny::Deny;
+use secrets_gateway::device::{self, DeviceStore};
 use secrets_gateway::health;
 use secrets_gateway::openbao::OpenBao;
 use secrets_gateway::stepup::StepUp;
-use secrets_gateway::totp::{self, Totp};
 use serde_json::{Value, json};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use tower::ServiceExt;
@@ -26,8 +33,8 @@ const OWNER_TOKEN: &str = "owner-token";
 const SECOND_OWNER_TOKEN: &str = "second-owner-token";
 const MEMBER_TOKEN: &str = "member-token";
 const SERVICE_TOKEN: &str = "service-token";
-const TOTP_SECRET: &str = "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP";
 const SECRET_VALUE: &str = "s3cr3t";
+const DEVICE_ID: &str = "test-device";
 const POLICY: &str =
     include_str!("../../../../../projects/home/kubernetes/secrets-gateway/policy.hcl");
 const DENY: &str =
@@ -144,6 +151,8 @@ struct FakeOpenBao {
     requests: Vec<(String, String)>,
     reject_write: bool,
     policy: Policy,
+    device: BTreeMap<String, String>,
+    device_version: u64,
 }
 
 impl OpenBaoState {
@@ -171,8 +180,56 @@ impl OpenBaoState {
                 requests: Vec::new(),
                 reject_write: false,
                 policy: Policy::parse(POLICY),
+                device: BTreeMap::new(),
+                device_version: 0,
             })),
         }
+    }
+
+    fn set_device(&self, public_key: &str) {
+        let mut inner = self.inner.lock().expect("lock");
+        inner.device = BTreeMap::from([
+            ("device_id".to_owned(), DEVICE_ID.to_owned()),
+            ("device_public_key".to_owned(), public_key.to_owned()),
+            ("device_enrolled_at".to_owned(), "1".to_owned()),
+        ]);
+        inner.device_version = 1;
+    }
+
+    fn clear_device(&self) {
+        let mut inner = self.inner.lock().expect("lock");
+        inner.device.clear();
+        inner.device_version = inner.device_version.saturating_add(1);
+    }
+
+    fn revoke_device(&self) {
+        let mut inner = self.inner.lock().expect("lock");
+        let device_id = inner.device.get("device_id").cloned();
+        inner.device.clear();
+        if let Some(device_id) = device_id {
+            inner
+                .device
+                .insert("device_revoke_device_id".to_owned(), device_id);
+            inner
+                .device
+                .insert("device_revoked_at".to_owned(), "2".to_owned());
+        }
+        inner.device_version = inner.device_version.saturating_add(1);
+    }
+
+    fn set_enrollment(&self, code_hash: &str, expires_at: u64) {
+        let mut inner = self.inner.lock().expect("lock");
+        inner
+            .device
+            .insert("enrollment_code_hash".to_owned(), code_hash.to_owned());
+        inner
+            .device
+            .insert("enrollment_expires_at".to_owned(), expires_at.to_string());
+        inner.device_version = inner.device_version.saturating_add(1);
+    }
+
+    fn device(&self) -> BTreeMap<String, String> {
+        self.inner.lock().expect("lock").device.clone()
     }
 
     fn record(&self, method: &Method, path: &str) {
@@ -296,6 +353,7 @@ fn list_keys(prefix: &str) -> Vec<String> {
         "k8s/home-assistant/phone-push",
         "k8s/home-assistant/scheduler-auth",
         "k8s/home-assistant/secrets-gateway",
+        "k8s/home-assistant/secrets-gateway-device",
         "k8s/test",
         "openbao/seal",
     ];
@@ -326,6 +384,17 @@ async fn data_get(
     state.record(&Method::GET, &full);
     if !state.allow(&Method::GET, &full) {
         return StatusCode::FORBIDDEN.into_response();
+    }
+    if path == device::DEVICE_PATH {
+        let inner = state.inner.lock().expect("lock");
+        if inner.device_version == 0 {
+            return StatusCode::NOT_FOUND.into_response();
+        }
+        let version = inner.device_version;
+        let data = inner.device.clone();
+        drop(inner);
+        return Json(json!({"data": {"data": data, "metadata": {"version": version}}}))
+            .into_response();
     }
     if path != "k8s/test" {
         return StatusCode::NOT_FOUND.into_response();
@@ -360,6 +429,39 @@ async fn data_write(
     state.record(&Method::POST, &full);
     if !state.allow(&Method::POST, &full) {
         return StatusCode::FORBIDDEN.into_response();
+    }
+    if path == device::DEVICE_PATH {
+        let mut inner = state.inner.lock().expect("lock");
+        let cas = body
+            .get("options")
+            .and_then(|options| options.get("cas"))
+            .and_then(Value::as_u64);
+        if let Some(cas) = cas
+            && cas != inner.device_version
+        {
+            return (
+                StatusCode::BAD_REQUEST,
+                r#"{"errors":["check-and-set parameter did not match the current version"]}"#,
+            )
+                .into_response();
+        }
+        let data = body
+            .get("data")
+            .and_then(Value::as_object)
+            .map(|values| {
+                values
+                    .iter()
+                    .filter_map(|(key, value)| {
+                        value.as_str().map(|text| (key.clone(), text.to_owned()))
+                    })
+                    .collect::<BTreeMap<_, _>>()
+            })
+            .unwrap_or_default();
+        inner.device = data;
+        inner.device_version += 1;
+        let version = inner.device_version;
+        drop(inner);
+        return Json(json!({"data": {"version": version}})).into_response();
     }
     if path != "k8s/test" {
         return StatusCode::NOT_FOUND.into_response();
@@ -549,21 +651,26 @@ async fn harness() -> Harness {
     )
     .expect("catalog");
     let deny = Deny::parse(DENY).expect("deny");
-    let openbao = OpenBao::new(
-        &openbao_url,
-        "secrets-gateway",
-        Token::new("service-account-jwt"),
-        Duration::from_secs(5),
-    )
-    .expect("openbao");
+    openbao_state.set_device(&public_key(&signing_key()));
+    let openbao = Arc::new(
+        OpenBao::new(
+            &openbao_url,
+            "secrets-gateway",
+            Token::new("service-account-jwt"),
+            Duration::from_secs(5),
+        )
+        .expect("openbao"),
+    );
+    let device = Arc::new(DeviceStore::new(Arc::clone(&openbao), device::DEVICE_PATH));
     let push = PushClient::new(&push_url, Token::new(SERVICE_TOKEN), Duration::from_secs(5))
         .expect("push");
     let state = GatewayState {
         access: AccessClient::fixed(snapshot),
-        openbao: Arc::new(openbao),
+        openbao,
         catalog: Arc::new(catalog),
         deny: Arc::new(deny),
-        stepup: Arc::new(StepUp::new(TOTP_SECRET).expect("step-up")),
+        device: Arc::clone(&device),
+        stepup: Arc::new(StepUp::new(device)),
         audit: Arc::new(Auditor::new(push)),
         max_list_entries: 50,
     };
@@ -607,8 +714,81 @@ async fn call(
     (status, headers, value)
 }
 
-fn code() -> String {
-    Totp::new(TOTP_SECRET).expect("totp").code(totp::now_unix())
+fn signing_key() -> SigningKey {
+    SigningKey::from_slice(&[7u8; 32]).expect("signing key")
+}
+
+fn other_signing_key() -> SigningKey {
+    SigningKey::from_slice(&[9u8; 32]).expect("signing key")
+}
+
+fn encoded(bytes: &[u8]) -> String {
+    URL_SAFE_NO_PAD.encode(bytes)
+}
+
+fn public_key(key: &SigningKey) -> String {
+    encoded(
+        key.verifying_key()
+            .to_public_key_der()
+            .expect("public key DER")
+            .as_bytes(),
+    )
+}
+
+fn signature(payload: &str) -> String {
+    sign_with(&signing_key(), payload)
+}
+
+fn sign_with(key: &SigningKey, payload: &str) -> String {
+    let signature: p256::ecdsa::Signature = key.sign(payload.as_bytes());
+    encoded(signature.to_der().as_bytes())
+}
+
+fn signed_headers<'a>(challenge: &'a str, signature: &'a str) -> [(&'a str, &'a str); 2] {
+    [
+        (STEP_UP_CHALLENGE_HEADER, challenge),
+        (STEP_UP_SIGNATURE_HEADER, signature),
+    ]
+}
+
+async fn mutation(harness: &Harness, body: Value) -> (String, String) {
+    let (challenge, payload) = issue(&harness.app, OWNER_TOKEN, body).await;
+    (challenge, signature(&payload))
+}
+
+async fn issue(app: &Router, token: &str, body: Value) -> (String, String) {
+    let (status, _, value) = call(
+        app,
+        Method::POST,
+        "/v1/step-up/challenge",
+        Some(token),
+        &[],
+        Some(body),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{value}");
+    (
+        value["challenge"].as_str().expect("challenge").to_owned(),
+        value["payload"].as_str().expect("payload").to_owned(),
+    )
+}
+
+async fn attestation(app: &Router, token: &str) -> String {
+    let (status, _, value) = call(
+        app,
+        Method::POST,
+        "/v1/device/challenge",
+        Some(token),
+        &[],
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{value}");
+    value["challenge"].as_str().expect("challenge").to_owned()
+}
+
+fn enrollment_hash(code: &str) -> String {
+    device::hash_code(&device::normalize_code(code))
 }
 
 async fn pushes(pushes: &mut UnboundedReceiver<Value>) -> Vec<Value> {
@@ -620,18 +800,26 @@ async fn pushes(pushes: &mut UnboundedReceiver<Value>) -> Vec<Value> {
     received
 }
 
-async fn session(harness: &Harness) -> String {
+async fn session_for(harness: &Harness, token: &str) -> String {
+    let (challenge, payload) = issue(&harness.app, token, json!({"action": "session"})).await;
     let (status, _, body) = call(
         &harness.app,
         Method::POST,
         "/v1/step-up",
-        Some(OWNER_TOKEN),
+        Some(token),
         &[],
-        Some(json!({"totp": code()})),
+        Some(json!({
+            "challenge": challenge,
+            "signature": signature(&payload),
+        })),
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{body}");
     body["session"].as_str().expect("session").to_owned()
+}
+
+async fn session(harness: &Harness) -> String {
+    session_for(harness, OWNER_TOKEN).await
 }
 
 #[test]
@@ -690,19 +878,13 @@ async fn the_owner_lists_the_whole_catalog_except_the_core() {
         );
     }
     let received = pushes(&mut harness.pushes).await;
-    assert!(!received.is_empty());
-    assert!(received.iter().all(|push| push["module"] == "secrets"));
-    assert!(
-        received
-            .iter()
-            .all(|push| !push.to_string().contains(SECRET_VALUE))
-    );
+    assert!(received.is_empty(), "{received:?}");
     let requests = harness.openbao.requests();
     assert!(!requests.iter().any(|(_, path)| {
         path.contains("infra/vpn/client-ca")
             || path.contains("k8s/flux-system")
             || path.contains("scheduler-auth")
-            || path.contains("secrets-gateway")
+            || (path.contains("secrets-gateway") && !path.contains("secrets-gateway-device"))
             || path.contains("openbao")
     }));
 }
@@ -729,7 +911,28 @@ async fn only_the_owner_module_can_use_the_gateway() {
             Some(json!({"version": 1, "cas": 2})),
         ),
         (Method::DELETE, "/v1/secrets/k8s/test?cas=2", None),
-        (Method::POST, "/v1/step-up", Some(json!({"totp": "123456"}))),
+        (
+            Method::POST,
+            "/v1/step-up",
+            Some(json!({"challenge": "x", "signature": "y"})),
+        ),
+        (
+            Method::POST,
+            "/v1/step-up/challenge",
+            Some(json!({"action": "session"})),
+        ),
+        (Method::GET, "/v1/device", None),
+        (Method::POST, "/v1/device/challenge", None),
+        (
+            Method::POST,
+            "/v1/device/enroll",
+            Some(json!({
+                "code": "ABCD",
+                "publicKey": "key",
+                "attestationChallenge": "challenge",
+                "attestationChain": ["cert"],
+            })),
+        ),
     ];
     for (method, uri, body) in cases {
         let (status, _, value) =
@@ -744,7 +947,7 @@ async fn only_the_owner_module_can_use_the_gateway() {
 
 #[tokio::test]
 async fn metadata_reports_versions_and_key_names_without_values() {
-    let harness = harness().await;
+    let mut harness = harness().await;
     let (status, _, body) = call(
         &harness.app,
         Method::GET,
@@ -762,10 +965,11 @@ async fn metadata_reports_versions_and_key_names_without_values() {
     assert!(keys.iter().any(|key| key == "password"));
     assert!(keys.iter().any(|key| key == "user"));
     assert!(!body.to_string().contains(SECRET_VALUE));
+    assert!(pushes(&mut harness.pushes).await.is_empty());
 }
 
 #[tokio::test]
-async fn reveal_needs_a_totp_started_session_and_disables_caching() {
+async fn reveal_needs_a_device_signed_session_and_disables_caching() {
     let mut harness = harness().await;
     let (status, _, body) = call(
         &harness.app,
@@ -779,13 +983,17 @@ async fn reveal_needs_a_totp_started_session_and_disables_caching() {
     assert_eq!(status, StatusCode::FORBIDDEN);
     assert_eq!(body["error"], "step_up_required");
 
+    let (challenge, payload) = issue(&harness.app, OWNER_TOKEN, json!({"action": "session"})).await;
     let (status, headers, body) = call(
         &harness.app,
         Method::POST,
         "/v1/step-up",
         Some(OWNER_TOKEN),
         &[],
-        Some(json!({"totp": code()})),
+        Some(json!({
+            "challenge": challenge,
+            "signature": signature(&payload),
+        })),
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{body}");
@@ -815,12 +1023,13 @@ async fn reveal_needs_a_totp_started_session_and_disables_caching() {
         Some("no-store")
     );
     let received = pushes(&mut harness.pushes).await;
-    assert!(!received.is_empty());
-    assert!(
-        received
-            .iter()
-            .all(|push| !push.to_string().contains(SECRET_VALUE))
-    );
+    assert_eq!(received.len(), 2, "{received:?}");
+    let push = received.last().expect("reveal push");
+    assert_eq!(push["module"], "secrets");
+    assert_eq!(push["data"]["entity"], "secrets");
+    assert_eq!(push["data"]["path"], "k8s/test");
+    assert_eq!(push["deepLink"], "home://secrets/path/k8s%2Ftest");
+    assert!(!push.to_string().contains(SECRET_VALUE));
 }
 
 #[tokio::test(start_paused = true)]
@@ -870,7 +1079,7 @@ async fn a_step_up_session_is_bound_to_the_token_that_started_it() {
 }
 
 #[tokio::test]
-async fn update_requires_totp_and_a_matching_cas() {
+async fn update_requires_a_device_signature_and_a_matching_cas() {
     let harness = harness().await;
     let (status, _, body) = call(
         &harness.app,
@@ -884,12 +1093,17 @@ async fn update_requires_totp_and_a_matching_cas() {
     assert_eq!(status, StatusCode::FORBIDDEN);
     assert_eq!(body["error"], "step_up_required");
 
+    let (challenge, signature) = mutation(
+        &harness,
+        json!({"action": "update", "path": "k8s/test", "key": "password", "cas": 1}),
+    )
+    .await;
     let (status, _, body) = call(
         &harness.app,
         Method::POST,
         "/v1/secrets/update/k8s/test",
         Some(OWNER_TOKEN),
-        &[(STEP_UP_TOTP_HEADER, &code())],
+        &signed_headers(&challenge, &signature),
         Some(json!({"key": "password", "value": "new", "cas": 1})),
     )
     .await;
@@ -903,12 +1117,17 @@ async fn update_requires_totp_and_a_matching_cas() {
 async fn update_refuses_a_soft_deleted_current_version() {
     let harness = harness().await;
     harness.openbao.mark_deleted(2);
+    let (challenge, signature) = mutation(
+        &harness,
+        json!({"action": "update", "path": "k8s/test", "key": "password", "cas": 2}),
+    )
+    .await;
     let (status, _, body) = call(
         &harness.app,
         Method::POST,
         "/v1/secrets/update/k8s/test",
         Some(OWNER_TOKEN),
-        &[(STEP_UP_TOTP_HEADER, &code())],
+        &signed_headers(&challenge, &signature),
         Some(json!({"key": "password", "value": "new", "cas": 2})),
     )
     .await;
@@ -920,12 +1139,17 @@ async fn update_refuses_a_soft_deleted_current_version() {
 #[tokio::test]
 async fn update_writes_a_new_version_without_leaking_the_value() {
     let mut harness = harness().await;
+    let (challenge, signature) = mutation(
+        &harness,
+        json!({"action": "update", "path": "k8s/test", "key": "password", "cas": 2}),
+    )
+    .await;
     let (status, _, body) = call(
         &harness.app,
         Method::POST,
         "/v1/secrets/update/k8s/test",
         Some(OWNER_TOKEN),
-        &[(STEP_UP_TOTP_HEADER, &code())],
+        &signed_headers(&challenge, &signature),
         Some(json!({"key": "password", "value": "rotated", "cas": 2})),
     )
     .await;
@@ -948,12 +1172,17 @@ async fn update_writes_a_new_version_without_leaking_the_value() {
 #[tokio::test]
 async fn rollback_copies_an_old_version_as_a_new_one() {
     let harness = harness().await;
+    let (challenge, signature) = mutation(
+        &harness,
+        json!({"action": "rollback", "path": "k8s/test", "version": 1, "cas": 2}),
+    )
+    .await;
     let (status, _, body) = call(
         &harness.app,
         Method::POST,
         "/v1/secrets/rollback/k8s/test",
         Some(OWNER_TOKEN),
-        &[(STEP_UP_TOTP_HEADER, &code())],
+        &signed_headers(&challenge, &signature),
         Some(json!({"version": 1, "cas": 2})),
     )
     .await;
@@ -968,12 +1197,17 @@ async fn rollback_copies_an_old_version_as_a_new_one() {
 #[tokio::test]
 async fn delete_is_soft_and_never_calls_destroy() {
     let harness = harness().await;
+    let (challenge, signature) = mutation(
+        &harness,
+        json!({"action": "delete", "path": "k8s/test", "version": 2, "cas": 2}),
+    )
+    .await;
     let (status, _, body) = call(
         &harness.app,
         Method::DELETE,
         "/v1/secrets/k8s/test?cas=2&version=2",
         Some(OWNER_TOKEN),
-        &[(STEP_UP_TOTP_HEADER, &code())],
+        &signed_headers(&challenge, &signature),
         None,
     )
     .await;
@@ -997,12 +1231,17 @@ async fn delete_is_soft_and_never_calls_destroy() {
 #[tokio::test]
 async fn delete_rejects_a_stale_cas() {
     let harness = harness().await;
+    let (challenge, signature) = mutation(
+        &harness,
+        json!({"action": "delete", "path": "k8s/test", "cas": 1}),
+    )
+    .await;
     let (status, _, body) = call(
         &harness.app,
         Method::DELETE,
         "/v1/secrets/k8s/test?cas=1",
         Some(OWNER_TOKEN),
-        &[(STEP_UP_TOTP_HEADER, &code())],
+        &signed_headers(&challenge, &signature),
         None,
     )
     .await;
@@ -1015,12 +1254,17 @@ async fn delete_rejects_a_stale_cas() {
 async fn an_openbao_cas_race_is_reported_as_conflict() {
     let harness = harness().await;
     harness.openbao.reject_next_write();
+    let (challenge, signature) = mutation(
+        &harness,
+        json!({"action": "update", "path": "k8s/test", "key": "password", "cas": 2}),
+    )
+    .await;
     let (status, _, body) = call(
         &harness.app,
         Method::POST,
         "/v1/secrets/update/k8s/test",
         Some(OWNER_TOKEN),
-        &[(STEP_UP_TOTP_HEADER, &code())],
+        &signed_headers(&challenge, &signature),
         Some(json!({"key": "password", "value": "new", "cas": 2})),
     )
     .await;
@@ -1032,6 +1276,15 @@ async fn an_openbao_cas_race_is_reported_as_conflict() {
 #[tokio::test]
 async fn denied_paths_are_rejected_before_openbao_is_called() {
     let mut harness = harness().await;
+    call(
+        &harness.app,
+        Method::GET,
+        "/v1/secrets",
+        Some(OWNER_TOKEN),
+        &[],
+        None,
+    )
+    .await;
     let before = harness.openbao.requests().len();
     let (status, _, body) = call(
         &harness.app,
@@ -1089,17 +1342,551 @@ async fn readiness_checks_openbao_and_the_access_snapshot() {
 }
 
 #[tokio::test]
+async fn the_device_state_path_is_hidden_and_forbidden() {
+    let harness = harness().await;
+    let (status, _, body) = call(
+        &harness.app,
+        Method::GET,
+        "/v1/secrets",
+        Some(OWNER_TOKEN),
+        &[],
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let entries = body["entries"].as_array().expect("entries");
+    assert!(
+        !entries
+            .iter()
+            .any(|entry| entry["path"] == device::DEVICE_PATH)
+    );
+    let (status, _, body) = call(
+        &harness.app,
+        Method::GET,
+        "/v1/secrets/meta/k8s/home-assistant/secrets-gateway-device",
+        Some(OWNER_TOKEN),
+        &[],
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(body["error"], "path_forbidden");
+}
+
+#[tokio::test]
+async fn a_challenge_is_bound_to_the_exact_operation() {
+    let harness = harness().await;
+    let (challenge, payload) = issue(
+        &harness.app,
+        OWNER_TOKEN,
+        json!({"action": "update", "path": "k8s/test", "key": "password", "cas": 2}),
+    )
+    .await;
+    let signed = signature(&payload);
+    let headers = signed_headers(&challenge, &signed);
+    let (status, _, body) = call(
+        &harness.app,
+        Method::POST,
+        "/v1/secrets/update/k8s/other",
+        Some(OWNER_TOKEN),
+        &headers,
+        Some(json!({"key": "password", "value": "new", "cas": 2})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(body["error"], "step_up_invalid");
+
+    let (challenge, payload) = issue(
+        &harness.app,
+        OWNER_TOKEN,
+        json!({"action": "update", "path": "k8s/test", "key": "password", "cas": 2}),
+    )
+    .await;
+    let signed = signature(&payload);
+    let headers = signed_headers(&challenge, &signed);
+    let (status, _, body) = call(
+        &harness.app,
+        Method::POST,
+        "/v1/secrets/update/k8s/test",
+        Some(OWNER_TOKEN),
+        &headers,
+        Some(json!({"key": "user", "value": "new", "cas": 2})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(body["error"], "step_up_invalid");
+
+    let (challenge, payload) = issue(
+        &harness.app,
+        OWNER_TOKEN,
+        json!({"action": "update", "path": "k8s/test", "key": "password", "cas": 2}),
+    )
+    .await;
+    let signed = signature(&payload);
+    let headers = signed_headers(&challenge, &signed);
+    let (status, _, body) = call(
+        &harness.app,
+        Method::POST,
+        "/v1/secrets/rollback/k8s/test",
+        Some(OWNER_TOKEN),
+        &headers,
+        Some(json!({"version": 1, "cas": 2})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(body["error"], "step_up_invalid");
+    assert_eq!(harness.openbao.current(), 2);
+}
+
+#[tokio::test]
+async fn a_signed_challenge_cannot_be_replayed() {
+    let harness = harness().await;
+    let (challenge, payload) = issue(
+        &harness.app,
+        OWNER_TOKEN,
+        json!({"action": "update", "path": "k8s/test", "key": "password", "cas": 2}),
+    )
+    .await;
+    let signed = signature(&payload);
+    let headers = signed_headers(&challenge, &signed);
+    let (status, _, body) = call(
+        &harness.app,
+        Method::POST,
+        "/v1/secrets/update/k8s/test",
+        Some(OWNER_TOKEN),
+        &headers,
+        Some(json!({"key": "password", "value": "first", "cas": 2})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let (status, _, body) = call(
+        &harness.app,
+        Method::POST,
+        "/v1/secrets/update/k8s/test",
+        Some(OWNER_TOKEN),
+        &headers,
+        Some(json!({"key": "password", "value": "second", "cas": 2})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(body["error"], "step_up_invalid");
+    assert_eq!(harness.openbao.current(), 3);
+}
+
+#[tokio::test]
+async fn a_signature_from_another_key_is_rejected() {
+    let harness = harness().await;
+    let (challenge, payload) = issue(
+        &harness.app,
+        OWNER_TOKEN,
+        json!({"action": "update", "path": "k8s/test", "key": "password", "cas": 2}),
+    )
+    .await;
+    let signature = sign_with(&other_signing_key(), &payload);
+    let headers = signed_headers(&challenge, &signature);
+    let (status, _, body) = call(
+        &harness.app,
+        Method::POST,
+        "/v1/secrets/update/k8s/test",
+        Some(OWNER_TOKEN),
+        &headers,
+        Some(json!({"key": "password", "value": "new", "cas": 2})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(body["error"], "step_up_invalid");
+    assert_eq!(harness.openbao.current(), 2);
+}
+
+#[tokio::test]
+async fn a_revoked_device_cannot_open_sessions_or_reveal() {
+    let harness = harness().await;
+    let session = session(&harness).await;
+    harness.openbao.clear_device();
+    let (status, _, body) = call(
+        &harness.app,
+        Method::POST,
+        "/v1/secrets/reveal/k8s/test",
+        Some(OWNER_TOKEN),
+        &[(STEP_UP_SESSION_HEADER, &session)],
+        Some(json!({"key": "password", "version": 2})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(body["error"], "step_up_required");
+    let (status, _, body) = call(
+        &harness.app,
+        Method::POST,
+        "/v1/step-up/challenge",
+        Some(OWNER_TOKEN),
+        &[],
+        Some(json!({"action": "session"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(body["error"], "device_not_enrolled");
+}
+
+#[tokio::test]
+async fn enrollment_binds_a_new_key_once() {
+    let harness = harness().await;
+    harness.openbao.clear_device();
+    harness
+        .openbao
+        .set_enrollment(&enrollment_hash("ABCD2345EFGH"), unix_now() + 900);
+    let key = other_signing_key();
+    let public_key = public_key(&key);
+    let nonce = attestation(&harness.app, OWNER_TOKEN).await;
+    let (status, _, body) = call(
+        &harness.app,
+        Method::POST,
+        "/v1/device/enroll",
+        Some(OWNER_TOKEN),
+        &[],
+        Some(json!({
+            "code": "abcd-2345-efgh",
+            "publicKey": public_key.clone(),
+            "attestationChallenge": nonce,
+            "attestationChain": [encoded(b"certificate")],
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["enrolled"], true);
+    assert!(body["deviceId"].as_str().is_some_and(|id| !id.is_empty()));
+    let stored = harness.openbao.device();
+    assert_eq!(stored.get("device_public_key"), Some(&public_key));
+    assert!(!stored.contains_key("enrollment_code_hash"));
+
+    let nonce = attestation(&harness.app, OWNER_TOKEN).await;
+    let (status, _, body) = call(
+        &harness.app,
+        Method::POST,
+        "/v1/device/enroll",
+        Some(OWNER_TOKEN),
+        &[],
+        Some(json!({
+            "code": "ABCD2345EFGH",
+            "publicKey": public_key,
+            "attestationChallenge": nonce,
+            "attestationChain": [encoded(b"certificate")],
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(body["error"], "enrollment_closed");
+
+    let (challenge, payload) = issue(&harness.app, OWNER_TOKEN, json!({"action": "session"})).await;
+    let (status, _, body) = call(
+        &harness.app,
+        Method::POST,
+        "/v1/step-up",
+        Some(OWNER_TOKEN),
+        &[],
+        Some(json!({
+            "challenge": challenge,
+            "signature": sign_with(&key, &payload),
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+}
+
+#[tokio::test]
+async fn enrollment_expiry_is_enforced() {
+    let harness = harness().await;
+    harness.openbao.clear_device();
+    harness
+        .openbao
+        .set_enrollment(&enrollment_hash("ABCD2345EFGH"), unix_now() - 1);
+    let nonce = attestation(&harness.app, OWNER_TOKEN).await;
+    let (status, _, body) = call(
+        &harness.app,
+        Method::POST,
+        "/v1/device/enroll",
+        Some(OWNER_TOKEN),
+        &[],
+        Some(json!({
+            "code": "ABCD2345EFGH",
+            "publicKey": public_key(&signing_key()),
+            "attestationChallenge": nonce,
+            "attestationChain": [encoded(b"certificate")],
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(body["error"], "enrollment_expired");
+}
+
+#[tokio::test]
+async fn enrollment_is_single_use_and_rate_limited() {
+    let harness = harness().await;
+    harness.openbao.clear_device();
+    harness
+        .openbao
+        .set_enrollment(&enrollment_hash("ABCD2345EFGH"), unix_now() + 900);
+    let mut last = StatusCode::OK;
+    for _ in 0..5 {
+        let nonce = attestation(&harness.app, OWNER_TOKEN).await;
+        let (status, _, _) = call(
+            &harness.app,
+            Method::POST,
+            "/v1/device/enroll",
+            Some(OWNER_TOKEN),
+            &[],
+            Some(json!({
+                "code": "WRONGCODE",
+                "publicKey": public_key(&signing_key()),
+                "attestationChallenge": nonce,
+                "attestationChain": [encoded(b"certificate")],
+            })),
+        )
+        .await;
+        last = status;
+    }
+    assert_eq!(last, StatusCode::TOO_MANY_REQUESTS);
+    let nonce = attestation(&harness.app, OWNER_TOKEN).await;
+    let (status, _, body) = call(
+        &harness.app,
+        Method::POST,
+        "/v1/device/enroll",
+        Some(OWNER_TOKEN),
+        &[],
+        Some(json!({
+            "code": "ABCD2345EFGH",
+            "publicKey": public_key(&signing_key()),
+            "attestationChallenge": nonce,
+            "attestationChain": [encoded(b"certificate")],
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
+    assert_eq!(body["error"], "rate_limited");
+}
+
+#[tokio::test]
+async fn enrollment_rejects_a_missing_code_a_bad_key_and_an_empty_chain() {
+    let harness = harness().await;
+    harness.openbao.clear_device();
+    let nonce = attestation(&harness.app, OWNER_TOKEN).await;
+    let (status, _, body) = call(
+        &harness.app,
+        Method::POST,
+        "/v1/device/enroll",
+        Some(OWNER_TOKEN),
+        &[],
+        Some(json!({
+            "code": "ABCD2345EFGH",
+            "publicKey": public_key(&signing_key()),
+            "attestationChallenge": nonce,
+            "attestationChain": [encoded(b"certificate")],
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(body["error"], "enrollment_closed");
+
+    harness
+        .openbao
+        .set_enrollment(&enrollment_hash("ABCD2345EFGH"), unix_now() + 900);
+    let nonce = attestation(&harness.app, OWNER_TOKEN).await;
+    let (status, _, body) = call(
+        &harness.app,
+        Method::POST,
+        "/v1/device/enroll",
+        Some(OWNER_TOKEN),
+        &[],
+        Some(json!({
+            "code": "ABCD2345EFGH",
+            "publicKey": "not-a-key",
+            "attestationChallenge": nonce,
+            "attestationChain": [encoded(b"certificate")],
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "public_key_invalid");
+
+    let nonce = attestation(&harness.app, OWNER_TOKEN).await;
+    let (status, _, body) = call(
+        &harness.app,
+        Method::POST,
+        "/v1/device/enroll",
+        Some(OWNER_TOKEN),
+        &[],
+        Some(json!({
+            "code": "ABCD2345EFGH",
+            "publicKey": public_key(&signing_key()),
+            "attestationChallenge": nonce,
+            "attestationChain": [],
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "attestation_invalid");
+}
+
+#[tokio::test]
+async fn a_new_enrollment_replaces_the_previous_key() {
+    let harness = harness().await;
+    harness
+        .openbao
+        .set_enrollment(&enrollment_hash("ABCD2345EFGH"), unix_now() + 900);
+    let new_key = other_signing_key();
+    let nonce = attestation(&harness.app, OWNER_TOKEN).await;
+    let (status, _, _) = call(
+        &harness.app,
+        Method::POST,
+        "/v1/device/enroll",
+        Some(OWNER_TOKEN),
+        &[],
+        Some(json!({
+            "code": "ABCD2345EFGH",
+            "publicKey": public_key(&new_key),
+            "attestationChallenge": nonce,
+            "attestationChain": [encoded(b"certificate")],
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    let (challenge, payload) = issue(&harness.app, OWNER_TOKEN, json!({"action": "session"})).await;
+    let (status, _, body) = call(
+        &harness.app,
+        Method::POST,
+        "/v1/step-up",
+        Some(OWNER_TOKEN),
+        &[],
+        Some(json!({
+            "challenge": challenge,
+            "signature": signature(&payload),
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(body["error"], "step_up_invalid");
+
+    let (challenge, payload) = issue(&harness.app, OWNER_TOKEN, json!({"action": "session"})).await;
+    let (status, _, body) = call(
+        &harness.app,
+        Method::POST,
+        "/v1/step-up",
+        Some(OWNER_TOKEN),
+        &[],
+        Some(json!({
+            "challenge": challenge,
+            "signature": sign_with(&new_key, &payload),
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+}
+
+#[tokio::test]
+async fn enrollment_needs_a_fresh_attestation_challenge() {
+    let harness = harness().await;
+    harness.openbao.clear_device();
+    harness
+        .openbao
+        .set_enrollment(&enrollment_hash("ABCD2345EFGH"), unix_now() + 900);
+    let nonce = attestation(&harness.app, OWNER_TOKEN).await;
+    let body = json!({
+        "code": "WRONGCODE",
+        "publicKey": public_key(&signing_key()),
+        "attestationChallenge": nonce,
+        "attestationChain": [encoded(b"certificate")],
+    });
+    let (status, _, _) = call(
+        &harness.app,
+        Method::POST,
+        "/v1/device/enroll",
+        Some(OWNER_TOKEN),
+        &[],
+        Some(body.clone()),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    let (status, _, body) = call(
+        &harness.app,
+        Method::POST,
+        "/v1/device/enroll",
+        Some(OWNER_TOKEN),
+        &[],
+        Some(body),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(body["error"], "attestation_challenge_invalid");
+}
+
+fn unix_now() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("clock")
+        .as_secs()
+}
+
+#[tokio::test]
+async fn a_revoked_device_is_announced_once() {
+    let mut harness = harness().await;
+    harness.openbao.revoke_device();
+    let (status, _, body) = call(
+        &harness.app,
+        Method::GET,
+        "/v1/secrets",
+        Some(OWNER_TOKEN),
+        &[],
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let received = pushes(&mut harness.pushes).await;
+    assert_eq!(received.len(), 1, "{received:?}");
+    assert_eq!(received[0]["data"]["entity"], "secrets");
+    assert!(received[0]["data"].get("path").is_none());
+    assert_eq!(received[0]["deepLink"], "home://secrets/device");
+    assert!(
+        received[0]["body"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("Отзыв телефона")
+    );
+    assert!(
+        !harness
+            .openbao
+            .device()
+            .contains_key("device_revoke_device_id")
+    );
+
+    let (status, _, _) = call(
+        &harness.app,
+        Method::GET,
+        "/v1/secrets",
+        Some(OWNER_TOKEN),
+        &[],
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(pushes(&mut harness.pushes).await.is_empty());
+}
+
+#[tokio::test]
 async fn repeated_step_up_failures_are_rate_limited() {
     let harness = harness().await;
     let mut last = StatusCode::OK;
     for _ in 0..5 {
+        let (challenge, _) = issue(&harness.app, OWNER_TOKEN, json!({"action": "session"})).await;
         let (status, _, _) = call(
             &harness.app,
             Method::POST,
             "/v1/step-up",
             Some(OWNER_TOKEN),
             &[],
-            Some(json!({"totp": "abc"})),
+            Some(json!({
+                "challenge": challenge,
+                "signature": sign_with(&other_signing_key(), "wrong"),
+            })),
         )
         .await;
         last = status;
@@ -1108,10 +1895,10 @@ async fn repeated_step_up_failures_are_rate_limited() {
     let (status, _, body) = call(
         &harness.app,
         Method::POST,
-        "/v1/step-up",
+        "/v1/step-up/challenge",
         Some(OWNER_TOKEN),
         &[],
-        Some(json!({"totp": code()})),
+        Some(json!({"action": "session"})),
     )
     .await;
     assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);

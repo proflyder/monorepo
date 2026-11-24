@@ -1,12 +1,16 @@
 package dev.proflyder.home.feature.secrets.data
 
 import dev.proflyder.home.core.model.Clock
+import dev.proflyder.home.core.model.DeviceAttestationChallenge
+import dev.proflyder.home.core.model.DeviceEnrollment
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.model.SecretMetadata
+import dev.proflyder.home.core.model.SecretOperation
 import dev.proflyder.home.core.model.SecretRollback
 import dev.proflyder.home.core.model.SecretValue
 import dev.proflyder.home.core.model.SecretVersionRef
+import dev.proflyder.home.core.model.StepUpChallenge
 import dev.proflyder.home.core.network.SecretsApi
 import dev.proflyder.home.feature.secrets.SecretsCatalogState
 import dev.proflyder.home.feature.secrets.SecretsRepository
@@ -51,13 +55,34 @@ class RemoteSecretsRepository(
 
     override suspend fun metadata(path: String): Outcome<SecretMetadata> = api.metadata(path)
 
-    override suspend fun stepUp(totp: String): Outcome<Unit> = when (val result = api.stepUp(totp)) {
-        is Outcome.Success -> {
-            startSession(result.value.session, result.value.expiresInSeconds)
-            Outcome.Success(Unit)
+    override suspend fun device(): Outcome<DeviceEnrollment> = api.device()
+
+    override suspend fun deviceChallenge(): Outcome<DeviceAttestationChallenge> = api.deviceChallenge()
+
+    override suspend fun enroll(
+        code: String,
+        publicKey: String,
+        attestationChallenge: String,
+        attestationChain: List<String>,
+    ): Outcome<DeviceEnrollment> =
+        api.enroll(code, publicKey, attestationChallenge, attestationChain)
+
+    override suspend fun challenge(
+        operation: SecretOperation,
+        path: String?,
+        key: String?,
+        version: Long?,
+        cas: Long?,
+    ): Outcome<StepUpChallenge> = api.challenge(operation, path, key, version, cas)
+
+    override suspend fun stepUp(challenge: String, signature: String): Outcome<Unit> =
+        when (val result = api.stepUp(challenge, signature)) {
+            is Outcome.Success -> {
+                startSession(result.value.session, result.value.expiresInSeconds)
+                Outcome.Success(Unit)
+            }
+            is Outcome.Failure -> result
         }
-        is Outcome.Failure -> result
-    }
 
     override suspend fun reveal(path: String, key: String, version: Long): Outcome<SecretValue> {
         val active = session?.takeIf { clock.elapsedNanos() < expiresAtNanos }
@@ -75,18 +100,25 @@ class RemoteSecretsRepository(
         key: String,
         value: String,
         cas: Long,
-        totp: String,
-    ): Outcome<SecretVersionRef> = api.update(path, key, value, cas, totp)
+        challenge: String,
+        signature: String,
+    ): Outcome<SecretVersionRef> = api.update(path, key, value, cas, challenge, signature)
 
     override suspend fun rollback(
         path: String,
         version: Long,
         cas: Long,
-        totp: String,
-    ): Outcome<SecretRollback> = api.rollback(path, version, cas, totp)
+        challenge: String,
+        signature: String,
+    ): Outcome<SecretRollback> = api.rollback(path, version, cas, challenge, signature)
 
-    override suspend fun delete(path: String, cas: Long, version: Long, totp: String): Outcome<Unit> =
-        api.delete(path, cas, version, totp)
+    override suspend fun delete(
+        path: String,
+        cas: Long,
+        version: Long,
+        challenge: String,
+        signature: String,
+    ): Outcome<Unit> = api.delete(path, cas, version, challenge, signature)
 
     private fun startSession(session: String, expiresInSeconds: Long) {
         this.session = session

@@ -12,6 +12,7 @@ import dev.proflyder.home.core.model.SecretVersion
 import dev.proflyder.home.feature.secrets.impl.databinding.DialogSecretStepupBinding
 import dev.proflyder.home.feature.secrets.impl.databinding.FragmentSecretPathBinding
 import dev.proflyder.home.feature.secrets.impl.databinding.FragmentSecretsCatalogBinding
+import dev.proflyder.home.feature.secrets.impl.databinding.FragmentSecretsDeviceBinding
 import dev.proflyder.home.feature.secrets.presentation.SecretPathAdapter
 import dev.proflyder.home.feature.secrets.presentation.SecretPathRow
 import dev.proflyder.home.feature.secrets.presentation.SecretsCatalogAdapter
@@ -58,6 +59,7 @@ class SecretsScreenshotTest {
             ),
         )
         binding.secretsCatalogSearch.setText("k8s")
+        binding.secretsCatalogDevice.visibility = View.VISIBLE
         binding.secretsCatalogProgress.visibility = View.GONE
         shadowOf(android.os.Looper.getMainLooper()).idle()
 
@@ -125,18 +127,34 @@ class SecretsScreenshotTest {
     }
 
     @Test
-    fun theTotpDialogAsksForSixDigits() {
+    fun theEnrollmentScreenAsksForAOneTimeCode() {
+        val context = themed()
+        val binding = FragmentSecretsDeviceBinding.inflate(LayoutInflater.from(context))
+        binding.secretsDeviceProgress.visibility = View.GONE
+        binding.secretsDeviceStatus.text = context.getString(
+            dev.proflyder.home.feature.secrets.impl.R.string.secrets_device_not_enrolled,
+        )
+        binding.secretsDeviceCode.setText("ABCD2345EFGH")
+        binding.secretsDeviceBind.isEnabled = true
+        shadowOf(android.os.Looper.getMainLooper()).idle()
+
+        val bitmap = render(surface(context, binding.root), 411, 480)
+        save(bitmap, "secrets-device-enroll.png")
+        assertTrue(bitmap.width > 0)
+    }
+
+    @Test
+    fun theDeviceStepExplainsWhatTheKeySigns() {
         val context = themed()
         val binding = DialogSecretStepupBinding.inflate(LayoutInflater.from(context))
-        binding.secretTotpInput.setText("123456")
         shadowOf(android.os.Looper.getMainLooper()).idle()
         val wrapper = FrameLayout(context).apply {
             setPadding(32, 32, 32, 32)
             setBackgroundColor(MaterialColors.getColor(this, com.google.android.material.R.attr.colorSurface))
             addView(binding.root)
         }
-        val bitmap = render(wrapper, 411, 320)
-        save(bitmap, "secrets-totp.png")
+        val bitmap = render(wrapper, 411, 260)
+        save(bitmap, "secrets-stepup.png")
         assertTrue(bitmap.width > 0)
     }
 
