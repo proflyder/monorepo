@@ -76,14 +76,14 @@ metro_android_library(
         "@maven//:com_squareup_okhttp3_okhttp",
         "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_android",
     ] + select({
-        ":network_inspection_off": [],
-        "//conditions:default": ["//projects/mobile/android/app/diagnostics"],
+        ":network_inspection_on": ["//projects/mobile/android/app/diagnostics"],
+        "//conditions:default": [],
     }),
 )
 
 config_setting(
-    name = "network_inspection_off",
-    define_values = {"home_network_inspection": "off"},
+    name = "network_inspection_on",
+    define_values = {"home_network_inspection": "on"},
 )
 
 home_android_binary(
@@ -125,6 +125,16 @@ sh_test(
         ":app.apk",
         "@androidsdk//:aapt2",
     ],
+)
+
+sh_test(
+    name = "apk_network_inspection_test",
+    srcs = ["//platform/android:apk_network_inspection_test.sh"],
+    args = ["$(location :app.apk)"] + select({
+        ":network_inspection_on": ["present"],
+        "//conditions:default": ["absent"],
+    }),
+    data = [":app.apk"],
 )
 
 home_android_local_test(

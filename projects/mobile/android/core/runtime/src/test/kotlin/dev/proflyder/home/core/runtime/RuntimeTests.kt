@@ -9,6 +9,7 @@ import org.junit.runners.Suite
     AppSyncSignalsTest::class,
     BackoffTest::class,
     ProcessAppForegroundTest::class,
+    ProcessAppActivationTest::class,
     DeviceIdentityTest::class,
     ObservabilityTest::class,
 )

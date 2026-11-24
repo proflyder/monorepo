@@ -4,6 +4,7 @@ import android.content.Intent
 import dev.proflyder.home.core.model.Clock
 import dev.proflyder.home.core.model.VpnProfile
 import dev.proflyder.home.core.model.VpnProtocolId
+import dev.proflyder.home.core.runtime.AppActivation
 import dev.proflyder.home.core.runtime.AppForeground
 import dev.proflyder.home.core.runtime.ForegroundState
 import dev.proflyder.home.feature.vpn.transport.SystemVpnStarts
@@ -19,6 +20,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.update
 
@@ -59,6 +61,18 @@ internal class FakeForeground(foreground: Boolean) : AppForeground {
 
     fun move(foreground: Boolean) {
         state.value = ForegroundState(foreground, 0)
+    }
+}
+
+internal class FakeActivation(active: Boolean = true) : AppActivation {
+    override val active = MutableStateFlow(active)
+
+    override fun activate() {
+        this.active.value = true
+    }
+
+    override suspend fun awaitActive() {
+        this.active.first { it }
     }
 }
 

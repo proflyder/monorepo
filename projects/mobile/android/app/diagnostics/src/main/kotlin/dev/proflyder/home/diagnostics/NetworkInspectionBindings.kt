@@ -4,6 +4,7 @@ import android.content.Context
 import com.chuckerteam.chucker.api.ChuckerCollector
 import com.chuckerteam.chucker.api.ChuckerInterceptor
 import com.chuckerteam.chucker.api.RetentionManager
+import dev.proflyder.home.core.model.AppEnvironment
 import dev.proflyder.home.core.model.AppLogger
 import dev.proflyder.home.core.model.debug
 import dev.proflyder.home.core.network.NetworkInspection
@@ -27,17 +28,21 @@ object NetworkInspectionBindings {
     @IntoSet
     @NetworkInspection
     @SingleIn(AppScope::class)
-    fun provideLogging(logger: AppLogger): Interceptor = HttpLoggingInterceptor { message -> logger.debug(LOG_TAG, message) }.apply {
-        level = HttpLoggingInterceptor.Level.BODY
-        redactHeader(REDACTED_HEADER)
-    }
+    fun provideLogging(logger: AppLogger, environment: AppEnvironment): Interceptor =
+        HttpLoggingInterceptor { message -> logger.debug(LOG_TAG, message) }.apply {
+            level = when (environment) {
+                AppEnvironment.DEBUG -> HttpLoggingInterceptor.Level.BODY
+                AppEnvironment.RELEASE -> HttpLoggingInterceptor.Level.NONE
+            }
+            redactHeader(REDACTED_HEADER)
+        }
 
     @Provides
     @IntoSet
     @NetworkInspection
     @SingleIn(AppScope::class)
     fun provideChucker(context: Context): Interceptor = ChuckerInterceptor.Builder(context)
-        .collector(ChuckerCollector(context, showNotification = true, retentionPeriod = RetentionManager.Period.ONE_DAY))
+        .collector(ChuckerCollector(context, showNotification = false, retentionPeriod = RetentionManager.Period.ONE_DAY))
         .maxContentLength(MAX_BODY_BYTES)
         .redactHeaders(REDACTED_HEADER)
         .alwaysReadResponseBody(false)

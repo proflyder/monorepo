@@ -1,5 +1,6 @@
 package dev.proflyder.home.feature.vpn.connect
 
+import dev.proflyder.home.feature.vpn.FakeActivation
 import dev.proflyder.home.feature.vpn.FakeController
 import dev.proflyder.home.feature.vpn.FakeEnvironment
 import dev.proflyder.home.feature.vpn.FakeForeground
@@ -37,7 +38,7 @@ class AutoConnectCoordinatorTest {
     private val systemStarts = FakeSystemStarts()
     private val logger = FakeAppLogger()
 
-    private fun coordinator(scope: CoroutineScope) = AutoConnectCoordinator(
+    private fun coordinator(scope: CoroutineScope, activation: FakeActivation = FakeActivation()) = AutoConnectCoordinator(
         controller,
         controller,
         permission,
@@ -48,6 +49,7 @@ class AutoConnectCoordinatorTest {
         userIntent,
         systemStarts,
         AutoConnectJournal(logger),
+        activation,
         scope,
     ).also { it.start() }
 
@@ -241,6 +243,70 @@ class AutoConnectCoordinatorTest {
         assertEquals(HomeRoute.READY, subject.route.value)
         assertTrue(controller.commands.isEmpty())
         assertTrue(logger.entries.any { "source=ENVIRONMENT_TIMEOUT action=NONE reason=ENVIRONMENT_UNKNOWN" in it.message })
+    }
+
+    @Test
+    fun aColdStartInAnUnknownEnvironmentNeverConnects() = runTest {
+        settings.settings.value = VpnSettings(autoConnect = true)
+        foreground.move(false)
+        val activation = FakeActivation(active = false)
+        val subject = coordinator(backgroundScope, activation)
+        runCurrent()
+        assertEquals(HomeRoute.READY, subject.route.value)
+        advanceTimeBy(30_000)
+        runCurrent()
+        assertTrue(controller.commands.isEmpty())
+        activation.activate()
+        runCurrent()
+        advanceTimeBy(16_000)
+        runCurrent()
+        assertTrue(controller.commands.isEmpty())
+        assertTrue(logger.entries.any { "source=ENVIRONMENT_TIMEOUT action=NONE reason=ENVIRONMENT_UNKNOWN" in it.message })
+    }
+
+    @Test
+    fun aColdStartAtHomeNeverConnectsEvenWithAutoConnect() = runTest {
+        settings.settings.value = VpnSettings(autoConnect = true)
+        foreground.move(false)
+        environment.state.value = HomeNetworkState.Home(setOf(1L))
+        val activation = FakeActivation(active = false)
+        val subject = coordinator(backgroundScope, activation)
+        runCurrent()
+        assertTrue(controller.commands.isEmpty())
+        activation.activate()
+        runCurrent()
+        assertEquals(HomeRoute.READY, subject.route.value)
+        assertTrue(controller.commands.isEmpty())
+        assertTrue(logger.entries.any { "reason=AT_HOME" in it.message })
+    }
+
+    @Test
+    fun aColdStartAwayConnectsOnlyAfterTheProcessIsUsed() = runTest {
+        settings.settings.value = VpnSettings(autoConnect = true)
+        foreground.move(false)
+        environment.state.value = HomeNetworkState.Away(setOf(1L))
+        val activation = FakeActivation(active = false)
+        val subject = coordinator(backgroundScope, activation)
+        runCurrent()
+        assertTrue(controller.commands.isEmpty())
+        assertEquals(HomeRoute.READY, subject.route.value)
+        activation.activate()
+        runCurrent()
+        assertEquals(listOf("connect"), controller.commands)
+        assertEquals(listOf(ConnectOrigin.AUTO_POLICY), controller.origins)
+        assertEquals(HomeRoute.CONNECTING, subject.route.value)
+    }
+
+    @Test
+    fun aSystemVpnRestartIsEvaluatedWithoutForegroundUse() = runTest {
+        settings.settings.value = VpnSettings(autoConnect = true)
+        foreground.move(false)
+        environment.state.value = HomeNetworkState.Away(setOf(1L))
+        coordinator(backgroundScope, FakeActivation(active = false))
+        runCurrent()
+        systemStarts.starts.emit(Unit)
+        runCurrent()
+        assertEquals(listOf(ConnectOrigin.AUTO_POLICY), controller.origins)
     }
 
     @Test

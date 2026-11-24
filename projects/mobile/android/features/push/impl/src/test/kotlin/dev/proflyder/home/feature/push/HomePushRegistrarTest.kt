@@ -9,6 +9,7 @@ import dev.proflyder.home.core.model.DeviceIdentity
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.network.PushDevicesApi
+import dev.proflyder.home.core.runtime.AppActivation
 import dev.proflyder.home.core.runtime.AppVersion
 import dev.proflyder.home.core.testing.FakeClock
 import kotlinx.coroutines.CompletableDeferred
@@ -17,6 +18,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -34,6 +36,7 @@ class HomePushRegistrarTest {
     private val store = MemoryStore()
     private val tokens = MutableTokenSource()
     private val settings = MutableSettings()
+    private val activation = HomeActivation()
     private val registrar = HomePushRegistrar(
         store = store,
         tokens = tokens,
@@ -42,8 +45,21 @@ class HomePushRegistrarTest {
         settings = settings,
         version = FixedVersion,
         clock = FakeClock(wallMillis = 1_000_000L),
+        activation = activation,
         scope = scope.backgroundScope,
     )
+
+    private class HomeActivation(active: Boolean = true) : AppActivation {
+        override val active = MutableStateFlow(active)
+
+        override fun activate() {
+            this.active.value = true
+        }
+
+        override suspend fun awaitActive() {
+            this.active.first { it }
+        }
+    }
 
     @After
     fun tearDown() {
@@ -58,6 +74,19 @@ class HomePushRegistrarTest {
         tokens.refreshed("token-a")
         scope.runCurrent()
         assertTrue(api.tokens.isEmpty())
+    }
+
+    @Test
+    fun aColdStartDoesNotRegisterUntilTheAppIsUsed() {
+        activation.active.value = false
+        settings.configure("https://home.test")
+        tokens.refreshed("token-a")
+        registrar.start()
+        scope.runCurrent()
+        assertTrue(api.tokens.isEmpty())
+        activation.activate()
+        scope.runCurrent()
+        assertEquals(listOf("token-a"), api.tokens)
     }
 
     @Test
