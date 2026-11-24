@@ -12,6 +12,7 @@ use subtle::ConstantTimeEq;
 use thiserror::Error;
 use tokio::time::Instant;
 
+use crate::attestation::{self, Roots};
 use crate::limiter::Limiter;
 use crate::openbao::{self, OpenBao};
 
@@ -85,11 +86,13 @@ pub struct DeviceStore {
     openbao: Arc<OpenBao>,
     path: String,
     limiter: Limiter,
-    attestations: Mutex<HashMap<String, Attestation>>,
+    attestations: Mutex<HashMap<String, PendingChallenge>>,
     revoked_poll: Mutex<Option<Instant>>,
+    roots: Roots,
+    fixed_challenge: Option<String>,
 }
 
-struct Attestation {
+struct PendingChallenge {
     nonce: String,
     expires_at: u64,
 }
@@ -102,12 +105,24 @@ struct Record {
 impl DeviceStore {
     #[must_use]
     pub fn new(openbao: Arc<OpenBao>, path: &str) -> Self {
+        Self::with_roots(openbao, path, Roots::pinned(), None)
+    }
+
+    #[must_use]
+    pub fn with_roots(
+        openbao: Arc<OpenBao>,
+        path: &str,
+        roots: Roots,
+        fixed_challenge: Option<String>,
+    ) -> Self {
         Self {
             openbao,
             path: path.to_owned(),
             limiter: Limiter::new(),
             attestations: Mutex::new(HashMap::new()),
             revoked_poll: Mutex::new(None),
+            roots,
+            fixed_challenge,
         }
     }
 
@@ -168,10 +183,13 @@ impl DeviceStore {
         principal: &str,
         now_unix: u64,
     ) -> Result<(String, u64), Error> {
-        let nonce = home_secret::hex(32)
-            .map_err(|_| Error::Unavailable)?
-            .expose()
-            .to_owned();
+        let nonce = match &self.fixed_challenge {
+            Some(challenge) => challenge.clone(),
+            None => home_secret::hex(32)
+                .map_err(|_| Error::Unavailable)?
+                .expose()
+                .to_owned(),
+        };
         let mut attestations = self
             .attestations
             .lock()
@@ -182,7 +200,7 @@ impl DeviceStore {
         }
         attestations.insert(
             principal.to_owned(),
-            Attestation {
+            PendingChallenge {
                 nonce: nonce.clone(),
                 expires_at: now_unix + ATTESTATION_TTL_SECONDS,
             },
@@ -222,9 +240,6 @@ impl DeviceStore {
         request: &Enrollment<'_>,
         now_unix: u64,
     ) -> Result<Device, Error> {
-        self.consume_attestation(principal, request.challenge, now_unix)?;
-        decode_public_key(request.public_key)?;
-        let attestation = attestation_digest(request.attestation_chain)?;
         let record = self.record().await?;
         let stored_hash = record
             .data
@@ -245,6 +260,16 @@ impl DeviceStore {
         if !hashes_match(&hash_code(&code), stored_hash) {
             return Err(Error::CodeInvalid);
         }
+        self.consume_attestation(principal, request.challenge, now_unix)?;
+        let public_key_der = public_key_der(request.public_key)?;
+        let attestation = attestation::verify(
+            request.attestation_chain,
+            request.challenge,
+            &public_key_der,
+            &self.roots,
+            now_unix,
+        )
+        .map_err(|_| Error::AttestationInvalid)?;
         let device_id = home_secret::hex(16)
             .map_err(|_| Error::Unavailable)?
             .expose()
@@ -258,7 +283,15 @@ impl DeviceStore {
             request.public_key.to_owned(),
         );
         data.insert("device_enrolled_at".to_owned(), now_unix.to_string());
-        data.insert("device_attestation_sha256".to_owned(), attestation);
+        data.insert(
+            "device_attestation_sha256".to_owned(),
+            attestation.fingerprint,
+        );
+        data.insert(
+            "device_security_level".to_owned(),
+            attestation.security_level.to_string(),
+        );
+        data.insert("device_verified_boot".to_owned(), attestation.verified_boot);
         let fingerprint = fingerprint(request.public_key);
         data.insert("device_fingerprint".to_owned(), fingerprint);
         self.openbao
@@ -350,7 +383,7 @@ fn hashes_match(provided: &str, stored: &str) -> bool {
     provided.as_bytes().ct_eq(stored.as_bytes()).into()
 }
 
-fn decode_public_key(encoded: &str) -> Result<VerifyingKey, Error> {
+fn public_key_der(encoded: &str) -> Result<Vec<u8>, Error> {
     if encoded.is_empty() || encoded.len() > MAX_PUBLIC_KEY_BYTES * 2 {
         return Err(Error::KeyInvalid);
     }
@@ -360,29 +393,16 @@ fn decode_public_key(encoded: &str) -> Result<VerifyingKey, Error> {
     if der.len() > MAX_PUBLIC_KEY_BYTES {
         return Err(Error::KeyInvalid);
     }
+    Ok(der)
+}
+
+fn decode_public_key(encoded: &str) -> Result<VerifyingKey, Error> {
+    let der = public_key_der(encoded)?;
     VerifyingKey::from_public_key_der(&der).map_err(|_| Error::KeyInvalid)
 }
 
 fn fingerprint(encoded: &str) -> String {
     hex::encode(Sha256::digest(encoded.as_bytes()))
-}
-
-fn attestation_digest(chain: &[String]) -> Result<String, Error> {
-    if chain.is_empty() || chain.len() > MAX_ATTESTATION_CERTIFICATES {
-        return Err(Error::AttestationInvalid);
-    }
-    let mut hasher = Sha256::new();
-    for item in chain {
-        let der = URL_SAFE_NO_PAD_INDIFFERENT
-            .decode(item)
-            .map_err(|_| Error::AttestationInvalid)?;
-        if der.is_empty() || der.len() > MAX_ATTESTATION_CERTIFICATE_BYTES {
-            return Err(Error::AttestationInvalid);
-        }
-        hasher.update(u64::try_from(der.len()).unwrap_or(u64::MAX).to_be_bytes());
-        hasher.update(&der);
-    }
-    Ok(hex::encode(hasher.finalize()))
 }
 
 fn map_write(error: openbao::Error) -> Error {
@@ -424,13 +444,5 @@ mod tests {
         assert!(hashes_match(&hash, &hash));
         assert!(!hashes_match(&hash, &hash_code("OTHER")));
         assert!(!hashes_match("abc", &hash));
-    }
-
-    #[test]
-    fn an_attestation_chain_must_be_well_formed() {
-        assert!(attestation_digest(&[]).is_err());
-        assert!(attestation_digest(&["***".to_owned()]).is_err());
-        assert!(attestation_digest(&["".to_owned()]).is_err());
-        assert!(attestation_digest(&[encode_base64(b"certificate")]).is_ok());
     }
 }

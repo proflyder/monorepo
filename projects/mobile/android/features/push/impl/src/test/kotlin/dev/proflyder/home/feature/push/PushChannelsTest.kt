@@ -70,12 +70,37 @@ class PushChannelsTest {
     }
 
     @Test
+    fun secretsNotificationsHideTheirPathOnTheLockScreen() {
+        val context = RuntimeEnvironment.getApplication()
+        PushChannels.ensure(context)
+        org.robolectric.Shadows.shadowOf(context as android.app.Application)
+            .grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
+        val notifier = PushNotifier(
+            context,
+            ThemedNotificationAccent(context, appearance(context)),
+            AndroidNotificationPermission(context),
+            PushIntentToken(context),
+        )
+
+        notifier.notify(PushMessage.Notify("Секреты", "Показ секрета", null, "secrets"))
+
+        val notification = org.robolectric.Shadows.shadowOf(manager(context)).getNotification(71)
+        assertNotNull(notification)
+        assertEquals(Notification.VISIBILITY_SECRET, notification!!.visibility)
+    }
+
+    @Test
     @Suppress("DEPRECATION")
     fun theRingNotificationIsSilentAndAlertsOnce() {
         val context = RuntimeEnvironment.getApplication()
         PushChannels.ensure(context)
 
-        val notification = PushNotifier(context, ThemedNotificationAccent(context, appearance(context)), AndroidNotificationPermission(context)).ring("Рикардо")
+        val notification = PushNotifier(
+            context,
+            ThemedNotificationAccent(context, appearance(context)),
+            AndroidNotificationPermission(context),
+            PushIntentToken(context),
+        ).ring("Рикардо")
 
         assertEquals(PushChannels.FIND, notification.channelId)
         assertNull(notification.sound)

@@ -412,15 +412,25 @@
     Android 11+, подпись через `BiometricPrompt.CryptoObject`. Привязка —
     одноразовый код из `admin:secrets-device-enroll` (15 минут, хранится
     хешем в OpenBao, single-use, constant-time, с backoff): приложение
-    отправляет публичный ключ, цепочку key attestation и код, сервер хранит
-    ключ и device id в `k8s/home-assistant/secrets-gateway-device`. Путь скрыт
-    от HTTP API (`deny.json` + reserved path) и не синхронизируется ESO.
+    отправляет публичный ключ, цепочку key attestation и код. Сервер проверяет
+    цепочку до закреплённых Google Hardware Attestation корней (RSA и ECDSA),
+    совпадение `attestationChallenge` с выданным nonce, `securityLevel` TEE или
+    StrongBox, публичный ключ листа и verified boot (проверяется и логируется),
+    затем хранит ключ и device id в
+    `k8s/home-assistant/secrets-gateway-device`. Путь скрыт от HTTP API только
+    проверкой в коде: `deny.json` его не покрывает, потому что из него
+    генерируется `policy.hcl`, а поду нужен доступ. ESO путь не синхронизирует.
     Повторная привязка заменяет ключ, `--revoke` удаляет его, и сервис читает
     ключ на каждый запрос, поэтому отзыв действует без рестарта.
     Challenge — 32 случайных байта, привязанные к token id, действию,
     пути/ключу/версии и сроку 60 секунд; подпись ECDSA-P256 проверяется в Rust
-    (`p256`), nonce одноразовый, использованные nonce пишутся на PVC.
-    Reveal обменивает подпись `action=session` на 5-минутную сессию;
-    update/rollback/delete подписывают точную операцию. Причина: код TOTP
+    (`p256`), nonce одноразовый, использованные nonce пишутся на PVC; update
+    дополнительно связывает хеш нового значения. Reveal обменивает подпись
+    `action=session` на 5-минутную сессию; update/rollback/delete подписывают
+    точную операцию. Ключ создаётся с `setUnlockedDeviceRequired(true)`; флаг
+    `setInvalidatedByBiometricEnrollment(true)` не действует для ключей,
+    разрешающих device credential, поэтому после смены биометрии ключ может
+    остаться рабочим, а его отзыв/перепривязка — явные операции. Step-up
+    требует Android 9 (API 28), хотя minSdk приложения 26. Причина: код TOTP
     можно подсмотреть или переслать, а ключ не покидает Secure Element и
     каждая операция подтверждается биометрией или паролем устройства.

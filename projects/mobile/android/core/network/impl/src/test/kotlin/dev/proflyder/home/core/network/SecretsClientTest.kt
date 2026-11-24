@@ -139,10 +139,17 @@ class SecretsClientTest {
     @Test
     fun aChallengeBindsTheOperationAndReturnsItsSignedPayload() = runBlocking {
         respond(200, "stepup_challenge.json")
+        val valueHash = "ab".repeat(32)
 
         val challenge = (
-            client().challenge(SecretOperation.UPDATE, "k8s/home-assistant/phone-push", "service_token", null, 3)
-                as Outcome.Success
+            client().challenge(
+                SecretOperation.UPDATE,
+                "k8s/home-assistant/phone-push",
+                "service_token",
+                null,
+                3,
+                valueHash,
+            ) as Outcome.Success
             ).value
 
         assertEquals("challenge-1", challenge.challenge)
@@ -154,6 +161,7 @@ class SecretsClientTest {
         assertTrue(body.contains("\"path\":\"k8s/home-assistant/phone-push\""))
         assertTrue(body.contains("\"key\":\"service_token\""))
         assertTrue(body.contains("\"cas\":3"))
+        assertTrue(body.contains("\"valueHash\":\"$valueHash\""))
     }
 
     @Test
@@ -251,7 +259,7 @@ class SecretsClientTest {
                 .setBody(TestFixtures.read("secrets/rate_limited.json")),
         )
 
-        val failure = client().challenge(SecretOperation.SESSION, null, null, null, null) as Outcome.Failure
+        val failure = client().challenge(SecretOperation.SESSION, null, null, null, null, null) as Outcome.Failure
         val serverFailure = failure.failure as RemoteFailure.Server
 
         assertEquals(429, serverFailure.httpStatus)

@@ -31,7 +31,7 @@ Bearer — app-токен из snapshot scheduler'а, модуль `secrets`. Б
 | `POST /v1/secrets/reveal/{path}` `{key,version}` | значение одного ключа одной версии; нужен step-up session |
 | `POST /v1/secrets/update/{path}` `{key,value,cas}` | CAS-запись одного ключа в новую версию (остальные ключи сохраняются); soft-deleted текущая версия → `409 version_unavailable`; нужна подпись операции |
 | `POST /v1/secrets/rollback/{path}` `{version,cas}` | читает старую версию и пишет её как новую (CAS); нужна подпись операции |
-| `DELETE /v1/secrets/{path}?cas=N&version=N` | soft-delete последней версии (`DELETE secret/data/…`); `cas`/`version` обязаны совпасть с текущей; нужна подпись операции; **destroy/metadata-delete/undelete недоступны** |
+| `DELETE /v1/secrets/{path}?cas=N&version=N` | soft-delete последней версии (`DELETE secret/data/…`); `cas`/`version` обязаны совпасть с текущей, перед удалением метаданные перечитываются; нужна подпись операции; **destroy/metadata-delete/undelete недоступны** |
 | `GET /v1/device` | привязан ли телефон: `{enrolled, deviceId, enrolledAt}` |
 | `POST /v1/device/challenge` | одноразовый nonce для key attestation: `{challenge, expiresIn}` (15 минут) |
 | `POST /v1/device/enroll` `{code,publicKey,attestationChallenge,attestationChain}` | одноразовый код привязки + публичный ключ P-256; сервер сохраняет ключ и device id, старый ключ перестаёт работать |
@@ -53,16 +53,26 @@ Keystore (StrongBox при наличии), с обязательной ауте
 использование (`timeout 0`, `BIOMETRIC_STRONG | DEVICE_CREDENTIAL` на Android
 11+), и подписывает серверные challenge через `BiometricPrompt.CryptoObject`.
 Публичный ключ и device id хранятся в OpenBao
-`k8s/home-assistant/secrets-gateway-device`; путь скрыт из HTTP API
-(`deny.json` + reserved path в коде) и не синхронизируется ESO.
+`k8s/home-assistant/secrets-gateway-device`; путь скрыт из HTTP API только
+проверкой в коде (reserved path): `deny.json` его не покрывает, потому что из
+того же файла генерируется `policy.hcl`, а поду нужен доступ. ESO этот путь не
+синхронизирует.
 
 - **Привязка** — `mise run admin:secrets-device-enroll`: генерирует 16 байт
   (base32, 26 символов), пишет хеш SHA-256 и срок 15 минут в OpenBao, а сам код
   — в файл 0600 (stdout печатает путь). Код одноразовый, сравнение
-  constant-time, ошибки дают backoff. `--revoke` удаляет ключ и код.
+  constant-time, ошибки дают backoff; nonce расходуется только после успешной
+  проверки кода. `--revoke` удаляет ключ и код.
+- **Attestation** — цепочка проверяется до закреплённых в коде корней Google
+  Hardware Attestation (RSA и ECDSA), `attestationChallenge` должен совпадать с
+  выданным nonce, `securityLevel` — TEE или StrongBox, публичный ключ листа —
+  с привязываемым ключом. `verified boot verified/locked` проверяется и
+  логируется; непроверенное состояние попадает в лог и в
+  `device_verified_boot`.
 - **Challenge** — 32 случайных байта; payload
   `home-secrets-step-up/1` содержит id, `principal`, действие, путь, ключ,
-  версию, `cas` и `expires`. Клиент подписывает payload как есть
+  версию, `cas`, хеш нового значения (`valueSha256`, только update) и
+  `expires`. Клиент подписывает payload как есть
   (`SHA256withECDSA`, DER), сервер проверяет ECDSA-P256 (`p256`) и сверяет
   операцию с запросом. Подпись нельзя переиспользовать на другом пути,
   действии, версии или после рестарта: использованные nonce пишутся на PVC
@@ -76,9 +86,9 @@ Keystore (StrongBox при наличии), с обязательной ауте
   `60s, 120s, 240s, …` до часа; после 10 ошибок за 60 с глобальный лимитер
   блокирует все токены на 5 минут. Ответ — `429` c `Retry-After`.
 - Ошибки: `step_up_required`, `step_up_invalid`, `step_up_expired`,
-  `device_not_enrolled`, `device_unavailable`, `enrollment_invalid`,
-  `enrollment_closed`, `enrollment_expired`, `enrollment_conflict`,
-  `attestation_challenge_invalid`, `attestation_invalid`, `public_key_invalid`.
+  `device_not_enrolled`, `device_unavailable`, `enrollment_invalid` (общий
+  ответ на неверный/просроченный код, nonce или аттестацию; точная причина —
+  только в audit-логе), `enrollment_conflict`, `rate_limited`.
 
 ## Denylist
 
@@ -118,7 +128,9 @@ step-up и rate-limit. Каждый push несёт `data {entity:"secrets", pat
 `deepLink home://secrets/path/<percent-encoded-path>` (для привязки —
 `home://secrets/device`), поэтому приложение открывает нужный путь по тапу.
 Текст содержит действие и путь, но не значение. Push отправляется
-асинхронно и не ломает запрос при недоступном phone-push. Отзыв, сделанный
+асинхронно и не ломает запрос при недоступном phone-push; `module=secrets`
+уходит в FCM `data`, и приложение показывает его с `VISIBILITY_SECRET`, чтобы
+пути не появлялись на экране блокировки. Отзыв, сделанный
 `admin:secrets-device-enroll -- --revoke`, сервис замечает опросом OpenBao
 (не чаще раза в 30 секунд) и присылает один push.
 
@@ -169,7 +181,8 @@ traversal/percent-encoding и audit-push без значений. Реальны
   поэтому рестарт не позволяет replay. Нет состояния — сервис не стартует.
 - `device.rs` читает публичный ключ из OpenBao на каждый challenge/проверку
   сессии, поэтому `--revoke` действует сразу. Код привязки сравнивается
-  constant-time по SHA-256, аттестация сохраняется только хешем.
+  constant-time по SHA-256, attestation проверяется по Google-корням, а в
+  OpenBao сохраняется только её хеш и итоговое состояние.
 - `audit.rs` создаёт `PushBody` только из action/path; значения не входят в
   тип события, поэтому не могут утечь в push по ошибке.
 - `catalog.rs` и `deny.rs` читают файлы из ConfigMap (`SECRETS_GATEWAY_*_FILE`),

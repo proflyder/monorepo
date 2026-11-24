@@ -73,7 +73,8 @@ class RemoteSecretsRepository(
         key: String?,
         version: Long?,
         cas: Long?,
-    ): Outcome<StepUpChallenge> = api.challenge(operation, path, key, version, cas)
+        valueHash: String?,
+    ): Outcome<StepUpChallenge> = api.challenge(operation, path, key, version, cas, valueHash)
 
     override suspend fun stepUp(challenge: String, signature: String): Outcome<Unit> =
         when (val result = api.stepUp(challenge, signature)) {

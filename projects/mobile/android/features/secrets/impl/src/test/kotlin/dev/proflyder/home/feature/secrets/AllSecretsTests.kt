@@ -6,6 +6,7 @@ import org.junit.runners.Suite
 @RunWith(Suite::class)
 @Suite.SuiteClasses(
     SecretProblemTest::class,
+    AndroidDeviceSignerTest::class,
     SecretsCatalogViewModelTest::class,
     SecretPathViewModelTest::class,
     SecretsDeviceViewModelTest::class,

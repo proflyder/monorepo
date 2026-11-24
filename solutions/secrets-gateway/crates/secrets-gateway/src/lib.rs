@@ -1,5 +1,6 @@
 pub mod api;
 pub mod app;
+pub mod attestation;
 pub mod audit;
 pub mod catalog;
 pub mod config;

@@ -14,6 +14,8 @@ internal sealed interface SecretProblem {
 
     data object DeviceUnavailable : SecretProblem
 
+    data object DeviceRebindRequired : SecretProblem
+
     data object EnrollmentRejected : SecretProblem
 
     data object EnrollmentConflict : SecretProblem
@@ -65,6 +67,7 @@ internal fun secretProblem(failure: RemoteFailure): SecretProblem {
 
 internal fun signatureProblem(reason: DeviceSignatureFailure): SecretProblem = when (reason) {
     DeviceSignatureFailure.KEY_MISSING -> SecretProblem.DeviceNotEnrolled
+    DeviceSignatureFailure.KEY_INVALIDATED -> SecretProblem.DeviceRebindRequired
     DeviceSignatureFailure.UNSUPPORTED,
     DeviceSignatureFailure.KEYSTORE,
     DeviceSignatureFailure.AUTHENTICATION,

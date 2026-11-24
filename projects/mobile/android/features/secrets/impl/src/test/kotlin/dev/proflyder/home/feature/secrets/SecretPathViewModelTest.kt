@@ -123,6 +123,7 @@ class SecretPathViewModelTest {
         advanceUntilIdle()
 
         assertEquals(listOf(SecretOperation.UPDATE), repository.challenges)
+        assertEquals(dev.proflyder.home.feature.secrets.presentation.sha256Hex("new-value"), repository.lastValueHash)
         assertEquals(emptyList<Triple<String, String, Long>>(), repository.updates)
 
         sign(viewModel)

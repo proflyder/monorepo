@@ -9,11 +9,27 @@ import dev.zacsweers.metro.binding
 
 @ContributesIntoSet(AppScope::class, binding = binding<DeepLinkSource>())
 @Inject
-class PushDeepLinkSource : DeepLinkSource {
+class PushDeepLinkSource(private val token: PushIntentToken) : DeepLinkSource {
     override fun take(intent: Intent): String? {
-        val direct = intent.getStringExtra(PushIntents.EXTRA_DEEP_LINK)?.trim().orEmpty()
-        val fromTray = PushDeepLink.parse(intent.getStringExtra(PushPayloads.KEY_DEEP_LINK))?.route.orEmpty()
+        val authorized = token.matches(intent.getStringExtra(PushIntents.EXTRA_DEEP_LINK_TOKEN))
+        val direct = if (authorized) {
+            intent.getStringExtra(PushIntents.EXTRA_DEEP_LINK)
+                ?.let { PushDeepLink.parse("${PushDeepLink.SCHEME}://$it") }
+                ?.route
+                .orEmpty()
+        } else {
+            ""
+        }
+        val fromTray = if (authorized) {
+            intent.getStringExtra(PushPayloads.KEY_DEEP_LINK)
+                ?.let(PushDeepLink::parse)
+                ?.route
+                .orEmpty()
+        } else {
+            ""
+        }
         intent.removeExtra(PushIntents.EXTRA_DEEP_LINK)
+        intent.removeExtra(PushIntents.EXTRA_DEEP_LINK_TOKEN)
         intent.removeExtra(PushPayloads.KEY_DEEP_LINK)
         return direct.ifEmpty { fromTray }.ifEmpty { null }
     }

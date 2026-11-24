@@ -118,6 +118,7 @@ pub enum Message {
         title: String,
         body: String,
         deep_link: Option<String>,
+        module: Option<String>,
         data: BTreeMap<String, String>,
     },
     Sync {
@@ -158,6 +159,7 @@ impl Message {
                 title,
                 body,
                 deep_link,
+                module,
                 data,
             } => {
                 let mut fields = json!({
@@ -174,6 +176,9 @@ impl Message {
                 }
                 if let Some(link) = deep_link {
                     object.insert("deepLink".to_owned(), json!(link));
+                }
+                if let Some(module) = module {
+                    object.insert("module".to_owned(), json!(module));
                 }
                 json!({
                     "message": {
@@ -401,6 +406,7 @@ mod tests {
             title: "Дом".to_owned(),
             body: "Готово".to_owned(),
             deep_link: Some("home://alarms".to_owned()),
+            module: Some("secrets".to_owned()),
             data: BTreeMap::from([("entity".to_owned(), "secrets".to_owned())]),
         }
         .payload("token", "entry-1");
@@ -413,6 +419,7 @@ mod tests {
         assert_eq!(message["data"]["body"], "Готово");
         assert_eq!(message["data"]["deepLink"], "home://alarms");
         assert_eq!(message["data"]["entity"], "secrets");
+        assert_eq!(message["data"]["module"], "secrets");
     }
 
     #[test]

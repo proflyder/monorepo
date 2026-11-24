@@ -90,6 +90,7 @@ backon = { version = "=1.6.0", default-features = false, features = ["std", "tok
 hmac = "=0.13.0"
 sha1 = { version = "=0.11.0", default-features = false }
 sha2 = "=0.11.1"
+x509-parser = { version = "=0.18.1", default-features = false, features = ["verify"] }
 p256 = { version = "=0.14.0", default-features = false, features = ["ecdsa", "pkcs8", "std"] }
 russh = { version = "=0.65.1", default-features = false, features = ["ring", "rsa"] }
 rand = "=0.10.3"

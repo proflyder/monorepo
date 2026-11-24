@@ -122,6 +122,7 @@ internal data class SecretChallengeBody(
     val key: String? = null,
     val version: Long? = null,
     val cas: Long? = null,
+    val valueHash: String? = null,
 )
 
 @Serializable
@@ -248,8 +249,9 @@ class HttpSecretsClient(private val http: HomeHttp) : SecretsApi {
         key: String?,
         version: Long?,
         cas: Long?,
+        valueHash: String?,
     ): Outcome<StepUpChallenge> =
-        api.challenge(SecretChallengeBody(operation.wire, path, key, version, cas))
+        api.challenge(SecretChallengeBody(operation.wire, path, key, version, cas, valueHash))
             .mapResult { value -> StepUpChallenge(value.challenge, value.payload, value.expiresIn) }
 
     override suspend fun stepUp(challenge: String, signature: String): Outcome<StepUpSession> =

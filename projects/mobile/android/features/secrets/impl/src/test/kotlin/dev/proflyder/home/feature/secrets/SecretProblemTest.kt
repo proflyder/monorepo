@@ -60,6 +60,7 @@ class SecretProblemTest {
     @Test
     fun localSignerFailuresMapToDeviceProblems() {
         assertEquals(SecretProblem.DeviceNotEnrolled, signatureProblem(DeviceSignatureFailure.KEY_MISSING))
+        assertEquals(SecretProblem.DeviceRebindRequired, signatureProblem(DeviceSignatureFailure.KEY_INVALIDATED))
         assertEquals(SecretProblem.DeviceUnavailable, signatureProblem(DeviceSignatureFailure.UNSUPPORTED))
         assertEquals(SecretProblem.DeviceUnavailable, signatureProblem(DeviceSignatureFailure.KEYSTORE))
         assertEquals(SecretProblem.DeviceUnavailable, signatureProblem(DeviceSignatureFailure.AUTHENTICATION))

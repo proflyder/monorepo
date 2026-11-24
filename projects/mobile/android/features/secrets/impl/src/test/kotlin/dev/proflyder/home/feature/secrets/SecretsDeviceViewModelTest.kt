@@ -57,6 +57,35 @@ class SecretsDeviceViewModelTest {
     }
 
     @Test
+    fun anEnrolledDeviceDoesNotRegenerateTheKeyWhenTheScreenOpens() = runTest(dispatcher.scheduler) {
+        val repository = FakeSecretsRepository()
+        repository.deviceResult = Outcome.Success(DeviceEnrollment(true, "device-7", 10))
+        val viewModel = SecretsDeviceViewModel(repository)
+        advanceUntilIdle()
+
+        assertEquals(0, repository.deviceChallenges)
+        assertFalse(viewModel.state.value.keyReady)
+        assertFalse(viewModel.state.value.rebinding)
+    }
+
+    @Test
+    fun rebindingStartsOnlyAfterAnExplicitIntent() = runTest(dispatcher.scheduler) {
+        val repository = FakeSecretsRepository()
+        repository.deviceResult = Outcome.Success(DeviceEnrollment(true, "device-7", 10))
+        val viewModel = SecretsDeviceViewModel(repository)
+        advanceUntilIdle()
+        assertEquals(0, repository.deviceChallenges)
+
+        viewModel.dispatch(SecretsDeviceIntent.Rebind)
+        advanceUntilIdle()
+
+        assertEquals(1, repository.deviceChallenges)
+        assertTrue(viewModel.state.value.rebinding)
+        val event = viewModel.screenEvents.next.first()
+        assertEquals(SecretsDeviceEvent.CreateKey("attestation-challenge"), event.event)
+    }
+
+    @Test
     fun bindingAnEnrolledKeySendsTheNormalizedCodeAndMaterial() = runTest(dispatcher.scheduler) {
         val repository = FakeSecretsRepository()
         val viewModel = SecretsDeviceViewModel(repository)

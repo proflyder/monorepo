@@ -17,6 +17,7 @@ internal sealed interface PushMessage {
         val title: String,
         val body: String,
         val deepLink: PushDeepLink?,
+        val module: String?,
     ) : Shown
 }
 
@@ -26,6 +27,8 @@ internal object PushPayloads {
     const val KEY_TITLE: String = "title"
     const val KEY_BODY: String = "body"
     const val KEY_DEEP_LINK: String = "deepLink"
+    const val KEY_MODULE: String = "module"
+    const val MAX_MODULE_CHARS: Int = 64
     const val TYPE_FIND: String = "phone_find"
     const val TYPE_NOTIFY: String = "phone_notify"
     const val TYPE_SYNC: String = "sync"
@@ -49,6 +52,7 @@ internal object PushPayloads {
             title = title,
             body = body,
             deepLink = PushDeepLink.parse(data[KEY_DEEP_LINK]),
+            module = data[KEY_MODULE]?.trim()?.takeIf { it.isNotEmpty() }?.take(MAX_MODULE_CHARS),
         )
     }
 

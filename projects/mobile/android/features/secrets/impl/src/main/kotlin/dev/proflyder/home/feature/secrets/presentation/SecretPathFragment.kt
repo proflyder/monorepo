@@ -311,6 +311,7 @@ internal fun secretProblemText(context: Context, problem: SecretProblem): String
     SecretProblem.StepUpExpired -> context.getString(R.string.secrets_problem_step_up_expired)
     SecretProblem.DeviceNotEnrolled -> context.getString(R.string.secrets_problem_device_not_enrolled)
     SecretProblem.DeviceUnavailable -> context.getString(R.string.secrets_problem_device_unavailable)
+    SecretProblem.DeviceRebindRequired -> context.getString(R.string.secrets_problem_device_rebind)
     SecretProblem.EnrollmentRejected -> context.getString(R.string.secrets_problem_enrollment_rejected)
     SecretProblem.EnrollmentConflict -> context.getString(R.string.secrets_problem_enrollment_conflict)
     SecretProblem.VersionUnavailable -> context.getString(R.string.secrets_problem_version_unavailable)

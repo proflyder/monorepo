@@ -28,6 +28,7 @@ LIB_DEPS = [
     "@crates//:tokio",
     "@crates//:tokio-util",
     "@crates//:tracing",
+    "@crates//:x509-parser",
 ]
 
 rust_library(
@@ -66,7 +67,9 @@ rust_test(
     name = "gateway_tests",
     size = "small",
     srcs = ["tests/gateway.rs"],
-    compile_data = ["//projects/home/kubernetes/secrets-gateway:deploy_templates"],
+    compile_data = [
+        "//projects/home/kubernetes/secrets-gateway:deploy_templates",
+    ] + glob(["tests/fixtures/attestation/**"]),
     edition = "2024",
     lint_config = ":workspace_lints",
     deps = LIB_DEPS + [

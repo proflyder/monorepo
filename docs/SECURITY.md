@@ -161,7 +161,10 @@
   ключ, device id и хеш одноразового кода лежат в
   `secret/k8s/home-assistant/secrets-gateway-device`; путь скрыт от HTTP API.
   `admin:secrets-device-enroll` создаёт код на 15 минут и пишет его в файл
-  0600, `--revoke` удаляет ключ; сервис читает ключ на каждый запрос.
+  0600, `--revoke` удаляет ключ; сервис читает ключ на каждый запрос. Цепочка
+  key attestation проверяется до закреплённых Google Hardware Attestation
+  корней, challenge/nonce, TEE/StrongBox, публичный ключ и verified boot;
+  непроверенный verified boot логируется.
 - Audit — декларативный девайс `stdout/`: kubelet ротирует лог, Alloy
   отправляет его в Loki (7 дней). Значения в записях HMAC-хэшированы, но пути
   и metadata запросов видны — Loki доступен только из LAN/VPN.

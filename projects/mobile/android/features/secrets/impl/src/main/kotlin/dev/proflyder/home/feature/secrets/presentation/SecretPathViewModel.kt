@@ -275,7 +275,16 @@ internal class SecretPathViewModel(
         updateState { copy(dialog = stepUp.copy(busy = true, problem = null)) }
         launch {
             val cas = if (operation == SecretOperation.SESSION) null else version
-            when (val result = repository.challenge(operation, pathFor(operation), keyFor(stepUp.action), versionFor(stepUp.action), cas)) {
+            when (
+                val result = repository.challenge(
+                    operation,
+                    pathFor(operation),
+                    keyFor(stepUp.action),
+                    versionFor(stepUp.action),
+                    cas,
+                    valueHashFor(stepUp.action),
+                )
+            ) {
                 is Outcome.Success -> {
                     signing = PendingSignature(stepUp.action, operation, result.value)
                     updateState { copy(dialog = stepUp.copy(busy = false)) }
@@ -422,6 +431,9 @@ internal class SecretPathViewModel(
         else -> null
     }
 
+    private fun valueHashFor(action: SecretAction): String? =
+        if (action.kind == SecretActionKind.UPDATE) sha256Hex(action.value) else null
+
     private fun currentVersion(): Long? = currentState.metadata?.currentVersion
 
     private data class PendingSignature(
@@ -434,6 +446,11 @@ internal class SecretPathViewModel(
         const val RE_MASK_MILLIS = 30_000L
     }
 }
+
+internal fun sha256Hex(value: String): String =
+    java.security.MessageDigest.getInstance("SHA-256")
+        .digest(value.toByteArray(Charsets.UTF_8))
+        .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
 
 @ContributesIntoMap(AppScope::class, binding = binding<ViewModelSource>())
 @ClassKey(SecretPathViewModel::class)

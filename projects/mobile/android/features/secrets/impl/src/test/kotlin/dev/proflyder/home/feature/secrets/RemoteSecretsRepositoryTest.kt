@@ -53,6 +53,7 @@ class RemoteSecretsRepositoryTest {
             key: String?,
             version: Long?,
             cas: Long?,
+            valueHash: String?,
         ): Outcome<StepUpChallenge> {
             lastChallenge = operation
             return Outcome.Success(StepUpChallenge("challenge-1", "payload-1", 60))
@@ -133,7 +134,7 @@ class RemoteSecretsRepositoryTest {
         assertTrue(repository.device() is Outcome.Success)
         assertTrue(repository.deviceChallenge() is Outcome.Success)
         assertTrue(repository.enroll("code", "key", "attestation", emptyList()) is Outcome.Success)
-        assertTrue(repository.challenge(SecretOperation.SESSION, null, null, null, null) is Outcome.Success)
+        assertTrue(repository.challenge(SecretOperation.SESSION, null, null, null, null, null) is Outcome.Success)
         assertEquals(SecretOperation.SESSION, api.lastChallenge)
     }
 }

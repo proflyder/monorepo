@@ -37,6 +37,7 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 tracing = { workspace = true }
+x509-parser = { workspace = true }
 
 [dev-dependencies]
 http-body-util = { workspace = true }

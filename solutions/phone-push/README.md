@@ -58,7 +58,9 @@ Bearer — service-token (`PUSH_SERVICE_TOKEN_FILE`, обязателен, бе�
 возвращается ни в один ответ.
 
 `module` (id модуля из `home-app-auth`, например `alerts`, `chat`) сужает
-адресатов до устройств токенов с этим модулем; phone-push передаёт его в
+адресатов до устройств токенов с этим модулем, а также уходит в FCM `data`:
+приложение скрывает содержимое `module=secrets` с экрана блокировки
+(`VISIBILITY_SECRET`). phone-push передаёт его в
 `GET /v1/push/devices?module=` без проверки. Неизвестный id scheduler
 отклоняет `400`, и phone-push отвечает `{sent:0,failed:0,devices:0}` с
 `warn` «push registry unavailable … HTTP 400» в логах: пуш не уходит никому

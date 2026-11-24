@@ -47,6 +47,7 @@ interface SecretsRepository {
         key: String?,
         version: Long?,
         cas: Long?,
+        valueHash: String?,
     ): Outcome<StepUpChallenge>
 
     suspend fun stepUp(challenge: String, signature: String): Outcome<Unit>

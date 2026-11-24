@@ -99,6 +99,8 @@ struct ChallengeBody {
     version: Option<u64>,
     #[serde(default)]
     cas: Option<u64>,
+    #[serde(default)]
+    value_hash: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -493,6 +495,7 @@ async fn update(
             key: Some(body.key.clone()),
             version: None,
             cas: Some(body.cas),
+            value_hash: Some(sha256_hex(&body.value)),
         },
         Some(audit_key(&body.key)),
         None,
@@ -630,7 +633,7 @@ async fn update(
         outcome: "ok",
         detail: None,
     });
-    Json(json!({"path": path, "version": version, "key": body.key})).into_response()
+    no_store(Json(json!({"path": path, "version": version, "key": body.key})).into_response())
 }
 
 async fn rollback(
@@ -665,6 +668,7 @@ async fn rollback(
             key: None,
             version: Some(body.version),
             cas: Some(body.cas),
+            value_hash: None,
         },
         None,
         Some(body.version),
@@ -779,12 +783,14 @@ async fn rollback(
         outcome: "ok",
         detail: Some("rollback"),
     });
-    Json(json!({
-        "path": path,
-        "fromVersion": body.version,
-        "version": version,
-    }))
-    .into_response()
+    no_store(
+        Json(json!({
+            "path": path,
+            "fromVersion": body.version,
+            "version": version,
+        }))
+        .into_response(),
+    )
 }
 
 async fn delete_latest(
@@ -812,6 +818,7 @@ async fn delete_latest(
             key: None,
             version: query.version,
             cas: Some(query.cas),
+            value_hash: None,
         },
         None,
         Some(query.cas),
@@ -862,6 +869,33 @@ async fn delete_latest(
         );
         return error(StatusCode::CONFLICT, "version_not_current");
     }
+    let fresh = match state.openbao.metadata(&path).await {
+        Ok(meta) => meta,
+        Err(failure) => {
+            audit_outcome(
+                &state,
+                &principal,
+                Action::Delete,
+                &path,
+                None,
+                Some(query.cas),
+                "error",
+            );
+            return openbao_error(failure);
+        }
+    };
+    if fresh.current_version != meta.current_version {
+        audit_outcome(
+            &state,
+            &principal,
+            Action::Delete,
+            &path,
+            None,
+            Some(fresh.current_version),
+            "conflict",
+        );
+        return conflict(fresh.current_version);
+    }
     match state.openbao.delete_latest(&path).await {
         Ok(()) => {
             state.audit.record(&Event {
@@ -873,12 +907,14 @@ async fn delete_latest(
                 outcome: "ok",
                 detail: None,
             });
-            Json(json!({
-                "path": path,
-                "deleted": true,
-                "version": meta.current_version,
-            }))
-            .into_response()
+            no_store(
+                Json(json!({
+                    "path": path,
+                    "deleted": true,
+                    "version": meta.current_version,
+                }))
+                .into_response(),
+            )
         }
         Err(failure) => {
             audit_outcome(
@@ -1046,8 +1082,8 @@ async fn device_enroll(
             )
         }
         Err(failure) => {
-            let (outcome, response) = device_failure(failure);
-            audit_event(
+            let (outcome, detail, response) = device_failure(failure);
+            audit_event_with_detail(
                 &state,
                 &principal,
                 Action::Enroll,
@@ -1055,6 +1091,7 @@ async fn device_enroll(
                 None,
                 None,
                 outcome,
+                detail,
             );
             response
         }
@@ -1092,6 +1129,10 @@ fn operation_from(
             if body.version.is_some() {
                 return Err(error(StatusCode::BAD_REQUEST, "invalid_challenge"));
             }
+            let Some(value_hash) = body.value_hash.as_deref().filter(|hash| valid_hash(hash))
+            else {
+                return Err(error(StatusCode::BAD_REQUEST, "invalid_challenge"));
+            };
             let path = resolve(
                 state,
                 principal,
@@ -1106,6 +1147,7 @@ fn operation_from(
                 key: Some(key.to_owned()),
                 version: None,
                 cas: Some(cas),
+                value_hash: Some(value_hash.to_ascii_lowercase()),
             })
         }
         Purpose::Rollback => {
@@ -1128,6 +1170,7 @@ fn operation_from(
                 key: None,
                 version: Some(version),
                 cas: Some(cas),
+                value_hash: None,
             })
         }
         Purpose::Delete => {
@@ -1137,7 +1180,7 @@ fn operation_from(
             let Some(cas) = body.cas else {
                 return Err(error(StatusCode::BAD_REQUEST, "invalid_challenge"));
             };
-            if body.key.is_some() {
+            if body.key.is_some() || body.value_hash.is_some() {
                 return Err(error(StatusCode::BAD_REQUEST, "invalid_challenge"));
             }
             let path = resolve(state, principal, Action::Delete, raw, None, body.version)?;
@@ -1147,6 +1190,7 @@ fn operation_from(
                 key: None,
                 version: body.version,
                 cas: Some(cas),
+                value_hash: None,
             })
         }
     }
@@ -1220,46 +1264,79 @@ fn failure_response(failure: Failure) -> (&'static str, Response) {
     }
 }
 
-fn device_failure(failure: device::Error) -> (&'static str, Response) {
+fn device_failure(failure: device::Error) -> (&'static str, Option<&'static str>, Response) {
     match failure {
         device::Error::EnrollmentClosed => (
-            "enrollment_closed",
-            error(StatusCode::FORBIDDEN, "enrollment_closed"),
+            "enrollment_invalid",
+            Some("enrollment_closed"),
+            error(StatusCode::FORBIDDEN, "enrollment_invalid"),
         ),
         device::Error::CodeExpired => (
-            "enrollment_expired",
-            error(StatusCode::FORBIDDEN, "enrollment_expired"),
+            "enrollment_invalid",
+            Some("enrollment_expired"),
+            error(StatusCode::FORBIDDEN, "enrollment_invalid"),
         ),
         device::Error::CodeInvalid => (
             "enrollment_invalid",
+            Some("enrollment_invalid"),
             error(StatusCode::FORBIDDEN, "enrollment_invalid"),
         ),
         device::Error::ChallengeInvalid => (
-            "attestation_challenge_invalid",
-            error(StatusCode::FORBIDDEN, "attestation_challenge_invalid"),
+            "enrollment_invalid",
+            Some("attestation_challenge_invalid"),
+            error(StatusCode::FORBIDDEN, "enrollment_invalid"),
         ),
         device::Error::KeyInvalid => (
-            "public_key_invalid",
-            error(StatusCode::BAD_REQUEST, "public_key_invalid"),
+            "enrollment_invalid",
+            Some("public_key_invalid"),
+            error(StatusCode::FORBIDDEN, "enrollment_invalid"),
         ),
         device::Error::AttestationInvalid => (
-            "attestation_invalid",
-            error(StatusCode::BAD_REQUEST, "attestation_invalid"),
+            "enrollment_invalid",
+            Some("attestation_invalid"),
+            error(StatusCode::FORBIDDEN, "enrollment_invalid"),
         ),
         device::Error::Conflict => (
             "enrollment_conflict",
+            None,
             error(StatusCode::CONFLICT, "enrollment_conflict"),
         ),
-        device::Error::RateLimited { retry_after } => ("rate_limited", rate_limited(retry_after)),
+        device::Error::RateLimited { retry_after } => {
+            ("rate_limited", None, rate_limited(retry_after))
+        }
         device::Error::NotEnrolled => (
             "device_not_enrolled",
+            None,
             error(StatusCode::FORBIDDEN, "device_not_enrolled"),
         ),
         device::Error::Unavailable => (
             "device_unavailable",
+            None,
             error(StatusCode::SERVICE_UNAVAILABLE, "device_unavailable"),
         ),
     }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn audit_event_with_detail(
+    state: &GatewayState,
+    principal: &Principal,
+    action: Action,
+    path: Option<&str>,
+    key: Option<&str>,
+    version: Option<u64>,
+    outcome: &'static str,
+    detail: Option<&'static str>,
+) {
+    state.audit.record(&Event {
+        action,
+        principal: &principal.id,
+        path,
+        key,
+        version,
+        outcome,
+        detail,
+    });
 }
 
 fn audit_event(
@@ -1366,6 +1443,15 @@ fn header_value<'a>(headers: &'a HeaderMap, name: &str) -> &'a str {
         .get(name)
         .and_then(|value| value.to_str().ok())
         .unwrap_or_default()
+}
+
+fn valid_hash(hash: &str) -> bool {
+    hash.len() == 64 && hash.bytes().all(|byte| byte.is_ascii_hexdigit())
+}
+
+fn sha256_hex(value: &str) -> String {
+    use sha2::Digest as _;
+    hex::encode(sha2::Sha256::digest(value.as_bytes()))
 }
 
 fn valid_key(key: &str) -> bool {

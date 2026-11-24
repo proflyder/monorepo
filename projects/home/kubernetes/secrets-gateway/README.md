@@ -39,14 +39,18 @@ LAN/VPN закрыт. Вызывающие в кластере — Traefik, mcp-
    `home-assistant`, TTL 20m/1h, audience `secrets-gateway`, policy
    `secrets-gateway`). Root/operator token в под не попадают.
 
-2. **Merge PR.** `deploy-home` публикует digest и Flux применяет
+2. **Установить новый APK до merge.** Сборка PR CI (`android-distribute`)
+   привязывает телефон и проверяет reveal/update. После merge старый APK не
+   умеет step-up, поэтому без этого шага телефон останется без секретов.
+
+3. **Merge PR.** `deploy-home` публикует digest и Flux применяет
    `app-secrets-gateway`. Если merge случился раньше шага 1, под остаётся
    `Pending` (нет Secret-тома), а Kustomization `app-secrets-gateway` —
    NotReady и ретраится каждую минуту; другие приложения не зависят от неё и
    не ломаются. Scheduler-часть обратно совместима: owner получает `secrets`
    неявно, миграция не нужна.
 
-3. **Синхронизировать ESO и дождаться пода.** ESO обновляет
+4. **Синхронизировать ESO и дождаться пода.** ESO обновляет
    `ExternalSecret/secrets-gateway` раз в час; после merge форсировать:
 
    ```bash
@@ -62,7 +66,7 @@ LAN/VPN закрыт. Вызывающие в кластере — Traefik, mcp-
    `secrets-gateway` Ready: `readyz` требует свежий snapshot доступа и
    доступный OpenBao.
 
-4. **Привязать телефон.** Одноразовый код создаётся в OpenBao, в файл 0600
+5. **Привязать телефон.** Одноразовый код создаётся в OpenBao, в файл 0600
    пишется только код; stdout печатает путь файла, не код:
 
    ```bash
@@ -90,6 +94,13 @@ LAN/VPN закрыт. Вызывающие в кластере — Traefik, mcp-
    маркер, который сервис замечает опросом (не чаще раза в 30 секунд) и
    присылает один push «Отзыв телефона».
 
+6. **Удалить legacy-состояние.** Файл последнего TOTP-шага больше не нужен:
+
+   ```bash
+   mise run kubectl -- -n home-assistant exec deploy/secrets-gateway -- \
+     rm -f /state/last-totp-step
+   ```
+
 ## Проверка после merge
 
 ```bash
@@ -116,8 +127,9 @@ curl -fsS http://127.0.0.1:8096/v1/device -H "Authorization: Bearer $TOKEN"
   (snapshot доступа и bearer в phone-push).
 - `secret/k8s/home-assistant/secrets-gateway-device` — публичный ключ,
   device id, время привязки, хеш аттестации и хеш одноразового кода. Путь
-  закрыт для HTTP API (`deny.json` + проверка в коде), но читается подом через
-  роль `secrets-gateway`; ESO его не синхронизирует.
+  закрыт для HTTP API только проверкой в коде: `deny.json` его не покрывает,
+  потому что из этого файла генерируется `policy.hcl`, а поду нужен доступ.
+  Читается подом через роль `secrets-gateway`; ESO его не синхронизирует.
 - `secret/k8s/home-assistant/secrets-gateway` — legacy TOTP-секрет. После
   перехода на ключ устройств его можно удалить; путь остаётся в `deny.json`,
   пока он существует.

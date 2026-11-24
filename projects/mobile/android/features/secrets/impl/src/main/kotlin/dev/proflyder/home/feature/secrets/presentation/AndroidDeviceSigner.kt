@@ -11,14 +11,18 @@ import android.hardware.biometrics.BiometricPrompt
 import android.os.Build
 import android.os.CancellationSignal
 import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyPermanentlyInvalidatedException
 import android.security.keystore.KeyProperties
 import android.security.keystore.StrongBoxUnavailableException
+import android.security.keystore.UserNotAuthenticatedException
 import android.util.Base64
 import androidx.annotation.RequiresApi
+import androidx.core.content.edit
 import androidx.fragment.app.FragmentActivity
 import dev.proflyder.home.feature.secrets.impl.R
 import java.io.IOException
 import java.security.GeneralSecurityException
+import java.security.InvalidKeyException
 import java.security.KeyPair
 import java.security.KeyPairGenerator
 import java.security.KeyStore
@@ -27,8 +31,15 @@ import java.security.ProviderException
 import java.security.Signature
 import java.security.SignatureException
 import java.security.spec.ECGenParameterSpec
+import java.util.concurrent.Executor
 
-internal enum class DeviceSignatureFailure { UNSUPPORTED, KEY_MISSING, KEYSTORE, AUTHENTICATION }
+internal enum class DeviceSignatureFailure {
+    UNSUPPORTED,
+    KEY_MISSING,
+    KEYSTORE,
+    AUTHENTICATION,
+    KEY_INVALIDATED,
+}
 
 internal sealed interface DeviceSignatureResult {
     data class Signed(val signature: String) : DeviceSignatureResult
@@ -60,13 +71,46 @@ internal interface SecretsDeviceSigner {
         onResult: (DeviceSignatureResult) -> Unit,
     )
 
+    fun promoteEnrollmentKey()
+
+    fun discardEnrollmentKey()
+
     fun cancel()
 }
 
+internal interface BiometricLauncher {
+    fun authenticate(
+        crypto: BiometricPrompt.CryptoObject,
+        cancellation: CancellationSignal,
+        executor: Executor,
+        callback: BiometricPrompt.AuthenticationCallback,
+    )
+}
+
+@RequiresApi(Build.VERSION_CODES.P)
+private class PlatformBiometricLauncher(
+    private val prompt: BiometricPrompt,
+) : BiometricLauncher {
+    override fun authenticate(
+        crypto: BiometricPrompt.CryptoObject,
+        cancellation: CancellationSignal,
+        executor: Executor,
+        callback: BiometricPrompt.AuthenticationCallback,
+    ) {
+        prompt.authenticate(crypto, cancellation, executor, callback)
+    }
+}
+
 @SuppressLint("NewApi")
-internal class AndroidDeviceSigner(private val context: Context) : SecretsDeviceSigner {
+internal class AndroidDeviceSigner(
+    private val context: Context,
+    private val launcher: (FragmentActivity) -> BiometricLauncher = { activity ->
+        PlatformBiometricLauncher(prompt(context, activity))
+    },
+) : SecretsDeviceSigner {
     private var pending: ((DeviceSignatureResult) -> Unit)? = null
     private var signal: CancellationSignal? = null
+    private var stagingAlias: String? = null
 
     override fun isSupported(): Boolean =
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && biometrics() && keyguard()
@@ -75,9 +119,11 @@ internal class AndroidDeviceSigner(private val context: Context) : SecretsDevice
         if (!isSupported()) return DeviceKeyResult.Failed(DeviceSignatureFailure.UNSUPPORTED)
         return try {
             val store = keyStore()
-            if (store.containsAlias(ALIAS)) store.deleteEntry(ALIAS)
-            val pair = pair(attestationChallenge)
-            val chain = store.getCertificateChain(ALIAS)?.map { encode(it.encoded) }.orEmpty()
+            discardEnrollmentKey()
+            val alias = STAGING_PREFIX + java.util.UUID.randomUUID()
+            stagingAlias = alias
+            val pair = pair(alias, attestationChallenge)
+            val chain = store.getCertificateChain(alias)?.map { encode(it.encoded) }.orEmpty()
             if (chain.isEmpty()) {
                 DeviceKeyResult.Failed(DeviceSignatureFailure.KEYSTORE)
             } else {
@@ -106,14 +152,57 @@ internal class AndroidDeviceSigner(private val context: Context) : SecretsDevice
             onResult(DeviceSignatureResult.Failed(signature.reason))
             return
         }
-        pending = onResult
         val cancellation = CancellationSignal()
-        signal = cancellation
-        prompt(activity).authenticate(
-            cancellation,
-            activity.mainExecutor,
-            callback((signature as SignatureResult.Ready).signature, payload),
+        start(
+            launcher = launcher(activity),
+            signature = (signature as SignatureResult.Ready).signature,
+            payload = payload,
+            cancellation = cancellation,
+            executor = activity.mainExecutor,
+            onResult = onResult,
         )
+    }
+
+    internal fun start(
+        launcher: BiometricLauncher,
+        signature: Signature,
+        payload: String,
+        cancellation: CancellationSignal,
+        executor: Executor,
+        onResult: (DeviceSignatureResult) -> Unit,
+    ) {
+        pending = onResult
+        signal = cancellation
+        launcher.authenticate(
+            BiometricPrompt.CryptoObject(signature),
+            cancellation,
+            executor,
+            callback(payload),
+        )
+    }
+
+    override fun promoteEnrollmentKey() {
+        val staged = stagingAlias ?: return
+        val previous = activeAlias()
+        preferences().edit(commit = true) { putString(ACTIVE_ALIAS_KEY, staged) }
+        stagingAlias = null
+        if (previous != staged) deleteAlias(previous)
+    }
+
+    override fun discardEnrollmentKey() {
+        val staged = stagingAlias ?: return
+        stagingAlias = null
+        deleteAlias(staged)
+    }
+
+    private fun deleteAlias(alias: String) {
+        try {
+            keyStore().deleteEntry(alias)
+        } catch (error: GeneralSecurityException) {
+            return
+        } catch (error: IOException) {
+            return
+        }
     }
 
     override fun cancel() {
@@ -124,33 +213,38 @@ internal class AndroidDeviceSigner(private val context: Context) : SecretsDevice
 
     private fun keyStore(): KeyStore = KeyStore.getInstance(PROVIDER).apply { load(null) }
 
-    private fun pair(attestationChallenge: String): KeyPair {
-        val pair = strongBoxPair(attestationChallenge)
-        return pair ?: regularPair(attestationChallenge)
+    private fun pair(alias: String, attestationChallenge: String): KeyPair {
+        val pair = strongBoxPair(alias, attestationChallenge)
+        return pair ?: regularPair(alias, attestationChallenge)
     }
 
-    private fun strongBoxPair(attestationChallenge: String): KeyPair? = try {
-        generate(attestationChallenge, strongBox = true)
+    private fun strongBoxPair(alias: String, attestationChallenge: String): KeyPair? = try {
+        generate(alias, attestationChallenge, strongBox = true)
     } catch (error: StrongBoxUnavailableException) {
         null
     }
 
-    private fun regularPair(attestationChallenge: String): KeyPair =
-        generate(attestationChallenge, strongBox = false)
+    private fun regularPair(alias: String, attestationChallenge: String): KeyPair =
+        generate(alias, attestationChallenge, strongBox = false)
 
-    private fun generate(attestationChallenge: String, strongBox: Boolean): KeyPair {
+    private fun generate(alias: String, attestationChallenge: String, strongBox: Boolean): KeyPair {
         val generator = KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_EC, PROVIDER)
-        generator.initialize(spec(attestationChallenge, strongBox))
+        generator.initialize(spec(alias, attestationChallenge, strongBox))
         return generator.generateKeyPair()
     }
 
     @Suppress("DEPRECATION")
-    private fun spec(attestationChallenge: String, strongBox: Boolean): KeyGenParameterSpec {
-        val builder = KeyGenParameterSpec.Builder(ALIAS, KeyProperties.PURPOSE_SIGN)
+    private fun spec(
+        alias: String,
+        attestationChallenge: String,
+        strongBox: Boolean,
+    ): KeyGenParameterSpec {
+        val builder = KeyGenParameterSpec.Builder(alias, KeyProperties.PURPOSE_SIGN)
             .setAlgorithmParameterSpec(ECGenParameterSpec(CURVE))
             .setDigests(KeyProperties.DIGEST_SHA256)
             .setAttestationChallenge(attestationChallenge.toByteArray(Charsets.UTF_8))
             .setUserAuthenticationRequired(true)
+            .setUnlockedDeviceRequired(true)
             .setInvalidatedByBiometricEnrollment(true)
         when {
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.R -> builder.setUserAuthenticationParameters(
@@ -167,7 +261,7 @@ internal class AndroidDeviceSigner(private val context: Context) : SecretsDevice
 
     private fun signature(): SignatureResult {
         val key = try {
-            keyStore().getKey(ALIAS, null) as? PrivateKey
+            keyStore().getKey(activeAlias(), null) as? PrivateKey
         } catch (error: GeneralSecurityException) {
             null
         } catch (error: IOException) {
@@ -176,36 +270,34 @@ internal class AndroidDeviceSigner(private val context: Context) : SecretsDevice
         if (key == null) return SignatureResult.Failed(DeviceSignatureFailure.KEY_MISSING)
         val signature = try {
             Signature.getInstance(SIGNATURE).apply { initSign(key) }
+        } catch (error: KeyPermanentlyInvalidatedException) {
+            return SignatureResult.Failed(DeviceSignatureFailure.KEY_INVALIDATED)
         } catch (error: GeneralSecurityException) {
             return SignatureResult.Failed(DeviceSignatureFailure.KEYSTORE)
         }
         return SignatureResult.Ready(signature)
     }
 
-    @RequiresApi(Build.VERSION_CODES.P)
-    private fun prompt(activity: FragmentActivity): BiometricPrompt {
-        val builder = BiometricPrompt.Builder(activity)
-            .setTitle(context.getString(R.string.secrets_stepup_title))
-            .setSubtitle(context.getString(R.string.secrets_stepup_message))
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            builder.setAllowedAuthenticators(
-                BiometricManager.Authenticators.BIOMETRIC_STRONG or
-                    BiometricManager.Authenticators.DEVICE_CREDENTIAL,
-            )
-        }
-        return builder.build()
-    }
-
-    private fun callback(
-        signature: Signature,
-        payload: String,
-    ): BiometricPrompt.AuthenticationCallback =
+    private fun callback(payload: String): BiometricPrompt.AuthenticationCallback =
         object : BiometricPrompt.AuthenticationCallback() {
             override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
-                val crypto = result.cryptoObject?.signature ?: signature
+                val crypto = result.cryptoObject?.signature
+                if (crypto == null) {
+                    finish(DeviceSignatureResult.Failed(DeviceSignatureFailure.KEYSTORE))
+                    return
+                }
                 val bytes = try {
                     crypto.update(payload.toByteArray(Charsets.UTF_8))
                     crypto.sign()
+                } catch (error: KeyPermanentlyInvalidatedException) {
+                    finish(DeviceSignatureResult.Failed(DeviceSignatureFailure.KEY_INVALIDATED))
+                    return
+                } catch (error: UserNotAuthenticatedException) {
+                    finish(DeviceSignatureResult.Failed(DeviceSignatureFailure.AUTHENTICATION))
+                    return
+                } catch (error: InvalidKeyException) {
+                    finish(DeviceSignatureResult.Failed(DeviceSignatureFailure.KEYSTORE))
+                    return
                 } catch (error: SignatureException) {
                     finish(DeviceSignatureResult.Failed(DeviceSignatureFailure.KEYSTORE))
                     return
@@ -246,6 +338,12 @@ internal class AndroidDeviceSigner(private val context: Context) : SecretsDevice
     private fun encode(bytes: ByteArray): String =
         Base64.encodeToString(bytes, Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)
 
+    private fun preferences() =
+        context.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
+
+    private fun activeAlias(): String =
+        preferences().getString(ACTIVE_ALIAS_KEY, ALIAS) ?: ALIAS
+
     private sealed interface SignatureResult {
         data class Ready(val signature: Signature) : SignatureResult
 
@@ -255,9 +353,26 @@ internal class AndroidDeviceSigner(private val context: Context) : SecretsDevice
     private companion object {
         const val PROVIDER = "AndroidKeyStore"
         const val ALIAS = "home_secrets_step_up"
+        const val STAGING_PREFIX = "home_secrets_step_up_staging_"
+        const val PREFERENCES = "home_secrets_device"
+        const val ACTIVE_ALIAS_KEY = "active_alias"
         const val CURVE = "secp256r1"
         const val SIGNATURE = "SHA256withECDSA"
         const val FEATURE_FACE = "android.hardware.face"
         const val FEATURE_IRIS = "android.hardware.iris"
+
+        @RequiresApi(Build.VERSION_CODES.P)
+        fun prompt(context: Context, activity: FragmentActivity): BiometricPrompt {
+            val builder = BiometricPrompt.Builder(activity)
+                .setTitle(context.getString(R.string.secrets_stepup_title))
+                .setSubtitle(context.getString(R.string.secrets_stepup_message))
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                builder.setAllowedAuthenticators(
+                    BiometricManager.Authenticators.BIOMETRIC_STRONG or
+                        BiometricManager.Authenticators.DEVICE_CREDENTIAL,
+                )
+            }
+            return builder.build()
+        }
     }
 }

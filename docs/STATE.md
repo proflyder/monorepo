@@ -209,7 +209,8 @@
 - secrets-gateway (`solutions/secrets-gateway`): owner-only API секретов
   приложения поверх OpenBao KV v2 (роль `secrets-gateway`, audience
   `secrets-gateway`), модуль `secrets`, step-up подписью EC P-256 ключа
-  телефона (одноразовая привязка кодом, использованные nonce на PVC), audit в
+  телефона (одноразовая привязка кодом с проверкой Google key attestation,
+  использованные nonce на PVC), audit в
   лог и phone-push; значения не хранит и не логирует. Каталог и deny-список
   приходят из ConfigMap, `readyz` проверяет OpenBao.
 - Чат приложения с Hermes — отдельная сессия `home-app` через chat relay

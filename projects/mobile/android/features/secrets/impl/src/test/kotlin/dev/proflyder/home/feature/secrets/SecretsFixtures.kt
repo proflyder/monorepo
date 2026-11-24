@@ -36,6 +36,7 @@ internal class FakeSecretsRepository : SecretsRepository {
     var rollbackResult: Outcome<SecretRollback> = Outcome.Success(SecretRollback(PATH, 1, 4))
     var deleteResult: Outcome<Unit> = Outcome.Success(Unit)
     var refreshes = 0
+    var deviceChallenges = 0
     val revealed = mutableListOf<Triple<String, String, Long>>()
     val updates = mutableListOf<Triple<String, String, Long>>()
     val rollbacks = mutableListOf<Pair<Long, Long>>()
@@ -43,6 +44,7 @@ internal class FakeSecretsRepository : SecretsRepository {
     val challenges = mutableListOf<SecretOperation>()
     val enrollments = mutableListOf<List<String>>()
     var lastSignature: String? = null
+    var lastValueHash: String? = null
 
     override val catalog: StateFlow<SecretsCatalogState> = catalogState
 
@@ -56,7 +58,10 @@ internal class FakeSecretsRepository : SecretsRepository {
 
     override suspend fun device(): Outcome<DeviceEnrollment> = deviceResult
 
-    override suspend fun deviceChallenge(): Outcome<DeviceAttestationChallenge> = deviceChallengeResult
+    override suspend fun deviceChallenge(): Outcome<DeviceAttestationChallenge> {
+        deviceChallenges++
+        return deviceChallengeResult
+    }
 
     override suspend fun enroll(
         code: String,
@@ -74,8 +79,10 @@ internal class FakeSecretsRepository : SecretsRepository {
         key: String?,
         version: Long?,
         cas: Long?,
+        valueHash: String?,
     ): Outcome<StepUpChallenge> {
         challenges += operation
+        lastValueHash = valueHash
         return stepUpChallengeResult
     }
 
@@ -170,6 +177,10 @@ internal class FakeSecretsDeviceSigner(
     ) {
         requestedPayload = payload
     }
+
+    override fun promoteEnrollmentKey() = Unit
+
+    override fun discardEnrollmentKey() = Unit
 
     override fun cancel() {
         cancellationRequested = true

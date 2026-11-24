@@ -3,6 +3,7 @@ package dev.proflyder.home.feature.secrets.presentation
 import android.os.Bundle
 import androidx.core.widget.doAfterTextChanged
 import androidx.lifecycle.lifecycleScope
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import dev.proflyder.home.core.navigation.Route
 import dev.proflyder.home.core.presentation.screenViewModel
 import dev.proflyder.home.core.ui.setVisible
@@ -26,18 +27,12 @@ internal class SecretsDeviceFragment :
             dispatch(SecretsDeviceIntent.Code(text?.toString().orEmpty()))
         }
         binding.secretsDeviceBind.setOnClickListener { dispatch(SecretsDeviceIntent.Bind) }
+        binding.secretsDeviceRebind.setOnClickListener { confirmRebind() }
         binding.secretsDeviceRetry.setOnClickListener { dispatch(SecretsDeviceIntent.Refresh) }
         if (!signer.isSupported()) {
             dispatch(SecretsDeviceIntent.KeyFailed(DeviceSignatureFailure.UNSUPPORTED))
         }
-        render(::status, ::renderStatus)
-        render({ it.enrolled }) { enrolled ->
-            binding.secretsDeviceStatus.text = if (enrolled) {
-                getString(R.string.secrets_device_enrolled, viewModel.state.value.deviceId.orEmpty())
-            } else {
-                getString(R.string.secrets_device_not_enrolled)
-            }
-        }
+        render(::formStatus, ::renderForm)
         render(::bindStatus) { bind ->
             binding.secretsDeviceBind.isEnabled = bind.enabled
             binding.secretsDeviceCode.isEnabled = !bind.busy
@@ -49,27 +44,53 @@ internal class SecretsDeviceFragment :
         }
     }
 
-    private fun status(state: SecretsDeviceUiState): DeviceStatus = DeviceStatus(
+    private fun formStatus(state: SecretsDeviceUiState): DeviceStatus = DeviceStatus(
         loading = state.loading,
+        enrolled = state.enrolled,
+        rebinding = state.rebinding,
+        deviceId = state.deviceId,
         failure = state.failure,
     )
 
     private fun bindStatus(state: SecretsDeviceUiState): BindStatus = BindStatus(
-        enabled = state.keyReady && state.code.isNotBlank() && !state.busy,
+        enabled = state.keyReady && state.code.isNotBlank() && !state.busy &&
+            (!state.enrolled || state.rebinding),
         busy = state.busy,
     )
 
-    private fun renderStatus(status: DeviceStatus) = with(binding) {
+    private fun renderForm(status: DeviceStatus) = with(binding) {
         secretsDeviceProgress.setVisible(status.loading)
         secretsDeviceError.setVisible(!status.loading && status.failure != null)
         secretsDeviceErrorText.text = status.failure?.userMessage(requireContext()).orEmpty()
+        val setup = !status.loading && (!status.enrolled || status.rebinding)
         secretsDeviceForm.setVisible(!status.loading)
+        secretsDeviceHelp.setVisible(setup)
+        secretsDeviceCodeLayout.setVisible(setup)
+        secretsDeviceBind.setVisible(setup)
+        secretsDeviceRebind.setVisible(!status.loading && status.enrolled && !status.rebinding)
+        secretsDeviceStatus.text = if (status.enrolled) {
+            getString(R.string.secrets_device_enrolled, status.deviceId.orEmpty())
+        } else {
+            getString(R.string.secrets_device_not_enrolled)
+        }
+    }
+
+    private fun confirmRebind() {
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle(R.string.secrets_device_rebind_title)
+            .setMessage(R.string.secrets_device_rebind_message)
+            .setPositiveButton(R.string.secrets_device_rebind) { _, _ ->
+                dispatch(SecretsDeviceIntent.Rebind)
+            }
+            .setNegativeButton(R.string.secrets_cancel, null)
+            .show()
     }
 
     override fun onEvent(event: SecretsDeviceEvent) {
         when (event) {
             is SecretsDeviceEvent.CreateKey -> createKey(event.challenge)
             SecretsDeviceEvent.Bound -> {
+                signer.promoteEnrollmentKey()
                 showMessage(R.string.secrets_device_bound)
                 navigate(Route.Back)
             }
@@ -88,6 +109,7 @@ internal class SecretsDeviceFragment :
     }
 
     override fun onDestroy() {
+        signer.discardEnrollmentKey()
         signer.cancel()
         super.onDestroy()
     }
@@ -95,6 +117,9 @@ internal class SecretsDeviceFragment :
 
 internal data class DeviceStatus(
     val loading: Boolean,
+    val enrolled: Boolean,
+    val rebinding: Boolean,
+    val deviceId: String?,
     val failure: dev.proflyder.home.core.model.RemoteFailure?,
 )
 

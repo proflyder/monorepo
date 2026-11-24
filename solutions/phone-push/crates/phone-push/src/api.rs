@@ -296,6 +296,7 @@ async fn notify(
         title: title.to_owned(),
         body: text.to_owned(),
         deep_link: deep_link.map(str::to_owned),
+        module: body.module.as_deref().map(str::to_owned),
         data,
     };
     respond(

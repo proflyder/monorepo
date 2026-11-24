@@ -20,6 +20,7 @@ internal class PushNotifier(
     private val context: Context,
     private val accent: NotificationAccent,
     private val permission: NotificationPermission,
+    private val token: PushIntentToken,
 ) {
     fun notify(message: PushMessage.Notify) {
         val content = openAppIntent(message.deepLink)
@@ -33,6 +34,7 @@ internal class PushNotifier(
             .setAutoCancel(true)
             .setCategory(NotificationCompat.CATEGORY_STATUS)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setVisibility(visibility(message.module))
             .build()
         post(NOTIFY_ID, notification)
     }
@@ -67,10 +69,20 @@ internal class PushNotifier(
         NotificationManagerCompat.from(context).cancel(FIND_ID)
     }
 
+    private fun visibility(module: String?): Int =
+        if (module == "secrets") {
+            NotificationCompat.VISIBILITY_SECRET
+        } else {
+            NotificationCompat.VISIBILITY_PRIVATE
+        }
+
     private fun openAppIntent(link: PushDeepLink?): PendingIntent {
         val intent = launchIntent()
             .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-        if (link != null) intent.putExtra(PushIntents.EXTRA_DEEP_LINK, link.route)
+        if (link != null) {
+            intent.putExtra(PushIntents.EXTRA_DEEP_LINK, link.route)
+            intent.putExtra(PushIntents.EXTRA_DEEP_LINK_TOKEN, token.current())
+        }
         return PendingIntent.getActivity(
             context,
             REQUEST_OPEN,

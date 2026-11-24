@@ -18,6 +18,7 @@ internal data class SecretsDeviceUiState(
     val deviceId: String? = null,
     val code: String = "",
     val keyReady: Boolean = false,
+    val rebinding: Boolean = false,
     val busy: Boolean = false,
     val failure: RemoteFailure? = null,
     val problem: SecretProblem? = null,
@@ -27,6 +28,7 @@ internal sealed interface SecretsDeviceIntent {
     data object Refresh : SecretsDeviceIntent
     data class Code(val value: String) : SecretsDeviceIntent
     data object Bind : SecretsDeviceIntent
+    data object Rebind : SecretsDeviceIntent
     data class KeyReady(val material: DeviceKeyMaterial) : SecretsDeviceIntent
     data class KeyFailed(val reason: DeviceSignatureFailure) : SecretsDeviceIntent
 }
@@ -55,6 +57,7 @@ internal class SecretsDeviceViewModel(
                 copy(code = intent.value.uppercase().filter { it.isLetterOrDigit() }, problem = null)
             }
             SecretsDeviceIntent.Bind -> bind()
+            SecretsDeviceIntent.Rebind -> rebind()
             is SecretsDeviceIntent.KeyReady -> keyReady(intent.material)
             is SecretsDeviceIntent.KeyFailed -> keyFailed(intent.reason)
         }
@@ -64,11 +67,39 @@ internal class SecretsDeviceViewModel(
         updateState { copy(loading = true, failure = null, problem = null) }
         launch {
             when (val device = repository.device()) {
-                is Outcome.Success -> updateState {
-                    copy(loading = false, enrolled = device.value.enrolled, deviceId = device.value.deviceId)
+                is Outcome.Success -> {
+                    updateState {
+                        copy(
+                            loading = false,
+                            enrolled = device.value.enrolled,
+                            deviceId = device.value.deviceId,
+                        )
+                    }
+                    if (!device.value.enrolled) requestKey()
                 }
                 is Outcome.Failure -> updateState { copy(loading = false, failure = device.failure) }
             }
+        }
+    }
+
+    private fun rebind() {
+        if (!currentState.enrolled || currentState.rebinding || currentState.busy) return
+        material = null
+        attestation = null
+        updateState {
+            copy(
+                rebinding = true,
+                keyReady = false,
+                code = "",
+                problem = null,
+                failure = null,
+            )
+        }
+        requestKey()
+    }
+
+    private fun requestKey() {
+        launch {
             when (val challenge = repository.deviceChallenge()) {
                 is Outcome.Success -> {
                     attestation = challenge.value.challenge
@@ -76,7 +107,7 @@ internal class SecretsDeviceViewModel(
                 }
                 is Outcome.Failure -> {
                     val problem = secretProblem(challenge.failure)
-                    updateState { copy(problem = problem) }
+                    updateState { copy(problem = problem, rebinding = false) }
                     emit(SecretsDeviceEvent.Problem(problem))
                 }
             }
@@ -86,6 +117,7 @@ internal class SecretsDeviceViewModel(
     private fun bind() {
         val state = currentState
         if (state.busy || state.code.isBlank()) return
+        if (state.enrolled && !state.rebinding) return
         val material = material
         val attestation = attestation
         if (material == null || attestation == null) {
@@ -104,6 +136,7 @@ internal class SecretsDeviceViewModel(
                             enrolled = result.value.enrolled,
                             deviceId = result.value.deviceId,
                             code = "",
+                            rebinding = false,
                         )
                     }
                     emit(SecretsDeviceEvent.Bound)

@@ -74,6 +74,7 @@ pub struct Operation {
     pub key: Option<String>,
     pub version: Option<u64>,
     pub cas: Option<u64>,
+    pub value_hash: Option<String>,
 }
 
 impl Operation {
@@ -85,6 +86,7 @@ impl Operation {
             key: None,
             version: None,
             cas: None,
+            value_hash: None,
         }
     }
 }
@@ -119,6 +121,7 @@ struct ChallengeRecord {
     key: Option<String>,
     version: Option<u64>,
     cas: Option<u64>,
+    value_hash: Option<String>,
     payload: String,
     expires_at: Instant,
     fingerprint: String,
@@ -200,6 +203,7 @@ impl StepUp {
                 key: operation.key,
                 version: operation.version,
                 cas: operation.cas,
+                value_hash: operation.value_hash.clone(),
                 payload: payload.clone(),
                 expires_at: now + Duration::from_secs(CHALLENGE_TTL_SECONDS),
                 fingerprint: key.fingerprint,
@@ -372,6 +376,7 @@ fn matches(record: &ChallengeRecord, expected: &Operation) -> bool {
         && record.key == expected.key
         && record.version == expected.version
         && record.cas == expected.cas
+        && record.value_hash == expected.value_hash
 }
 
 fn verify_signature(payload: &str, signature: &str, key: &DeviceKey) -> bool {
@@ -395,12 +400,13 @@ pub fn canonical(
     expires_at: u64,
 ) -> String {
     format!(
-        "home-secrets-step-up/1\nchallenge={challenge}\nprincipal={principal}\naction={}\npath={}\nkey={}\nversion={}\ncas={}\nexpires={expires_at}\n",
+        "home-secrets-step-up/1\nchallenge={challenge}\nprincipal={principal}\naction={}\npath={}\nkey={}\nversion={}\ncas={}\nvalueSha256={}\nexpires={expires_at}\n",
         operation.purpose.as_str(),
         text(operation.path.as_deref()),
         text(operation.key.as_deref()),
         number(operation.version),
         number(operation.cas),
+        text(operation.value_hash.as_deref()),
     )
 }
 
@@ -469,6 +475,7 @@ mod tests {
             key: Some("password".to_owned()),
             version: None,
             cas: Some(3),
+            value_hash: Some("abc".to_owned()),
         };
         let payload = canonical("challenge", "owner", &operation, 42);
         assert!(payload.contains("action=update"));
@@ -476,6 +483,7 @@ mod tests {
         assert!(payload.contains("key=password"));
         assert!(payload.contains("version=\n"));
         assert!(payload.contains("cas=3"));
+        assert!(payload.contains("valueSha256=abc"));
         assert!(payload.contains("expires=42"));
         let other = canonical("challenge", "owner", &Operation::session(), 42);
         assert_ne!(payload, other);
@@ -502,6 +510,7 @@ mod tests {
             key: None,
             version: None,
             cas: None,
+            value_hash: None,
             payload: "payload".to_owned(),
             expires_at,
             fingerprint: "fingerprint".to_owned(),
