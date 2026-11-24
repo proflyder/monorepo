@@ -185,8 +185,14 @@
   обновляет `/v1/me` и показывает локализованное «нет доступа». Экран
   «Система → Доступы» (`admin`) выпускает именованные токены, меняет их
   модули и отзывает; plaintext показывается один раз и не попадает в
-  сетевые инспекторы. Адреса и таймауты — Firebase Remote Config
-  `home_connection`; выкладка — Firebase App Distribution из CI. Живая
+  сетевые инспекторы. «Система → Секреты» (`secrets`, только owner) ходит в
+  secrets-gateway через Traefik `secrets.<domain>`: биометрия/пароль
+  устройства на сеанс процесса, TOTP step-up (5 минут для просмотра, свежий
+  код для update/rollback/delete), авто-маскировка значения через 30 секунд,
+  очистка буфера обмена через 30 секунд, `FLAG_SECURE` и исключение клиента
+  из сетевых инспекторов. Адреса и таймауты — Firebase Remote Config
+  `home_connection` (`schedulerBaseUrl`, `controlBaseUrl`, `intercomBaseUrl`,
+  `secretsBaseUrl`); выкладка — Firebase App Distribution из CI. Живая
   приёмка большинства экранов не пройдена (`PENDING.md`).
 
 ## Прочие сервисы

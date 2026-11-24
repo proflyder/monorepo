@@ -3,9 +3,10 @@
 Owner-only API секретов приложения. Flux (`Kustomization/app-secrets-gateway`,
 образ `SECRETS_GATEWAY_IMAGE` из pins). Один Deployment в namespace
 `home-assistant`, ClusterIP `:8096`; PVC `secrets-gateway-state` хранит только
-последний TOTP-шаг. Наружу не публикуется: маршрут для телефона и
-Android-экран — PR B. Вызывающие в кластере — Traefik (после IngressRoute),
-mcp-gateway (health-check) и owner с узла через port-forward.
+последний TOTP-шаг. Владелец открывает его через Traefik по
+`secrets.<HOME_DOMAIN>` (IngressRoute `secrets-gateway` в
+`../../ingress/routes/routes.yaml`, middleware `home-allowlist`); путь вне
+LAN/VPN закрыт. Вызывающие в кластере — Traefik, mcp-gateway (health-check).
 
 ## Что нужно от владельца (один раз)
 

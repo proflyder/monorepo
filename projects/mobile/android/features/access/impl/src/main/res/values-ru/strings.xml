@@ -39,5 +39,6 @@
     <string name="access_module_system">Система</string>
     <string name="access_module_infra_reports">Отчёты об инфраструктуре</string>
     <string name="access_module_alerts">Алерты</string>
+    <string name="access_module_secrets">Секреты</string>
     <string name="access_module_admin">Администрирование</string>
 </resources>

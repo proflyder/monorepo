@@ -100,7 +100,7 @@
   иначе Wi-Fi 4-address/WDS. Оба одновременно в мост не подключать.
 - VM сохраняют `.27/.28`, L2, ARP/mDNS/IPv6; NAT и PCI passthrough нет.
 - Traefik в `hostNetwork` (`80/443`) публикует `ha`, `grafana`, `alarms`,
-  `control`, `currency`, `intercom`, `vault`, `passwords` и `nexus` как
+  `control`, `currency`, `intercom`, `secrets`, `vault`, `passwords` и `nexus` как
   `https://<name>.home.example.com`; сертификат — wildcard Let's Encrypt от
   cert-manager (ACME DNS-01 Cloudflare).
 - Трафик снаружи приходит через VPN; исключение — Cloudflare Tunnel

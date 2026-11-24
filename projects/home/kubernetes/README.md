@@ -42,7 +42,7 @@ KUBECONFIG=… ./projects/home/kubernetes/apply-runtime.sh
 ```
 
 DNS-only A-запись для приватного имени (`ha`, `grafana`, `alarms`, `control`,
-`currency`, `intercom`, `passwords`, `vault`, `nexus`):
+`currency`, `intercom`, `secrets`, `passwords`, `vault`, `nexus`):
 
 ```bash
 mise run secrets:file home/vpn/cloudflare.env

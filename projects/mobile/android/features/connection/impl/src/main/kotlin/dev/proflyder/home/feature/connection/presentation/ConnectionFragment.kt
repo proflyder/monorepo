@@ -66,6 +66,10 @@ internal class ConnectionFragment :
             loaded == null -> getString(R.string.connection_remote_not_provided)
             else -> loaded.intercomEndpoint?.baseUrl() ?: getString(R.string.connection_remote_not_set_calls)
         }
+        connectionRemoteSecrets.text = when {
+            loaded == null -> getString(R.string.connection_remote_not_provided)
+            else -> loaded.secretsEndpoint?.baseUrl() ?: getString(R.string.connection_remote_not_set_secrets)
+        }
         connectionRemoteTimeouts.text = loaded?.let {
             getString(R.string.connection_remote_timeouts, it.connectTimeoutMillis / 1000L, it.readTimeoutMillis / 1000L)
         } ?: getString(R.string.connection_remote_not_provided)
@@ -102,6 +106,7 @@ internal class ConnectionFragment :
             Field.ENDPOINT -> getString(R.string.connection_remote_invalid_scheduler)
             Field.CONTROL_ENDPOINT -> getString(R.string.connection_remote_invalid_control)
             Field.INTERCOM_ENDPOINT -> getString(R.string.connection_remote_invalid_intercom)
+            Field.SECRETS_ENDPOINT -> getString(R.string.connection_remote_invalid_secrets)
             Field.TIMEOUT -> getString(R.string.connection_remote_invalid_timeout)
             else -> getString(R.string.connection_remote_invalid)
         }

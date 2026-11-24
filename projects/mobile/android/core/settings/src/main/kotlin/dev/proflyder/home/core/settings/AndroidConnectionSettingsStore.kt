@@ -74,6 +74,7 @@ class AndroidConnectionSettingsStore(
             endpoint = loaded?.endpoint,
             controlEndpoint = loaded?.controlEndpoint,
             intercomEndpoint = loaded?.intercomEndpoint,
+            secretsEndpoint = loaded?.secretsEndpoint,
             bearerToken = token,
             connectTimeoutMillis = loaded?.connectTimeoutMillis ?: ConnectionConfig.DEFAULT_CONNECT_TIMEOUT_MILLIS,
             readTimeoutMillis = loaded?.readTimeoutMillis ?: ConnectionConfig.DEFAULT_READ_TIMEOUT_MILLIS,

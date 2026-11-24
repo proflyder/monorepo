@@ -217,6 +217,7 @@ loopback, DHCP, multicast, NTP и `tcp/443` к диапазонам GitHub дл�
   `https://grafana.home.example.com/`,
   `https://alarms.home.example.com/` (scheduler),
   `https://control.home.example.com/` (ha-control),
+  `https://secrets.home.example.com/` (secrets-gateway, owner-only API),
   `https://currency.home.example.com/` (currency-bot API, Bearer),
   `https://intercom.home.example.com/` (intercom signaling, Bearer;
   аварийный путь — NodePort `30097`),

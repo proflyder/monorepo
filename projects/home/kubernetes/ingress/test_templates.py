@@ -100,8 +100,19 @@ class Routes(unittest.TestCase):
             "scheduler": "Host(`alarms.${HOME_DOMAIN}`)",
             "currency-bot": "Host(`currency.${HOME_DOMAIN}`)",
             "ha-control": "Host(`control.${HOME_DOMAIN}`)",
+            "secrets-gateway": "Host(`secrets.${HOME_DOMAIN}`)",
             "intercom": "Host(`intercom.${HOME_DOMAIN}`)",
         })
+
+    def test_secrets_gateway_targets_the_cluster_ip_service(self):
+        route = by_name(self.routes, "IngressRoute", "secrets-gateway")
+        rule = route["spec"]["routes"][0]
+        self.assertEqual(rule["middlewares"], [{"name": "home-allowlist"}])
+        self.assertEqual(
+            rule["services"],
+            [{"name": "secrets-gateway", "namespace": "home-assistant", "port": 8096}],
+        )
+        self.assertEqual(route["spec"]["tls"]["secretName"], "home-wildcard-tls")
 
     def test_system_dashboard_shares_the_control_host(self):
         route = by_name(self.routes, "IngressRoute", "ha-control")["spec"]["routes"][1]

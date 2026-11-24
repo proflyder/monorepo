@@ -12,6 +12,7 @@ enum class AppModule(val wire: String) {
     SYSTEM("system"),
     INFRA_REPORTS("infra_reports"),
     ALERTS("alerts"),
+    SECRETS("secrets"),
     ADMIN("admin"),
     ;
 

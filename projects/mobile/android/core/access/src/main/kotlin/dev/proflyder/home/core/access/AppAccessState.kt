@@ -21,3 +21,9 @@ fun AppAccessState.allows(module: AppModule): Boolean = when (this) {
     AppAccessState.Unknown -> true
     is AppAccessState.Ready -> access.allows(module)
 }
+
+val AppAccessState.owner: Boolean
+    get() = (this as? AppAccessState.Ready)?.access?.owner == true
+
+val AppAccessState.secretsAllowed: Boolean
+    get() = owner && allows(AppModule.SECRETS)
