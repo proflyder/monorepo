@@ -81,6 +81,11 @@ class ModuleGatingTest {
         com.google.android.material.R.style.Theme_Material3_DayNight,
     )
 
+    private fun homeContext(): Context = ContextThemeWrapper(
+        org.robolectric.RuntimeEnvironment.getApplication(),
+        R.style.Theme_Home,
+    )
+
     @Test
     fun bottomTabsOnlyShowModulesTheTokenAllows() {
         val view = BottomNavigationView(context())
@@ -112,5 +117,22 @@ class ModuleGatingTest {
         toolbar.render(chrome.copy(overlay = true), everything)
         assertEquals(listOf(1001, 1002), toolbar.visibleActions.map { it.itemId })
         assertFalse(binding.toolbar.menu.findItem(R.id.action_menu).isVisible)
+    }
+
+    @Test
+    fun anOverlayScreenShowsOnlyTheActionsItPublishes() {
+        val binding = ActivityMainBinding.inflate(LayoutInflater.from(homeContext()))
+        val chrome = AppChromeState("secrets", R.string.app_actions, overlay = true)
+        val screenAction = FakeAction(2001, AppModule.SECRETS)
+        val toolbar = ToolbarChrome(binding, FakeNavigator("home"), setOf(FakeAction(1001, AppModule.BASE))) {}
+
+        toolbar.render(chrome.copy(screenActions = listOf(screenAction)), everything)
+
+        assertEquals(listOf(1001), toolbar.visibleActions.map { it.itemId })
+        assertTrue(binding.toolbar.menu.findItem(R.id.action_menu).isVisible)
+        binding.toolbar.menu.performIdentifierAction(R.id.action_menu, 0)
+        val label = toolbar.contentView?.findViewById<android.widget.TextView>(dev.proflyder.home.core.ui.R.id.ds_popup_menu_label)
+        assertEquals(homeContext().getString(android.R.string.ok), label?.text)
+        toolbar.dismiss()
     }
 }

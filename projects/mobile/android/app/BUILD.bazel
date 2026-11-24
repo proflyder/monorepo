@@ -173,6 +173,7 @@ home_android_local_test(
         "dev.proflyder.home.ModuleGatingTest",
         "dev.proflyder.home.NarrowScreensTest",
         "dev.proflyder.home.NoticeSwipeActivityTest",
+        "dev.proflyder.home.SecretsDeviceMenuScreenshotTest",
         "dev.proflyder.home.ThemeScreenshotTest",
         "dev.proflyder.home.ToolbarMenuScreenshotTest",
         "dev.proflyder.home.WindowInsetsScreenshotTest",

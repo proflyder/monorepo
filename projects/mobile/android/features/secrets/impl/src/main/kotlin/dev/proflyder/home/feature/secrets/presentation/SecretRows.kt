@@ -6,16 +6,24 @@ import dev.proflyder.home.core.model.SecretVersion
 internal sealed interface SecretsCatalogRow {
     val key: String
 
+    data object DeviceCard : SecretsCatalogRow {
+        override val key: String = "device-card"
+    }
+
     data class Group(override val key: String, val name: String) : SecretsCatalogRow
 
     data class EntryRow(override val key: String, val entry: SecretEntry) : SecretsCatalogRow
 }
 
-internal fun catalogRows(groups: List<SecretsCatalogGroup>): List<SecretsCatalogRow> =
-    groups.flatMap { group ->
-        listOf<SecretsCatalogRow>(SecretsCatalogRow.Group("group:${group.name}", group.name)) +
-            group.entries.map { SecretsCatalogRow.EntryRow("path:${it.path}", it) }
-    }
+internal fun catalogRows(
+    groups: List<SecretsCatalogGroup>,
+    deviceCard: Boolean = false,
+): List<SecretsCatalogRow> =
+    (if (deviceCard) listOf(SecretsCatalogRow.DeviceCard) else emptyList()) +
+        groups.flatMap { group ->
+            listOf<SecretsCatalogRow>(SecretsCatalogRow.Group("group:${group.name}", group.name)) +
+                group.entries.map { SecretsCatalogRow.EntryRow("path:${it.path}", it) }
+        }
 
 internal sealed interface SecretPathRow {
     val key: String

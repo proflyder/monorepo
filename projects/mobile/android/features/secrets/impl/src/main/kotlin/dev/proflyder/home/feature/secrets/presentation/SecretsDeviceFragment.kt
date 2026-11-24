@@ -1,6 +1,7 @@
 package dev.proflyder.home.feature.secrets.presentation
 
 import android.os.Bundle
+import android.text.format.DateFormat
 import androidx.core.widget.doAfterTextChanged
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -10,6 +11,7 @@ import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.core.ui.userMessage
 import dev.proflyder.home.feature.secrets.impl.R
 import dev.proflyder.home.feature.secrets.impl.databinding.FragmentSecretsDeviceBinding
+import java.util.Date
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -49,6 +51,7 @@ internal class SecretsDeviceFragment :
         enrolled = state.enrolled,
         rebinding = state.rebinding,
         deviceId = state.deviceId,
+        enrolledAt = state.enrolledAt,
         failure = state.failure,
     )
 
@@ -73,7 +76,16 @@ internal class SecretsDeviceFragment :
         } else {
             getString(R.string.secrets_device_not_enrolled)
         }
+        secretsDeviceEnrolledAt.setVisible(status.enrolled && status.enrolledAt > 0)
+        secretsDeviceEnrolledAt.text = if (status.enrolled && status.enrolledAt > 0) {
+            getString(R.string.secrets_device_enrolled_at, enrolledDate(status.enrolledAt))
+        } else {
+            ""
+        }
     }
+
+    private fun enrolledDate(seconds: Long): String =
+        DateFormat.getMediumDateFormat(requireContext()).format(Date(seconds * 1000))
 
     private fun confirmRebind() {
         MaterialAlertDialogBuilder(requireContext())
@@ -120,6 +132,7 @@ internal data class DeviceStatus(
     val enrolled: Boolean,
     val rebinding: Boolean,
     val deviceId: String?,
+    val enrolledAt: Long,
     val failure: dev.proflyder.home.core.model.RemoteFailure?,
 )
 

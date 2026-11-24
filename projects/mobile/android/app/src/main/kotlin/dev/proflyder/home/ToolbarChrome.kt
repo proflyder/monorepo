@@ -20,6 +20,7 @@ internal class ToolbarChrome(
 ) {
     private val allActions = actions.sortedBy { it.order }
     private var actions: List<ToolbarAction> = allActions
+    private var menuActions: List<ToolbarAction> = allActions
     private var popup: HomePopupMenu? = null
     private var overlay: Boolean? = null
 
@@ -38,7 +39,7 @@ internal class ToolbarChrome(
 
     fun render(chrome: AppChromeState, access: AppAccessState) {
         binding.toolbarTitle.setText(chrome.titleRes)
-        applyAccess(access, chrome.overlay)
+        applyAccess(access, chrome)
         renderBack(chrome.canGoBack)
         if (overlay == chrome.overlay) return
         overlay = chrome.overlay
@@ -51,11 +52,13 @@ internal class ToolbarChrome(
 
     internal val visibleActions: List<ToolbarAction> get() = actions
 
-    private fun applyAccess(access: AppAccessState, overlayShown: Boolean) {
-        val next = allActions.filter { access.allows(it.module) }
-        val changed = next.map(ToolbarAction::itemId) != actions.map(ToolbarAction::itemId)
-        actions = next
-        binding.toolbar.menu.findItem(R.id.action_menu)?.isVisible = !overlayShown && actions.isNotEmpty()
+    private fun applyAccess(access: AppAccessState, chrome: AppChromeState) {
+        val allowed = allActions.filter { access.allows(it.module) }
+        val next = if (chrome.overlay) chrome.screenActions else allowed + chrome.screenActions
+        val changed = next.map(ToolbarAction::itemId) != menuActions.map(ToolbarAction::itemId)
+        actions = allowed
+        menuActions = next
+        binding.toolbar.menu.findItem(R.id.action_menu)?.isVisible = next.isNotEmpty()
         if (changed) dismiss()
     }
 
@@ -84,10 +87,10 @@ internal class ToolbarChrome(
     }
 
     private fun populate(menu: Menu) {
-        actions.forEach { menu.add(Menu.NONE, it.itemId, it.order, it.titleRes).setIcon(it.iconRes) }
+        menuActions.forEach { menu.add(Menu.NONE, it.itemId, it.order, it.titleRes).setIcon(it.iconRes) }
     }
 
     private fun perform(itemId: Int) {
-        actions.firstOrNull { it.itemId == itemId }?.perform(navigator)
+        menuActions.firstOrNull { it.itemId == itemId }?.perform(navigator)
     }
 }

@@ -1,5 +1,7 @@
 package dev.proflyder.home.feature.secrets
 
+import dev.proflyder.home.core.model.DeviceEnrollment
+import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.feature.secrets.data.SecretsUnlockSession
 import dev.proflyder.home.feature.secrets.presentation.SecretsCatalogIntent
 import dev.proflyder.home.feature.secrets.presentation.SecretsCatalogViewModel
@@ -64,5 +66,38 @@ class SecretsCatalogViewModelTest {
 
         viewModel.dispatch(SecretsCatalogIntent.Query("restic"))
         assertEquals(listOf("infra"), viewModel.state.value.groups.map { it.name })
+    }
+
+    @Test
+    fun theCatalogShowsTheBindCardOnlyForAPhoneThatIsNotBound() {
+        val repository = FakeSecretsRepository()
+        repository.catalogState.value = SecretsCatalogState(
+            loading = false,
+            entries = listOf(FakeSecretsRepository.entry("k8s/home-assistant/phone-push", "push tokens")),
+        )
+        val viewModel = SecretsCatalogViewModel(repository, SecretsUnlockSession().apply { unlock() })
+
+        assertFalse(viewModel.state.value.deviceNotEnrolled)
+        assertFalse(viewModel.state.value.deviceEnrolled)
+
+        viewModel.dispatch(SecretsCatalogIntent.RefreshDevice)
+        assertTrue(viewModel.state.value.deviceNotEnrolled)
+        assertFalse(viewModel.state.value.deviceEnrolled)
+
+        repository.deviceResult = Outcome.Success(DeviceEnrollment(true, "device-1", 1))
+        viewModel.dispatch(SecretsCatalogIntent.RefreshDevice)
+        assertFalse(viewModel.state.value.deviceNotEnrolled)
+        assertTrue(viewModel.state.value.deviceEnrolled)
+    }
+
+    @Test
+    fun theCatalogHidesTheBindCardUntilTheSecretsAreUnlocked() {
+        val repository = FakeSecretsRepository()
+        val viewModel = SecretsCatalogViewModel(repository, SecretsUnlockSession())
+
+        viewModel.dispatch(SecretsCatalogIntent.RefreshDevice)
+
+        assertFalse(viewModel.state.value.deviceNotEnrolled)
+        assertTrue(viewModel.state.value.locked)
     }
 }

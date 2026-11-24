@@ -37,7 +37,9 @@ a typed router. Device acceptance and open work: [STATE](../../../docs/STATE.md)
   (StrongBox when available) signs every step-up challenge behind a per-use
   biometric or device credential; a reveal session lasts 5 minutes, while
   update, rollback and soft delete sign that exact operation. The key is bound
-  once through **Bind phone** with a one-time code from the server; opening
+  once with a one-time code from the server through the **Bind** card above the
+  catalog of an unbound phone; once bound, device management moves to the
+  screen's toolbar overflow as **Device**; opening
   that screen never rotates an enrolled key, and **Re-bind** asks for
   confirmation. A staged key survives screen recreation and is promoted only
   after the server accepts it; leftovers are swept on the next open. Step-up needs Android 9 (API 28); on API 26–27 the screen
