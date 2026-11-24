@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import subprocess
@@ -11,6 +12,35 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 KNOWN_BROKEN_LEGACY = {ROOT / "resources" / "spotify-autostart" / "spotify.sh"}
+CLUSTER_SCOPED_KINDS = frozenset({
+    "APIService",
+    "CSIDriver",
+    "CSINode",
+    "CertificateSigningRequest",
+    "ClusterExternalSecret",
+    "ClusterIssuer",
+    "ClusterPolicy",
+    "ClusterRole",
+    "ClusterRoleBinding",
+    "ClusterSecretStore",
+    "ComponentStatus",
+    "CustomResourceDefinition",
+    "FlowSchema",
+    "IngressClass",
+    "MutatingWebhookConfiguration",
+    "Namespace",
+    "Node",
+    "PersistentVolume",
+    "PodSecurityPolicy",
+    "PriorityClass",
+    "PriorityLevelConfiguration",
+    "RuntimeClass",
+    "StorageClass",
+    "ValidatingAdmissionPolicy",
+    "ValidatingAdmissionPolicyBinding",
+    "ValidatingWebhookConfiguration",
+    "VolumeAttachment",
+})
 
 
 def all_repo_shell() -> list[Path]:
@@ -156,6 +186,87 @@ class KubernetesCatalogCoverageTests(unittest.TestCase):
             "(projects/home/kubernetes/mcp-gateway/manifests/catalog.yaml):\n"
             + "\n".join(missing),
         )
+
+
+class KustomizeNamespaceTests(unittest.TestCase):
+    KUBERNETES = ROOT / "projects/home/kubernetes"
+    FLUX = KUBERNETES / "flux"
+    FIXTURES = ROOT / "platform/quality/testdata/kustomize"
+
+    def flux_applied_directories(self) -> list[Path]:
+        applied = set()
+        for path in sorted(self.FLUX.rglob("*.yaml")):
+            for document in yaml.safe_load_all(path.read_text(encoding="utf-8")):
+                if not isinstance(document, dict) or document.get("kind") != "Kustomization":
+                    continue
+                if not str(document.get("apiVersion", "")).startswith("kustomize.toolkit.fluxcd.io/"):
+                    continue
+                spec = document.get("spec") or {}
+                if spec.get("targetNamespace"):
+                    continue
+                relative = str(spec.get("path") or "").removeprefix("./").rstrip("/")
+                if relative:
+                    applied.add((ROOT / relative).resolve())
+        return [
+            directory
+            for directory in sorted(self.KUBERNETES.glob("*/manifests"))
+            if directory.resolve() in applied
+        ]
+
+    def kustomize_command(self, directory: Path) -> list[str]:
+        kustomize = shutil.which("kustomize")
+        if kustomize:
+            return [kustomize, "build", str(directory)]
+        kubectl = shutil.which("kubectl")
+        if kubectl:
+            return [kubectl, "kustomize", str(directory)]
+        raise RuntimeError("kustomize or kubectl is required for the Flux namespace gate")
+
+    def kustomize(self, directory: Path) -> list[dict]:
+        result = subprocess.run(
+            self.kustomize_command(directory),
+            check=True,
+            capture_output=True,
+            text=True,
+            env={**os.environ, "KUBECONFIG": os.devnull},
+            timeout=120,
+        )
+        return [document for document in yaml.safe_load_all(result.stdout) if isinstance(document, dict)]
+
+    def namespace_problems(self, directory: Path) -> list[str]:
+        problems = []
+        for document in self.kustomize(directory):
+            if str(document.get("kind")) in CLUSTER_SCOPED_KINDS:
+                continue
+            metadata = document.get("metadata") or {}
+            if metadata.get("namespace"):
+                continue
+            name = metadata.get("name") or metadata.get("generateName") or "?"
+            problems.append(
+                f"{directory.relative_to(ROOT)}: {document.get('kind')}/{name} has no metadata.namespace"
+            )
+        return problems
+
+    def test_every_flux_applied_manifests_directory_namespaces_every_resource(self):
+        directories = self.flux_applied_directories()
+        self.assertGreaterEqual(len(directories), 5, directories)
+        problems = [problem for directory in directories for problem in self.namespace_problems(directory)]
+        self.assertEqual(
+            problems,
+            [],
+            "Flux applies these manifests without targetNamespace, so every namespaced resource "
+            "needs metadata.namespace (or the generator entry needs a namespace):\n"
+            + "\n".join(problems),
+        )
+
+    def test_a_generated_config_map_without_a_namespace_is_reported(self):
+        problems = self.namespace_problems(self.FIXTURES / "missing-namespace")
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("ConfigMap/missing-namespace-", problems[0])
+        self.assertIn("metadata.namespace", problems[0])
+
+    def test_cluster_scoped_kinds_need_no_namespace(self):
+        self.assertEqual(self.namespace_problems(self.FIXTURES / "cluster-scoped"), [])
 
 
 class AndroidManifestPermissionTests(unittest.TestCase):

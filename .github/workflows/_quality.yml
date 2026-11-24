@@ -25,7 +25,7 @@ jobs:
       - uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b
         with:
           version: 2026.11.4
-          install_args: "python node shellcheck gitleaks actionlint"
+          install_args: "python node shellcheck gitleaks actionlint kubectl"
           cache: true
 
       - name: Install test dependencies
@@ -45,7 +45,7 @@ jobs:
         continue-on-error: true
         run: mise run lint:comments
 
-      - name: Python product gates (syntax, shellcheck, secrets, k8s catalog coverage)
+      - name: Python product gates (syntax, shellcheck, secrets, k8s catalog coverage, Flux namespaces)
         id: static
         background: true
         continue-on-error: true
@@ -91,7 +91,7 @@ jobs:
           node platform/ci/step_report.mjs --title quality
           --check 'audit=Repository audit'
           --check 'comments=No comments in code'
-          --check 'static=Python product gates + k8s catalog coverage'
+          --check 'static=Python product gates + k8s catalog coverage + Flux namespaces'
           --check 'units=CI unit map is valid and every source/test file is routed'
           --check 'ci-tests=CI routing and gate tests'
           --check 'shellcheck=Shellcheck'
