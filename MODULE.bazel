@@ -294,6 +294,8 @@ maven.install(
         "androidx.swiperefreshlayout:swiperefreshlayout:1.2.0",
         "com.google.android.material:material:1.14.0",
         "com.google.firebase:firebase-annotations:18.0.0",
+        "com.google.firebase:firebase-appdistribution:16.0.0-beta21",
+        "com.google.firebase:firebase-appdistribution-api:16.0.0-beta21",
         "com.google.firebase:firebase-common:23.0.0",
         "com.google.firebase:firebase-components:20.0.0",
         "com.google.firebase:firebase-config-interop:17.0.0",

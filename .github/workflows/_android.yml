@@ -135,7 +135,7 @@ jobs:
           {
             echo "version_code=$version_code"
             echo "version_name=$version_name"
-            echo "define_args=--define home_version_code=$version_code --define home_version_name=$version_name --define home_network_inspection=off"
+            echo "define_args=--define home_version_code=$version_code --define home_version_name=$version_name --define home_network_inspection=off --define home_app_distribution=on"
           } >> "$GITHUB_OUTPUT"
           echo "Release versionCode $version_code, versionName $version_name"
 

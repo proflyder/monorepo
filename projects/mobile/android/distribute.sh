@@ -147,6 +147,7 @@ else
       --define "home_version_code=$VERSION_CODE" \
       --define "home_version_name=$VERSION_NAME" \
       --define "home_network_inspection=off" \
+      --define "home_app_distribution=on" \
       //projects/mobile/android:app
   )
 

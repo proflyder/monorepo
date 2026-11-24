@@ -29,6 +29,7 @@ DETEKT_TEST_TARGETS = [
     "//projects/mobile/android/features/scenarios/impl:robolectric_test",
     "//projects/mobile/android/features/settings/impl:robolectric_test",
     "//projects/mobile/android/features/system/impl:robolectric_test",
+    "//projects/mobile/android/features/update/impl:robolectric_test",
 ]
 
 alias(
@@ -54,6 +55,7 @@ test_suite(
     name = "android_tests",
     tests = [
         "//projects/mobile/android/app:apk_abi_test",
+        "//projects/mobile/android/app:apk_app_distribution_test",
         "//projects/mobile/android/app:apk_manifest_test",
         "//projects/mobile/android/app:apk_network_inspection_test",
         "//projects/mobile/android/app:apk_runtime_closure_test",
@@ -96,6 +98,7 @@ test_suite(
         "//projects/mobile/android/features/system/impl:robolectric_test",
         "//projects/mobile/android/features/time/impl:robolectric_test",
         "//projects/mobile/android/features/timers/impl:robolectric_test",
+        "//projects/mobile/android/features/update/impl:robolectric_test",
         "//projects/mobile/android/features/vpn/impl:robolectric_test",
     ],
 )

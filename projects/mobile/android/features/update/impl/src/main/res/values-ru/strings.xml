@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="home_update_title_available">Доступно обновление</string>
+    <string name="home_update_title_checking">Проверяем обновления</string>
+    <string name="home_update_title_up_to_date">Обновлений нет</string>
+    <string name="home_update_title_sign_in">Нужен вход тестировщика</string>
+    <string name="home_update_title_failed">Не удалось обновить</string>
+    <string name="home_update_version_available">Доступна версия %1$s</string>
+    <string name="home_update_version_current">Установлена версия %1$s</string>
+    <string name="home_update_notes_title">Что нового</string>
+    <string name="home_update_action_update">Обновить</string>
+    <string name="home_update_action_sign_in">Войти</string>
+    <string name="home_update_action_retry">Повторить</string>
+    <string name="home_update_action_later">Позже</string>
+    <string name="home_update_action_close">Закрыть</string>
+    <string name="home_update_progress_checking">Проверяем…</string>
+    <string name="home_update_progress_signing_in">Входим…</string>
+    <string name="home_update_progress_downloading">Загрузка… %1$d%%</string>
+    <string name="home_update_progress_downloading_unknown">Загрузка…</string>
+    <string name="home_update_progress_downloaded">Подтвердите установку в системном окне</string>
+    <string name="home_update_sign_in_explanation">Firebase App Distribution просит тестировщика войти в Google-аккаунт, на который пришло приглашение. Приложение хранит вход на этом телефоне и не видит ваш пароль.</string>
+    <string name="home_update_up_to_date">У вас уже последняя сборка.</string>
+    <string name="home_update_error_offline">Нет связи с Firebase. Проверьте сеть и повторите.</string>
+    <string name="home_update_error_auth">Вход тестировщика истёк. Войдите снова.</string>
+    <string name="home_update_error_auth_cancelled">Вход отменён.</string>
+    <string name="home_update_error_download">Не удалось загрузить обновление.</string>
+    <string name="home_update_error_install">Система не установила обновление.</string>
+    <string name="home_update_error_install_cancelled">Установка отменена.</string>
+    <string name="home_update_error_unsupported">Эта сборка не умеет обновляться.</string>
+    <string name="home_update_error_unknown">Что-то пошло не так. Повторите позже.</string>
+</resources>

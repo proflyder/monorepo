@@ -206,6 +206,59 @@ Firebase App Distribution (tester group `admins`, or `HOME_TESTERS_GROUP`).
   fixture: `node platform/ci/fad_cleanup.mjs --fixture
   platform/ci/testdata/fad-releases.json --now 2026-11-04T12:00:00Z`.
 
+## In-app updates
+
+The phone updates itself from Firebase App Distribution; nothing is installed
+without a tap.
+
+- **Only the distributed build carries the updater.** `distribute.sh` and the
+  release step of `_android.yml` pass `--define home_app_distribution=on`,
+  which links the full `com.google.firebase:firebase-appdistribution`
+  (`16.0.0-beta21`). Every other build compiles against
+  `firebase-appdistribution-api` alone and hides the update UI; the generated
+  `UpdateBuild.APP_DISTRIBUTION` flag is the only difference. The app manifest
+  declares `REQUEST_INSTALL_PACKAGES` because `rules_android` drops library
+  permissions; the full SDK adds its `InstallActivity`, `SignInResultActivity`,
+  file provider and component registrars through manifest merging.
+- **When it checks.** `UpdateCoordinator` (`features/update/impl`) is an
+  `AppStartable` that reacts to `AppForeground` and waits for `AppActivation`
+  first, so a background cold start runs no SDK call. The attempt timestamp is
+  persisted in DataStore (`update_last_check_wall_millis`), so automatic checks
+  happen at most once per 6 h across restarts. A manual check from Settings
+  always runs.
+- **Where it shows.** Settings → **System → Check for updates** shows the
+  installed version and the last result. When a release is available,
+  `UpdatePromptContribution` (an `AppActivityContribution` attached by
+  `MainActivity`) opens our own dialog: version, release notes and
+  "Update"/"Later". "Update" calls `updateApp()` on the tap and shows download
+  progress; the system installer asks for confirmation. The app never installs
+  by itself.
+- **Tester sign-in.** App Distribution requires the tester's Google account.
+  `checkForNewRelease` returns `AUTHENTICATION_FAILURE` until `signInTester()`
+  succeeds; the dialog explains that the sign-in stays on the phone and offers
+  "Sign in", then retries the check. The sign-in is stored by the SDK, not by
+  the app.
+- **Release notes** come from `distribute.sh` (`--release-notes`): the PR title
+  for a PR release, otherwise the merge commit subject, plus the short SHA and
+  the run URL. The dialog renders them as-is.
+- **Failures** are mapped to our localized strings (offline, download, install,
+  cancelled, unsupported, unknown); an automatic failure is logged and stays
+  silent, a manual one opens the dialog with the reason. No failure path
+  crashes.
+- **Tests**: `features/update/impl:robolectric_test` drives `UpdateCoordinator`
+  through a fake `AppUpdater` (throttle, activation gate, available/sign-in/
+  failure/progress states) and renders the real dialog window in the Emerald
+  theme, dark and light, with the `ru` locale; each screenshot asserts that the
+  window paints the dialog surface and that the labels keep a 4.5:1 contrast
+  against it. `app:apk_app_distribution_test` fails if the full SDK is absent
+  with `home_app_distribution=on` or present without it.
+
+First run on a phone: open the Settings row, tap **Sign in** once with the
+Google account invited to the `admins` tester group, then tap **Update** when a
+release is offered and allow "install unknown apps" in the system prompt. The
+same SDK menu (shake or notification) is not needed; the row is the intended
+entry point.
+
 ## Firebase and connection settings
 
 Firebase provides Crashlytics, Remote Config and FCM; no Analytics. Crashlytics
@@ -505,8 +558,9 @@ badges are selectors in `render`.
   scheme is accepted.
 - `MainActivity` has no feature knowledge: it renders `AppChromeState` and
   attaches `Set<ToolbarContribution>`, `Set<ToolbarAction>`,
-  `Set<DeepLinkSource>`. Home quick-action tiles of other features come from
-  `Set<QuickTileProvider>`.
+  `Set<DeepLinkSource>` and `Set<AppActivityContribution>` (an activity-bound
+  presenter such as the in-app update prompt). Home quick-action tiles of
+  other features come from `Set<QuickTileProvider>`.
 
 ### Shared infrastructure
 
