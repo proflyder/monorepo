@@ -73,6 +73,7 @@ jobs:
       python_units: ${{ steps.route.outputs.python_units }}
       js_units: ${{ steps.route.outputs.js_units }}
       native_units: ${{ steps.route.outputs.native_units }}
+      native_release_units: ${{ steps.route.outputs.native_release_units }}
       base_sha: ${{ steps.route.outputs.base_sha }}
       docs_only: ${{ steps.route.outputs.docs_only }}
       deploy_control: ${{ steps.route.outputs.deploy_control }}
@@ -134,7 +135,9 @@ jobs:
             const argv = process.env.MODE === 'all'
               ? ['--all', '--format', 'github']
               : ['--base', process.env.PR_BASE_SHA || '', '--format', 'github'];
-            await affected.runGithubScript({ core, argv });
+            const computed = await affected.runGithubScript({ core, argv });
+            const releases = (computed.entries.native || []).filter((entry) => entry.publish !== false);
+            core.setOutput('native_release_units', affected.jsonDumps(releases));
 
   quality:
     needs: changes
@@ -270,7 +273,7 @@ jobs:
       publish_script: ${{ matrix.publish_script }}
       publish_attest_glob: ${{ matrix.publish_attest_glob }}
       promote: false
-      push_tree_tag: ${{ inputs.same_repository }}
+      push_tree_tag: ${{ inputs.same_repository && matrix.publish }}
       save_cache: ${{ inputs.mode != 'pull_request' }}
     secrets:
       NEXUS_CI_PASSWORD: ${{ secrets.NEXUS_CI_PASSWORD }}
@@ -283,7 +286,7 @@ jobs:
       inputs.same_repository &&
       needs.changes.result == 'success' &&
       needs.native.result == 'success' &&
-      needs.changes.outputs.native_units != '[]'
+      needs.changes.outputs.native_release_units != '[]'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -314,7 +317,7 @@ jobs:
 
       - name: Verify the routed native versions are unused
         env:
-          NATIVE_UNITS: ${{ needs.changes.outputs.native_units }}
+          NATIVE_UNITS: ${{ needs.changes.outputs.native_release_units }}
         run: |
           set -euo pipefail
           tree=$(git rev-parse 'HEAD^{tree}')
