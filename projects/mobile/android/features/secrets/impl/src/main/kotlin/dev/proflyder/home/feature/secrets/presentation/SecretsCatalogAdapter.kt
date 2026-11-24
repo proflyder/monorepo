@@ -2,6 +2,7 @@ package dev.proflyder.home.feature.secrets.presentation
 
 import android.view.LayoutInflater
 import android.view.ViewGroup
+import dev.proflyder.home.core.designsystem.list.SectionedAdapter
 import dev.proflyder.home.core.presentation.KeyedDiff
 import dev.proflyder.home.core.ui.AdapterCallback
 import dev.proflyder.home.core.ui.BaseAdapterCallback
@@ -21,7 +22,9 @@ private val CatalogDiff = KeyedDiff<SecretsCatalogRow>(key = { it.key })
 internal class SecretsCatalogAdapter(
     private val onClick: (SecretsCatalogRow.EntryRow) -> Unit,
     private val onBindDevice: () -> Unit = {},
-) : BaseListAdapter<SecretsCatalogRow, ViewBinding, CatalogCallback>(BaseAdapterCallback<SecretsCatalogRow>(), CatalogDiff) {
+) : BaseListAdapter<SecretsCatalogRow, ViewBinding, CatalogCallback>(BaseAdapterCallback<SecretsCatalogRow>(), CatalogDiff),
+    SectionedAdapter {
+    override fun isSectionHeader(position: Int): Boolean = getItem(position) !is SecretsCatalogRow.EntryRow
 
     override fun viewTypeOf(item: SecretsCatalogRow): Int = when (item) {
         SecretsCatalogRow.DeviceCard -> TYPE_DEVICE

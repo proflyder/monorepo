@@ -3,4 +3,5 @@
     <id name="ds_device_state_fill" />
     <id name="ds_button_loading_text" />
     <id name="ds_popup_obstacle" />
+    <id name="ds_grouped_row_ripple" />
 </resources>

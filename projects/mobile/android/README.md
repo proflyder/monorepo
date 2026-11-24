@@ -590,8 +590,8 @@ badges are selectors in `render`.
   through typed `ResultKey`s.
 - Sectioned lists: the adapter implements `SectionedAdapter`; decorations
   `StickySectionHeaders().attachTo(list)` (a tap on the pinned header goes to
-  the header), `GroupDividers` (only between rows of a group) and `GroupCards`
-  (rounded first and last row of a group).
+  the header) and `addGroupedRows()` (cards, dividers and a row ripple clipped
+  to each row's card shape).
 - A notice with an action is a `RouteNotice(message, route)` shown by
   `showNotice`: a snackbar with "Open" that opens the typed `Route`.
 - Back handlers are registered with `addBackCallback`; `backDispatcher`
