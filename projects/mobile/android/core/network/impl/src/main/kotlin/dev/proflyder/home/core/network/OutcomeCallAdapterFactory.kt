@@ -62,7 +62,7 @@ internal class OutcomeExecutor(
         val result = runCatching { call.awaitResponse() }
         val failure = result.exceptionOrNull() ?: return result.getOrThrow().toOutcome().also(::report)
         if (!retry.allows(number, failure)) return Outcome.Failure(failure.toCallFailure())
-        delay(retry.delayAfter(number))
+        delay(retry.delayAfter(number, failure))
         gate.await()
         return attempt(call.clone(), number + 1)
     }

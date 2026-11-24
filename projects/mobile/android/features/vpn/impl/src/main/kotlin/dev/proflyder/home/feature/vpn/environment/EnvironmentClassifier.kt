@@ -13,4 +13,15 @@ internal object EnvironmentClassifier {
         reachesHome() -> HomeNetworkState.Home(facts.handles)
         else -> HomeNetworkState.Away(facts.handles)
     }
+
+    fun keepKnownHome(
+        state: HomeNetworkState,
+        previous: HomeNetworkState,
+        handles: Set<Long>,
+    ): HomeNetworkState = when {
+        state == HomeNetworkState.Unknown &&
+            previous is HomeNetworkState.Home &&
+            previous.networks == handles -> previous
+        else -> state
+    }
 }

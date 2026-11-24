@@ -24,4 +24,25 @@ class EnvironmentClassifierTest {
         assertEquals(HomeNetworkState.Away(setOf(1L)), EnvironmentClassifier.classify(wifi, true) { false })
         assertEquals(HomeNetworkState.Offline, EnvironmentClassifier.classify(NetworkFacts(emptySet()), true) { true })
     }
+
+    @Test
+    fun aBlockedHomeNetworkKeepsTheKnownHomeInsteadOfFlappingToUnknown() {
+        val home = HomeNetworkState.Home(setOf(1L))
+
+        assertEquals(home, EnvironmentClassifier.keepKnownHome(HomeNetworkState.Unknown, home, setOf(1L)))
+    }
+
+    @Test
+    fun aBlockedNetworkOnDifferentHandlesIsUnknown() {
+        val home = HomeNetworkState.Home(setOf(1L))
+
+        assertEquals(HomeNetworkState.Unknown, EnvironmentClassifier.keepKnownHome(HomeNetworkState.Unknown, home, setOf(2L)))
+    }
+
+    @Test
+    fun losingEveryNetworkIsOfflineEvenAfterHome() {
+        val home = HomeNetworkState.Home(setOf(1L))
+
+        assertEquals(HomeNetworkState.Offline, EnvironmentClassifier.keepKnownHome(HomeNetworkState.Offline, home, setOf(1L)))
+    }
 }
