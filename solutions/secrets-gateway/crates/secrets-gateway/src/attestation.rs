@@ -1,5 +1,5 @@
 use base64::Engine as _;
-use base64::engine::general_purpose::URL_SAFE_NO_PAD_INDIFFERENT;
+use base64::engine::general_purpose::STANDARD_NO_PAD;
 use sha2::{Digest, Sha256};
 use subtle::ConstantTimeEq;
 use thiserror::Error;
@@ -10,7 +10,8 @@ use x509_parser::parse_x509_certificate;
 use x509_parser::pem::parse_x509_pem;
 use x509_parser::time::ASN1Time;
 
-const MAX_CHAIN_CERTIFICATES: usize = 4;
+const MIN_CHAIN_CERTIFICATES: usize = 2;
+const MAX_CHAIN_CERTIFICATES: usize = 8;
 const SECURITY_LEVEL_TEE: u32 = 1;
 const SECURITY_LEVEL_STRONGBOX: u32 = 2;
 const ROOT_OF_TRUST_TAG: u32 = 704;
@@ -61,11 +62,23 @@ EUaYLxwGlT9SLdjkVpz0UUOR5wIxAIoGyxGKRHVTpqpGRFiJtQEOOTp/+s1GcxeY
 uR2zh/80lQyu9vAFCj6E4AXc+osmRg==
 -----END CERTIFICATE-----";
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum Error {
-    #[error("attestation chain is malformed")]
-    Chain,
+    #[error("attestation chain has {0} certificates, outside 2..=8")]
+    Length(usize),
+    #[error("attestation certificate {0} does not parse")]
+    Parse(usize),
+    #[error("attestation certificate {index} ({subject}) is not valid now")]
+    Expired { index: usize, subject: String },
+    #[error("attestation certificate {0} is not signed by certificate {1}")]
+    Link(usize, usize),
+    #[error("attestation certificate {0} is not a CA")]
+    Authority(usize),
+    #[error("attestation verification time is out of range")]
+    Clock,
     #[error("attestation chain does not reach a pinned root")]
+    Anchor,
+    #[error("pinned trust anchors are malformed")]
     Roots,
     #[error("attestation extension is malformed")]
     Extension,
@@ -132,46 +145,68 @@ pub fn verify(
     roots: &Roots,
     now_unix: u64,
 ) -> Result<Attestation, Error> {
-    if chain.len() < 2 || chain.len() > MAX_CHAIN_CERTIFICATES {
-        return Err(Error::Chain);
+    let result = verify_chain(chain, challenge, public_key_der, roots, now_unix);
+    if let Err(error) = &result {
+        log_rejection(chain, error);
     }
-    let mut ders = Vec::with_capacity(chain.len());
-    for item in chain {
-        ders.push(
-            URL_SAFE_NO_PAD_INDIFFERENT
-                .decode(item)
-                .map_err(|_| Error::Encoding)?,
-        );
+    result
+}
+
+fn verify_chain(
+    chain: &[String],
+    challenge: &str,
+    public_key_der: &[u8],
+    roots: &Roots,
+    now_unix: u64,
+) -> Result<Attestation, Error> {
+    if !(MIN_CHAIN_CERTIFICATES..=MAX_CHAIN_CERTIFICATES).contains(&chain.len()) {
+        return Err(Error::Length(chain.len()));
     }
-    let mut certificates = Vec::with_capacity(ders.len());
-    for der in &ders {
-        let (_, certificate) = parse_x509_certificate(der).map_err(|_| Error::Chain)?;
-        certificates.push(certificate);
-    }
-    let now = ASN1Time::from_timestamp(i64::try_from(now_unix).unwrap_or(i64::MAX))
-        .map_err(|_| Error::Chain)?;
-    if !certificates
+    let ders = chain
         .iter()
-        .all(|certificate| certificate.validity().is_valid_at(now))
-    {
-        return Err(Error::Chain);
+        .map(|item| decode_certificate(item))
+        .collect::<Result<Vec<_>, _>>()?;
+    let certificates = ders
+        .iter()
+        .enumerate()
+        .map(|(index, der)| {
+            parse_x509_certificate(der)
+                .map(|(_, certificate)| certificate)
+                .map_err(|_| Error::Parse(index))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let now = ASN1Time::from_timestamp(i64::try_from(now_unix).unwrap_or(i64::MAX))
+        .map_err(|_| Error::Clock)?;
+    let anchored = chain_anchor(&certificates, &ders, roots);
+    let anchor_index = certificates.len() - 1;
+    for (index, certificate) in certificates.iter().enumerate() {
+        if anchored && index == anchor_index {
+            continue;
+        }
+        if !certificate.validity().is_valid_at(now) {
+            return Err(Error::Expired {
+                index,
+                subject: certificate.subject().to_string(),
+            });
+        }
     }
-    for pair in certificates.windows(2) {
+    for (index, pair) in certificates.windows(2).enumerate() {
         pair[0]
             .verify_signature(Some(pair[1].public_key()))
-            .map_err(|_| Error::Chain)?;
+            .map_err(|_| Error::Link(index, index + 1))?;
     }
-    if !certificates[1..].iter().all(|certificate| {
-        certificate
+    for (offset, certificate) in certificates[1..].iter().enumerate() {
+        if !certificate
             .basic_constraints()
             .ok()
             .flatten()
             .is_some_and(|constraints| constraints.value.ca)
-    }) {
-        return Err(Error::Chain);
+        {
+            return Err(Error::Authority(offset + 1));
+        }
     }
-    if !reaches_root(&certificates, &ders, roots) {
-        return Err(Error::Roots);
+    if !anchored {
+        return Err(Error::Anchor);
     }
     let leaf = &certificates[0];
     if leaf.public_key().raw != public_key_der {
@@ -224,7 +259,51 @@ pub fn verify(
     })
 }
 
-fn reaches_root(certificates: &[X509Certificate<'_>], ders: &[Vec<u8>], roots: &Roots) -> bool {
+fn decode_certificate(item: &str) -> Result<Vec<u8>, Error> {
+    let normalized = item
+        .trim()
+        .chars()
+        .map(|character| match character {
+            '-' => '+',
+            '_' => '/',
+            other => other,
+        })
+        .collect::<String>();
+    STANDARD_NO_PAD
+        .decode(normalized.trim_end_matches('='))
+        .map_err(|_| Error::Encoding)
+}
+
+fn log_rejection(chain: &[String], error: &Error) {
+    let certificates = chain
+        .iter()
+        .enumerate()
+        .map(|(index, item)| describe_certificate(index, item))
+        .collect::<Vec<_>>();
+    tracing::warn!(
+        chain_length = chain.len(),
+        certificates = %certificates.join("; "),
+        error = %error,
+        "key attestation chain rejected"
+    );
+}
+
+fn describe_certificate(index: usize, item: &str) -> String {
+    let Ok(der) = decode_certificate(item) else {
+        return format!("{index}: undecodable base64");
+    };
+    let Ok((_, certificate)) = parse_x509_certificate(&der) else {
+        return format!("{index}: does not parse");
+    };
+    format!(
+        "{index}: subject={} issuer={} not_after={}",
+        certificate.subject(),
+        certificate.issuer(),
+        certificate.validity().not_after
+    )
+}
+
+fn chain_anchor(certificates: &[X509Certificate<'_>], ders: &[Vec<u8>], roots: &Roots) -> bool {
     let top = certificates.last().expect("chain is not empty");
     let top_der = ders.last().expect("chain is not empty");
     if roots
