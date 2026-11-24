@@ -1,0 +1,46 @@
+[package]
+name = "secrets-gateway"
+description = "Owner-only OpenBao secrets API with TOTP step-up and audit"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "secrets_gateway"
+path = "src/lib.rs"
+
+[[bin]]
+name = "secrets-gateway"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = { workspace = true }
+axum = { workspace = true }
+hmac = { workspace = true }
+home-app-auth = { path = "../../../../packages/rust/home-app-auth" }
+home-config = { path = "../../../../packages/rust/home-config" }
+home-http = { path = "../../../../packages/rust/home-http" }
+home-runtime = { path = "../../../../packages/rust/home-runtime" }
+home-secret = { path = "../../../../packages/rust/home-secret" }
+home-telemetry = { path = "../../../../packages/rust/home-telemetry" }
+home-tls = { path = "../../../../packages/rust/home-tls" }
+http = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha1 = { workspace = true }
+subtle = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+http-body-util = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["test-util"] }
+tower = { workspace = true }
+
+[lints]
+workspace = true

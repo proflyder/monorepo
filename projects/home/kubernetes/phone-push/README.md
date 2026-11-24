@@ -88,7 +88,8 @@ data-only FCM без уведомления: `{type:"sync", entity, op, id}`. `e
   (service-токен: его же предъявляют mcp-gateway и scheduler).
 - `secret/k8s/home-assistant/phone-push#service_account_json` →
   `phone-push#service_account_json` (FCM).
-- NetworkPolicy: ingress только от `mcp-gateway`, scheduler и kubelet; egress —
-  scheduler `:8098`, CoreDNS `:53`, HTTPS `:443` (OAuth/FCM).
+- NetworkPolicy: ingress только от `mcp-gateway`, scheduler,
+  `secrets-gateway` (audit-пуши) и kubelet; egress — scheduler `:8098`,
+  CoreDNS `:53`, HTTPS `:443` (OAuth/FCM).
 - Откат — revert pins-коммита `PHONE_PUSH_IMAGE` или `flux suspend`
   Kustomization `app-phone-push`; своего состояния у сервиса нет.

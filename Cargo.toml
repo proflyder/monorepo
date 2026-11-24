@@ -17,6 +17,7 @@ members = [
     "solutions/currency-bot/crates/*",
     "solutions/intercom/crates/*",
     "solutions/phone-push/crates/*",
+    "solutions/secrets-gateway/crates/*",
 ]
 resolver = "3"
 

@@ -145,6 +145,39 @@ mise run secrets:exec -- -P kube exec -- \
   platform/workstation/with-kube-tunnel.sh kubectl get pods -A
 ```
 
+## secrets-gateway (owner-only секреты приложения)
+
+Порядок первого включения (владелец; секреты и URI не печатать):
+
+```bash
+# 1. TOTP-секрет в OpenBao + otpauth URI в файл 0600
+mise run admin:secrets-totp-init
+# ротация: старые коды перестают работать; после неё force-sync ESO и
+# rollout restart deploy/secrets-gateway (сервис читает TOTP при старте)
+mise run admin:secrets-totp-init -- --rotate
+
+# 2. policy + auth/kubernetes/role/secrets-gateway (audience secrets-gateway)
+mise run admin:openbao-bootstrap
+
+# 3. merge; если merge раньше шагов 1-2 — под Pending и Kustomization
+#    app-secrets-gateway NotReady, другие приложения не ломаются
+# 4. после merge: force-sync ESO и проверка Secret
+mise run kubectl -- -n home-assistant annotate externalsecret secrets-gateway \
+  force-sync="$(date +%s)" --overwrite
+mise run kubectl -- -n home-assistant wait --for=condition=Ready \
+  externalsecret/secrets-gateway --timeout=120s
+mise run kubectl -- -n home-assistant get secret secrets-gateway \
+  -o go-template='{{range $k, $v := .data}}{{$k}}{{"\n"}}{{end}}'
+```
+
+В Secret должны быть `service_token` и `totp_secret`; в поде — SA
+`secrets-gateway` с projected audience `secrets-gateway`
+(`automountServiceAccountToken: false`), без root/operator token. PVC
+`secrets-gateway-state` хранит только последний TOTP-шаг. Импортировать URI в
+аутентификатор и удалить файл. Проверка и откат —
+`projects/home/kubernetes/secrets-gateway/README.md`; API и step-up —
+`solutions/secrets-gateway/README.md`.
+
 ## Где команды модулей
 
 | Тема | Документ |
@@ -160,6 +193,7 @@ mise run secrets:exec -- -P kube exec -- \
 | MCP-шлюз, голосовой маршрут, мост bb | `projects/home/kubernetes/mcp-gateway/README.md` |
 | Планировщик, ha-bridge, ha-scenario, сид сценариев | `projects/home/kubernetes/scheduler/README.md` |
 | Intercom | `projects/home/kubernetes/intercom/README.md` |
+| secrets-gateway (OpenBao KV, TOTP step-up, audit) | `solutions/secrets-gateway/README.md`, `projects/home/kubernetes/secrets-gateway/README.md` |
 | wakegrant | `projects/home/kubernetes/wakegrant/README.md` |
 | Currency bot | `projects/home/kubernetes/currency-bot/README.md` |
 | Hermes / runtime | `projects/home-assistant/deploy/README.md`, `KUBERNETES-OPERATIONS.md` |

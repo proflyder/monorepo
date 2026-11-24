@@ -28,6 +28,7 @@ pub enum Module {
     System,
     InfraReports,
     Alerts,
+    Secrets,
     Admin,
 }
 
@@ -43,6 +44,7 @@ pub const MODULES: &[Module] = &[
     Module::System,
     Module::InfraReports,
     Module::Alerts,
+    Module::Secrets,
     Module::Admin,
 ];
 
@@ -69,6 +71,7 @@ impl Module {
             Self::System => "system",
             Self::InfraReports => "infra_reports",
             Self::Alerts => "alerts",
+            Self::Secrets => "secrets",
             Self::Admin => "admin",
         }
     }
@@ -87,8 +90,14 @@ impl Module {
             Self::System => "Система",
             Self::InfraReports => "Отчёты инфраструктуры",
             Self::Alerts => "Алерты",
+            Self::Secrets => "Секреты",
             Self::Admin => "Администрирование",
         }
+    }
+
+    #[must_use]
+    pub fn owner_only(self) -> bool {
+        matches!(self, Self::Admin | Self::Secrets)
     }
 
     #[must_use]
@@ -123,7 +132,7 @@ impl Modules {
         MODULES
             .iter()
             .copied()
-            .filter(|module| *module != Module::Admin)
+            .filter(|module| !module.owner_only())
             .collect()
     }
 
@@ -223,6 +232,9 @@ pub struct Principal {
 impl Principal {
     #[must_use]
     pub fn allows(&self, module: Module) -> bool {
+        if module.owner_only() && !self.owner {
+            return false;
+        }
         self.owner || self.modules.contains(module)
     }
 
@@ -944,5 +956,41 @@ mod tests {
         }
         assert!(Modules::member().contains(Module::Home));
         assert!(!Modules::member().contains(Module::Admin));
+        assert!(!Modules::member().contains(Module::Secrets));
+    }
+
+    #[test]
+    fn the_secrets_module_is_owner_only() {
+        assert!(Module::Secrets.owner_only());
+        assert!(Module::Admin.owner_only());
+        assert!(!Module::Home.owner_only());
+        assert_eq!(Module::from_id("secrets"), Some(Module::Secrets));
+        assert!(!Modules::all_but_admin().contains(Module::Secrets));
+        assert!(!Modules::all_but_admin().contains(Module::Admin));
+        assert!(Modules::all_but_admin().contains(Module::Alerts));
+    }
+
+    #[test]
+    fn a_non_owner_never_gets_an_owner_only_module_even_if_stored() {
+        let mut modules = Modules::member();
+        modules.insert(Module::Secrets);
+        let principal = Principal {
+            id: "member".to_owned(),
+            name: "member".to_owned(),
+            owner: false,
+            modules,
+        };
+        assert!(!principal.allows(Module::Secrets));
+        assert_eq!(
+            principal.require(Module::Secrets),
+            Err(Forbidden::Module(Module::Secrets))
+        );
+        let owner = Principal {
+            id: "owner".to_owned(),
+            name: "owner".to_owned(),
+            owner: true,
+            modules: Modules::empty(),
+        };
+        assert!(owner.allows(Module::Secrets));
     }
 }

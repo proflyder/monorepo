@@ -20,6 +20,9 @@ spec:
         - podSelector:
             matchLabels:
               app.kubernetes.io/name: scheduler
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: secrets-gateway
         - ipBlock:
             cidr: ${NODE_LAN_IP}/32
       ports:

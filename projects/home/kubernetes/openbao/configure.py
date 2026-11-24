@@ -12,6 +12,73 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[4]
 SECRETS = ROOT / "secrets" / "openbao"
+SECRETS_GATEWAY_DENY = (
+    ROOT / "projects" / "home" / "kubernetes" / "secrets-gateway"
+    / "manifests" / "deny.json"
+)
+SECRETS_GATEWAY_ALLOW = """\
+path "secret/data/*" {
+  capabilities = ["read", "update", "delete"]
+}
+
+path "secret/metadata/*" {
+  capabilities = ["read", "list"]
+}
+
+path "secret/metadata" {
+  capabilities = ["list"]
+}"""
+SECRETS_GATEWAY_STATIC_DENY = """\
+path "secret/destroy/*" {
+  capabilities = ["deny"]
+}
+
+path "secret/delete/*" {
+  capabilities = ["deny"]
+}
+
+path "secret/undelete/*" {
+  capabilities = ["deny"]
+}
+
+path "secret/subkeys/*" {
+  capabilities = ["deny"]
+}
+
+path "secret/config" {
+  capabilities = ["deny"]
+}
+
+path "sys/*" {
+  capabilities = ["deny"]
+}
+
+path "auth/*" {
+  capabilities = ["deny"]
+}
+
+path "identity/*" {
+  capabilities = ["deny"]
+}"""
+
+
+def secrets_gateway_deny_block(path: str) -> str:
+    return 'path "%s" {\n  capabilities = ["deny"]\n}' % path
+
+
+def secrets_gateway_policy() -> str:
+    prefixes = json.loads(
+        SECRETS_GATEWAY_DENY.read_text(encoding="utf-8"))["prefixes"]
+    blocks = []
+    for prefix in prefixes:
+        for kind in ("data", "metadata"):
+            blocks.append(secrets_gateway_deny_block(f"secret/{kind}/{prefix}"))
+            blocks.append(secrets_gateway_deny_block(f"secret/{kind}/{prefix}/*"))
+    return "\n\n".join(
+        [SECRETS_GATEWAY_ALLOW, SECRETS_GATEWAY_STATIC_DENY, *blocks]) + "\n"
+
+
+SECRETS_GATEWAY_POLICY = secrets_gateway_policy()
 
 GITHUB_ISSUER = "https://token.actions.githubusercontent.com"
 GITHUB_STATION_ENVIRONMENT = "Station"
@@ -356,15 +423,17 @@ def ensure_kubernetes(bao: Bao) -> None:
         "external-secrets": (["external-secrets"], ["external-secrets"], ["k8s-read"]),
         "k8s-smoke": (["openbao-smoke"], ["openbao-smoke"], ["k8s-read"]),
         "backup": (["openbao-backup"], ["openbao"], ["backup"]),
+        "secrets-gateway": (["secrets-gateway"], ["home-assistant"], ["secrets-gateway"]),
     }
     for name, (accounts, namespaces, policies) in roles.items():
+        audience = "secrets-gateway" if name == "secrets-gateway" else ""
         bao.expect("POST", f"/v1/auth/kubernetes/role/{name}", {
             "bound_service_account_names": accounts,
             "bound_service_account_namespaces": namespaces,
             "token_policies": policies,
             "token_ttl": "20m",
             "token_max_ttl": "1h",
-            "audience": "",
+            "audience": audience,
         })
         print(f"role: auth/kubernetes/role/{name}")
 
@@ -491,6 +560,7 @@ def main() -> None:
         ensure_policy(bao, "ci-station", STATION_POLICY)
     ensure_policy(bao, "k8s-read", K8S_POLICY)
     ensure_policy(bao, "backup", BACKUP_POLICY)
+    ensure_policy(bao, "secrets-gateway", SECRETS_GATEWAY_POLICY)
     ensure_policy(bao, "operator-kv", OPERATOR_KV_POLICY)
     ensure_userpass(bao, args.user)
     ensure_github(bao, audience, args.repository, station_repository)

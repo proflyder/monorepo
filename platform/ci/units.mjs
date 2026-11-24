@@ -319,6 +319,61 @@ export const config = {
     },
 
     {
+      id: "secrets-gateway",
+      platform: "bazel",
+      title: "solutions/secrets-gateway (Rust owner-only OpenBao KV API) + home deployment",
+      paths: [
+        "solutions/secrets-gateway/**",
+        "platform/deploy/**",
+        "platform/deploy-rs/**",
+      ],
+      deploy: {
+        builder: "bazel",
+        target_root: "//solutions/secrets-gateway",
+        images: ["secrets-gateway"],
+        workloads: ["secrets-gateway"],
+        namespace: "home-assistant",
+      },
+      rollback: {
+        kind: "flux-pins",
+        note:
+          "Stateless: revert the `deploy/home-apps` commit that changed " +
+          "SECRETS_GATEWAY_IMAGE and let Flux re-apply the previous digest.",
+        source: "DECISIONS 54 and projects/home/kubernetes/secrets-gateway/README.md",
+      },
+      bazel: {
+        roots: [
+          "//solutions/secrets-gateway",
+          "//packages/rust",
+          "//projects/home/kubernetes/secrets-gateway",
+        ],
+        test_targets: [
+          "//solutions/secrets-gateway/crates/secrets-gateway:unit_tests",
+          "//solutions/secrets-gateway/crates/secrets-gateway:gateway_tests",
+          "//solutions/secrets-gateway/crates/secrets-gateway:clippy",
+          "//solutions/secrets-gateway/crates/secrets-gateway:rustfmt",
+        ],
+        build_targets: [
+          "//solutions/secrets-gateway/...",
+          "//projects/home/kubernetes/secrets-gateway/...",
+        ],
+      },
+    },
+
+    {
+      id: "secrets-gateway-deploy",
+      platform: "python",
+      title: "projects/home/kubernetes/secrets-gateway (policy, manifests, TOTP init)",
+      paths: [
+        "projects/home/kubernetes/secrets-gateway/**",
+        "platform/mise-tasks/admin/secrets-totp-init.sh",
+      ],
+      python: {
+        suites: ["projects/home/kubernetes/secrets-gateway"],
+      },
+    },
+
+    {
       id: "currency-bot",
       platform: "bazel",
       title: "solutions/currency-bot (Rust Telegram currency bot) + home deployment",
@@ -888,7 +943,11 @@ export const config = {
       id: "openbao",
       platform: "python",
       title: "projects/home/kubernetes/openbao (config, CI OIDC secret hand-off)",
-      paths: ["projects/home/kubernetes/openbao/**"],
+      paths: [
+        "projects/home/kubernetes/openbao/**",
+        "projects/home/kubernetes/secrets-gateway/policy.hcl",
+        "projects/home/kubernetes/secrets-gateway/manifests/deny.json",
+      ],
       python: {
         suites: ["projects/home/kubernetes/openbao"],
       },
@@ -929,6 +988,7 @@ export const config = {
         "projects/home/kubernetes/vaultwarden/**",
         "projects/home/kubernetes/wakegrant/manifests/**",
         "projects/home/kubernetes/intercom/manifests/**",
+        "projects/home/kubernetes/secrets-gateway/manifests/**",
         "projects/home/kubernetes/currency-bot/manifests/**",
         "projects/home/kubernetes/mcp-gateway/manifests/**",
         "projects/home/kubernetes/scheduler/manifests/**",
@@ -960,6 +1020,7 @@ export const config = {
       paths: [
         "projects/home/kubernetes/external-secrets/**",
         "projects/home/kubernetes/scheduler/manifests/external-secrets.yaml",
+        "projects/home/kubernetes/secrets-gateway/manifests/external-secrets.yaml",
         "projects/home-assistant/deploy/manifests/external-secrets.yaml",
         "projects/home/kubernetes/ingress/routes/external-secret-cloudflare.yaml",
         "projects/home/kubernetes/observability/manifests/external-secret-grafana-admin.yaml",

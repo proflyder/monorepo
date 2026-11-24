@@ -126,6 +126,37 @@ spec:
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
+  name: app-secrets-gateway
+  namespace: flux-system
+spec:
+  interval: 1m
+  retryInterval: 1m
+  timeout: 5m
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  path: ./projects/home/kubernetes/secrets-gateway/manifests
+  prune: true
+  wait: true
+  suspend: false
+  dependsOn:
+    - name: platform
+    - name: home-app-pins
+  postBuild:
+    substituteFrom:
+      - kind: ConfigMap
+        name: home-app-images
+      - kind: Secret
+        name: flux-app-settings
+  healthChecks:
+    - apiVersion: apps/v1
+      kind: Deployment
+      name: secrets-gateway
+      namespace: home-assistant
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
   name: app-currency-bot
   namespace: flux-system
 spec:

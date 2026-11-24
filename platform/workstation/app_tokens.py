@@ -32,6 +32,7 @@ MODULES = [
     "system",
     "infra_reports",
     "alerts",
+    "secrets",
     "admin",
 ]
 NAMESPACE = "home-assistant"

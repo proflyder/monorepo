@@ -225,6 +225,10 @@
    "purpose": "app access tokens seed (app_tokens, sha256 only), legacy token (mama), service_token (with transient service_token_previous), WireGuard peer-sync bearer (vpn_sync_token) and VPN profile settings (vpn.json)",
    "consumer": "ESO → home-assistant"
   },
+  "k8s/home-assistant/secrets-gateway": {
+   "purpose": "TOTP secret (base32) for secrets-gateway step-up; created by admin:secrets-totp-init",
+   "consumer": "ESO → home-assistant"
+  },
   "k8s/home-assistant/wakegrant": {
    "purpose": "wakegrant issuer token and per-machine keys",
    "consumer": "ESO → home-assistant"

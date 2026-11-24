@@ -49,6 +49,7 @@ test("deploy images and native publish repositories of units.mjs are considered"
     "phone-push",
     "pulsar-firmware",
     "scheduler",
+    "secrets-gateway",
     "voice-proxy",
     "wakegrant",
     "windows-logon-provider",

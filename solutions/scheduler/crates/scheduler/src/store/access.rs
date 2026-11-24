@@ -74,9 +74,15 @@ fn clean_name(name: &str) -> Result<String, StoreError> {
 
 fn clean_modules(modules: &Modules, owner: bool) -> Result<Vec<String>, StoreError> {
     let mut modules = modules.clone();
+    if !owner && modules.contains(Module::Secrets) {
+        return Err(StoreError::precondition(
+            "the secrets module belongs to the owner token",
+        ));
+    }
     modules.insert(Module::Base);
     if owner {
         modules.insert(Module::Admin);
+        modules.insert(Module::Secrets);
     }
     Ok(modules.ids().into_iter().map(str::to_owned).collect())
 }
@@ -158,6 +164,7 @@ fn import_seed_record(
     }
     if !record.owner {
         modules.remove(Module::Admin);
+        modules.remove(Module::Secrets);
     }
     if record.owner && record.id != OWNER_TOKEN_ID {
         tracing::warn!(
@@ -340,6 +347,11 @@ impl Store {
                 "the admin module belongs to the owner token",
             ));
         }
+        if modules.contains(Module::Secrets) {
+            return Err(StoreError::precondition(
+                "the secrets module belongs to the owner token",
+            ));
+        }
         let modules_json = serde_json::to_string(&clean_modules(modules, false)?)
             .map_err(|error| StoreError::invalid(error.to_string()))?;
         let id = id.to_owned();
@@ -393,6 +405,11 @@ impl Store {
                     if !current.owner && requested.contains(Module::Admin) {
                         return Err(StoreError::precondition(
                             "the admin module belongs to the owner token",
+                        ));
+                    }
+                    if !current.owner && requested.contains(Module::Secrets) {
+                        return Err(StoreError::precondition(
+                            "the secrets module belongs to the owner token",
                         ));
                     }
                     Some(
@@ -498,6 +515,46 @@ mod tests {
         let owner = store.access_token("owner").expect("owner");
         assert!(owner.owner);
         assert!(owner.modules.contains(Module::Admin));
+        assert!(owner.modules.contains(Module::Secrets));
+    }
+
+    #[test]
+    fn the_secrets_module_cannot_be_granted_to_a_non_owner() {
+        let store = store();
+        let mut secrets = Modules::member();
+        secrets.insert(Module::Secrets);
+        let error = store
+            .access_create("guest", "Guest", &sha256_hex("guest"), &secrets, 10)
+            .expect_err("create with secrets");
+        assert_eq!(error.kind(), Some(crate::domain::ErrorKind::Precondition));
+        let guest = store
+            .access_create(
+                "phone",
+                "Phone",
+                &sha256_hex("phone"),
+                &Modules::member(),
+                11,
+            )
+            .expect("plain member");
+        let error = store
+            .access_update("phone", None, Some(&secrets), 12)
+            .expect_err("update with secrets");
+        assert_eq!(error.kind(), Some(crate::domain::ErrorKind::Precondition));
+        assert!(
+            !store
+                .access_token(&guest.id)
+                .expect("guest")
+                .modules
+                .contains(Module::Secrets)
+        );
+        let snapshot = store.access_snapshot().expect("snapshot");
+        assert!(
+            snapshot
+                .authenticate_token("phone")
+                .expect("token")
+                .require(Module::Secrets)
+                .is_err()
+        );
     }
 
     #[test]

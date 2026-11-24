@@ -359,9 +359,11 @@
     регистрация push-устройства), `home` (`/v1/catalog`, `EnqueueTask`,
     `CancelTask`), `scenarios`, `alarms_timers`, `intercom_call`,
     `notifications`, `chat`, `vpn`, `system`, `infra_reports` (резерв),
-    `alerts` (фильтр alert-сообщений и alert-push), `admin` (`/v1/access/*`).
+    `alerts` (фильтр alert-сообщений и alert-push), `secrets`
+    (`secrets-gateway /v1/secrets/*`), `admin` (`/v1/access/*`).
     Любой действующий токен получает `base`; legacy «Мама» временно —
-    все модули, кроме `admin`, чтобы до UI-PR с именованными токенами не
+    все модули, кроме owner-only `admin` и `secrets`, чтобы до UI-PR с
+    именованными токенами не
     было регрессий у телефонов/HA/APK; сужение — отдельным решением после
     раздачи именованных токенов; owner —
     все модули, его нельзя отозвать или лишить `admin`. Проверка — общий
@@ -380,3 +382,25 @@
     при старте назначаются «Маме», перехват push — тем же FCM-токеном или
     owner'ом, VPN — только owner'ом;
     `EnqueueTask/CancelTask` для `home` ограничены `control`/`home.control`.
+70. **Секреты приложения — отдельный owner-only gateway поверх OpenBao.**
+    Новый сервис `solutions/secrets-gateway` читает и меняет KV v2 через
+    Kubernetes auth роль `secrets-gateway` с отдельным audience (не
+    root/operator token). Владелец решил открыть из телефона весь каталог,
+    кроме ядра: `openbao/*`, `infra/vpn/client-ca`, `k8s/flux-system/*`,
+    `k8s/home-assistant/scheduler-auth`, `k8s/home-assistant/secrets-gateway`.
+    Остальные пути, включая `infra/*` и `ci/*`, достижимы. Список задан в
+    `manifests/deny.json`; из него генерируется `policy.hcl`, а сервис читает
+    тот же файл из ConfigMap, поэтому код и policy не расходятся. Политика:
+    read/update/delete на `secret/data/*` (delete — только soft-delete
+    версии), read/list на `secret/metadata/*`; destroy, metadata-delete,
+    undelete, sys/auth/identity запрещены. Модуль `secrets` — owner-only:
+    scheduler store и admin API отказывают не-owner'у, owner имеет его неявно.
+    Reveal требует 5-минутную TOTP-сессию; update/rollback/delete — свежий
+    TOTP, CAS и запрет update soft-deleted версии. Ошибки TOTP дают
+    экспоненциальный backoff и глобальный лимит; последний успешный шаг
+    хранится на PVC, поэтому рестарт не replay'ит код. API только soft-delete
+    последней версии и CAS-запись; destroy отсутствует. Каждый доступ
+    логируется без значений и уходит push'ем в phone-push с `module=secrets`
+    (owner-устройства). Причина: телефон получает управляемые секреты без
+    operator-токена и без расширения прав app-токенов; значения остаются в
+    OpenBao, а UI — PR B.

@@ -3971,6 +3971,35 @@ dependencies = [
 ]
 
 [[package]]
+name = "secrets-gateway"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "axum",
+ "hmac",
+ "home-app-auth",
+ "home-config",
+ "home-http",
+ "home-runtime",
+ "home-secret",
+ "home-telemetry",
+ "home-tls",
+ "http",
+ "http-body-util",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha1",
+ "subtle",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tokio-util",
+ "tower",
+ "tracing",
+]
+
+[[package]]
 name = "security-framework"
 version = "3.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

@@ -1,0 +1,15 @@
+load("//platform/bazel/oci:service_image.bzl", "rust_service_image")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_service_image(
+    name = "secrets-gateway",
+    crate_binary = "//solutions/secrets-gateway/crates/secrets-gateway:secrets-gateway",
+    repo = "ghcr.io/proflyder/secrets-gateway",
+)
+
+filegroup(
+    name = "images",
+    srcs = [":secrets-gateway_image"],
+    visibility = ["//visibility:public"],
+)

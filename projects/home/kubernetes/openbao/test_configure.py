@@ -274,7 +274,8 @@ class MainGating(unittest.TestCase):
         names, _, github = run_main()
         self.assertNotIn("ci-station", names)
         self.assertEqual(names, ["admin", "ci-android",
-                                 "k8s-read", "backup", "operator-kv"])
+                                 "k8s-read", "backup", "secrets-gateway",
+                                 "operator-kv"])
         self.assertEqual(github, [(AUDIENCE, HOME_REPOSITORY, None)])
 
     def test_flag_adds_policy_and_role(self):
@@ -294,6 +295,76 @@ class MainGating(unittest.TestCase):
         names, _, github = run_main("--station-repository", "  ")
         self.assertNotIn("ci-station", names)
         self.assertEqual(github, [(AUDIENCE, HOME_REPOSITORY, None)])
+
+
+class SecretsGatewayPolicyTests(unittest.TestCase):
+    def test_the_tracked_policy_is_generated_from_the_deny_file(self):
+        policy = (
+            configure.ROOT / "projects" / "home" / "kubernetes"
+            / "secrets-gateway" / "policy.hcl"
+        ).read_text(encoding="utf-8")
+        self.assertEqual(policy, configure.secrets_gateway_policy())
+
+    def test_policy_allows_kv_v2_data_and_metadata_only(self):
+        policy = configure.SECRETS_GATEWAY_POLICY
+        self.assertIn('path "secret/data/*"', policy)
+        self.assertIn('path "secret/metadata/*"', policy)
+        self.assertIn('path "secret/metadata"', policy)
+        self.assertIn('capabilities = ["read", "update", "delete"]', policy)
+        self.assertIn('capabilities = ["read", "list"]', policy)
+        self.assertNotIn('"destroy"', policy)
+        self.assertNotIn('"sudo"', policy)
+        metadata_blocks = re.findall(
+            r'path "secret/metadata[^"]*" \{(.*?)\}', policy, re.S)
+        for block in metadata_blocks:
+            self.assertNotIn('"delete"', block)
+            self.assertNotIn('"destroy"', block)
+            self.assertNotIn('"undelete"', block)
+
+    def test_core_paths_and_openbao_internals_are_denied(self):
+        policy = configure.SECRETS_GATEWAY_POLICY
+        for path in (
+            "secret/data/openbao",
+            "secret/data/openbao/*",
+            "secret/data/infra/vpn/client-ca",
+            "secret/data/infra/vpn/client-ca/*",
+            "secret/data/k8s/flux-system",
+            "secret/data/k8s/flux-system/*",
+            "secret/data/k8s/home-assistant/scheduler-auth",
+            "secret/data/k8s/home-assistant/secrets-gateway",
+            "secret/destroy/*",
+            "sys/*",
+        ):
+            with self.subTest(path=path):
+                block = re.search(
+                    rf'path "{re.escape(path)}" \{{(.*?)\}}', policy, re.S)
+                self.assertIsNotNone(block, path)
+                self.assertIn('capabilities = ["deny"]', block.group(1))
+
+    def test_non_core_infrastructure_and_ci_are_reachable(self):
+        policy = configure.SECRETS_GATEWAY_POLICY
+        for path in (
+            "secret/data/infra",
+            "secret/data/ci",
+            "secret/data/k8s/home-assistant/phone-push",
+        ):
+            with self.subTest(path=path):
+                block = re.search(
+                    rf'path "{re.escape(path)}" \{{(.*?)\}}', policy, re.S)
+                self.assertIsNone(block, path)
+
+    def test_the_role_binds_the_service_account_to_the_policy(self):
+        bao = Recorder()
+        with redirect_stdout(StringIO()):
+            configure.ensure_kubernetes(bao)
+        self.assertEqual(bao.payload("/v1/auth/kubernetes/role/secrets-gateway"), {
+            "bound_service_account_names": ["secrets-gateway"],
+            "bound_service_account_namespaces": ["home-assistant"],
+            "token_policies": ["secrets-gateway"],
+            "token_ttl": "20m",
+            "token_max_ttl": "1h",
+            "audience": "secrets-gateway",
+        })
 
 
 class OperatorPolicyTests(unittest.TestCase):

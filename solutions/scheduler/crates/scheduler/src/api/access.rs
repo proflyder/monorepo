@@ -220,6 +220,9 @@ pub async fn create(
         Ok(modules) => modules,
         Err(response) => return *response,
     };
+    if modules.contains(Module::Secrets) {
+        return forbidden(Forbidden::Module(Module::Secrets));
+    }
     let token = match home_secret::hex(32) {
         Ok(secret) => format!("home_{}", secret.expose()),
         Err(_) => {
@@ -278,6 +281,16 @@ pub async fn update(
         },
         None => None,
     };
+    let target = match state.store.access_token(&id) {
+        Ok(target) => target,
+        Err(error) => return store_error(error),
+    };
+    if modules
+        .as_ref()
+        .is_some_and(|modules| !target.owner && modules.contains(Module::Secrets))
+    {
+        return forbidden(Forbidden::Module(Module::Secrets));
+    }
     let updated = match state.store.access_update(
         &id,
         body.name.as_deref(),
@@ -499,6 +512,72 @@ mod tests {
             read_body(snapshot(State(state), headers("service-token")).await).await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["revision"], 1);
+    }
+
+    #[tokio::test]
+    async fn the_secrets_module_is_owner_only() {
+        let state = state();
+        let (status, body) = read_body(
+            create(
+                State(state.clone()),
+                headers("owner-token"),
+                Json(CreateBody {
+                    name: "Секреты".to_owned(),
+                    modules: vec!["secrets".to_owned()],
+                }),
+            )
+            .await,
+        )
+        .await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
+        assert_eq!(body["error"], "module_forbidden");
+        assert_eq!(body["module"], "secrets");
+
+        let (status, body) = read_body(
+            update(
+                State(state.clone()),
+                Path("member".to_owned()),
+                headers("owner-token"),
+                Json(UpdateBody {
+                    name: None,
+                    modules: Some(vec!["secrets".to_owned()]),
+                }),
+            )
+            .await,
+        )
+        .await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
+        assert_eq!(body["module"], "secrets");
+
+        let owner_modules = Modules::owner()
+            .ids()
+            .into_iter()
+            .map(str::to_owned)
+            .collect();
+        let (status, _) = read_body(
+            update(
+                State(state.clone()),
+                Path("owner".to_owned()),
+                headers("owner-token"),
+                Json(UpdateBody {
+                    name: None,
+                    modules: Some(owner_modules),
+                }),
+            )
+            .await,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+
+        let (status, listed) = read_body(modules(State(state), headers("owner-token")).await).await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(
+            listed["modules"]
+                .as_array()
+                .expect("modules")
+                .iter()
+                .any(|module| module["id"] == "secrets")
+        );
     }
 
     #[tokio::test]

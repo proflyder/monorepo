@@ -340,10 +340,12 @@ UI выдачи именованных токенов у существующи�
 | `system` | `mcp-gateway /v1/system/summary|hosts|k8s|devices` |
 | `infra_reports` | зарезервирован: app-эндпоинтов в PR1 нет |
 | `alerts` | фильтр alert-сообщений в `/v1/chat/messages` и `/v1/chat/events` и push alert-карточек; `/v1/chat/alerts` закрыт отдельным токеном Alertmanager (`chat-alerts`) |
+| `secrets` | `secrets-gateway /v1/secrets/*` и step-up; owner-only |
 | `admin` | `GET /v1/access/modules`, `GET/POST /v1/access/tokens`, `PATCH/DELETE /v1/access/tokens/{id}` |
 
 Любой действующий токен получает `base` неявно. Набор legacy-токена «Мама» —
-все модули, кроме `admin` (см. выше). Owner — все модули. Запрос без модуля получает `403
+все модули, кроме owner-only `admin` и `secrets` (см. выше). Owner — все
+модули. Запрос без модуля получает `403
 {"error":"module_forbidden","module":"<id>"}`; без/с неверным токеном — `401`.
 
 Admin API:
@@ -356,8 +358,11 @@ Admin API:
 - `GET /v1/me` — `{name,modules,owner}` для текущего токена.
 
 Неизвестный id модуля в admin API — `400`; занятое имя и попытка выдать
-`admin` — `409`; лимит токенов — `429`. `PATCH` применяет имя и модули в одной
-транзакции. Отзыв удаляет push-устройства, их историю и VPN-peer'ы токена.
+`admin` — `409`; выдать `secrets` не-owner'у — `403 module_forbidden`
+(и store, и admin API); лимит токенов — `429`. Owner неявно имеет `secrets`,
+а `clean_modules` хранит его в наборе owner-токена. `PATCH` применяет имя и
+модули в одной транзакции. Отзыв удаляет push-устройства, их историю и
+VPN-peer'ы токена.
 Модуль `scenarios` даёт создавать и запускать сценарии с любыми HA-действиями,
 то есть по силе равен управлению домом; выдавать его стоит тем же, кому `home`.
 

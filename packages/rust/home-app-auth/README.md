@@ -21,5 +21,9 @@
   чужое обновление: если оно уже идёт, сразу `401`.
 - `Modules::parse` строгий (admin API → `400`), `Modules::parse_lenient`
   игнорирует неизвестные id (snapshot и seed пишут `warn`).
+- `secrets` и `admin` — owner-only модули: `Module::owner_only` и
+  `Principal::allows` отказывают не-owner'у, даже если id оказался в его
+  списке. `Modules::all_but_admin` (legacy «Мама») не содержит owner-only
+  модулей; issuance проверяет scheduler.
 - `AccessClient::fixed` — клиент без сети для тестов потребителей.
 - `snapshot_url` срезает необязательный суффикс `/home.v1.SchedulerService`.
