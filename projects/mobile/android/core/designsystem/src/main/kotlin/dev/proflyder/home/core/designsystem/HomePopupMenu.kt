@@ -2,6 +2,7 @@ package dev.proflyder.home.core.designsystem
 
 import android.graphics.Color
 import android.graphics.Rect
+import android.util.TypedValue
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.Menu
@@ -162,10 +163,16 @@ class HomePopupMenu(
     private fun build(content: View, width: Int, height: Int): PopupWindow {
         val popup = PopupWindow(content, width, height, true)
         popup.animationStyle = R.style.Animation_Home_PopupMenu
-        popup.elevation = anchor.resources.getDimension(R.dimen.ds_popup_elevation)
+        popup.elevation = elevation()
         popup.setBackgroundDrawable(Color.TRANSPARENT.toDrawable())
         popup.isOutsideTouchable = true
         return popup
+    }
+
+    private fun elevation(): Float {
+        val value = TypedValue()
+        anchor.context.theme.resolveAttribute(R.attr.homePopupElevation, value, true)
+        return value.getDimension(anchor.resources.displayMetrics)
     }
 
     private data class PopupPosition(val x: Int, val top: Int, val height: Int)

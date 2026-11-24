@@ -2,6 +2,7 @@ package dev.proflyder.home
 
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.content.res.Configuration
 import android.util.TypedValue
 import android.view.View
 import android.view.ViewGroup
@@ -39,23 +40,30 @@ class ToolbarMenuScreenshotTest {
     @Test
     fun system() = shootAll(AppTheme.SYSTEM)
 
+    @Test
+    @Config(qualifiers = "w411dp-h891dp-notnight-xxhdpi")
+    fun emeraldLight() = shootAll(AppTheme.EMERALD)
+
     private fun shootAll(theme: AppTheme) {
         val activity = launch(theme)
+        val mode = mode(activity)
         assertEquals(UiR.style.Widget_Home_PopupMenu, styleOf(activity, AppCompatR.attr.popupMenuStyle))
         assertEquals(UiR.style.Widget_Home_ListPopupWindow, styleOf(activity, AppCompatR.attr.listPopupWindowStyle))
+        assertEquals(activity.resources.getDimension(UiR.dimen.ds_popup_elevation), elevation(activity), 0.01f)
 
         val toolbar = activity.findViewById<MaterialToolbar>(R.id.toolbar)
         toolbar.menu.performIdentifierAction(R.id.action_menu, 0)
         idle(activity)
         val actions = requireNotNull(activity.actionsMenu.contentView) { "the menu must be open" }
         assertSharedMenu(actions)
-        shoot("menu-${theme.key}-actions-dark.png", activity, actions, toolbar.findViewById(R.id.action_menu))
+        assertEquals(activity.resources.getDimension(UiR.dimen.ds_popup_elevation), popupElevation(), 0.01f)
+        shoot("menu-${theme.key}-actions-$mode.png", activity, actions, toolbar.findViewById(R.id.action_menu))
         activity.actionsMenu.dismiss()
         idle(activity)
 
         activity.router.openRoute("settings/appearance")
         idle(activity)
-        shoot("menu-${theme.key}-appearance-dark.png", activity)
+        shoot("menu-${theme.key}-appearance-$mode.png", activity)
 
         activity.router.selectTab("chat")
         idle(activity)
@@ -66,8 +74,22 @@ class ToolbarMenuScreenshotTest {
         assertSharedMenu(menu)
         assertNotNull(menu.findViewById<View>(ChatR.id.chat_attach_photo))
         assertNotNull(menu.findViewById<View>(ChatR.id.chat_attach_file))
-        shoot("menu-${theme.key}-chat-attach-dark.png", activity, menu, attach)
+        shoot("menu-${theme.key}-chat-attach-$mode.png", activity, menu, attach)
     }
+
+    private fun mode(activity: MainActivity): String {
+        val night = activity.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
+        return if (night == Configuration.UI_MODE_NIGHT_YES) "dark" else "light"
+    }
+
+    private fun elevation(activity: MainActivity): Float {
+        val value = TypedValue()
+        activity.theme.resolveAttribute(UiR.attr.homePopupElevation, value, true)
+        return value.getDimension(activity.resources.displayMetrics)
+    }
+
+    private fun popupElevation(): Float =
+        requireNotNull(shadowOf(RuntimeEnvironment.getApplication()).latestPopupWindow).elevation
 
     private fun assertSharedMenu(menu: View) {
         assertEquals(UiR.id.ds_popup_menu_items, menu.id)

@@ -22,6 +22,7 @@ the colour roles.
 | Icons `ds_icon_*` | s 18, m 24 dp |
 | Stroke `ds_stroke_*` | thin 1, thick 2 dp |
 | Typography | Material 3 roles through the theme (`?attr/textAppearanceTitleMedium`, `…BodyLarge`, `…LabelLarge`, …) plus `TextAppearance.Home.{Time,Countdown,ToolbarTitle,Pill,PillTab,ChatMeta,PopupMenuItem}` |
+| Popup `homePopup*` | surface `colorSurfaceContainerHighest` (lighter than card surfaces in dark themes, darker in light), stroke `colorPrimary` at 50% alpha, stroke width 1 dp, radius `ds_radius_xl` 28 dp, elevation `ds_popup_elevation` 8 dp; item text `colorOnSurface`, item icons `colorPrimary`, pressed/hover ripple `colorPrimary` at 20%/8% |
 | Motion | `HomeMotion` (enter/exit/selection durations and easings from the theme) |
 
 ## Components
@@ -41,7 +42,7 @@ the colour roles.
 | Switch | `MaterialSwitch` (theme default `Widget.Home.Switch` from core/theme) | Checked track `colorStateOn`. |
 | Slider | `Slider` without `style` (theme default `Widget.Home.Slider`) | Active track `colorPrimary`, inactive `colorSurfaceContainerHighest`, active ticks `colorOnPrimary`, inactive ticks `colorOnSurfaceVariant`, thumb `colorPrimary`. Gradient sliders: `GradientSlider` + `Widget.Home.Slider.Gradient`; the gradient is the track and ticks are hidden. |
 | Pills | `PillSegments` | The only choice-between-options control; no segmented buttons. |
-| Popup menu | `HomePopupMenu(anchor, menuRes)` | Card with 48 dp rows and icons. Opens below the anchor when it fits, otherwise above; stays inside the window insets (system bars, IME, cutout) and never covers a view marked with `HomePopupMenu.markObstacle` (the bottom navigation); scrolls inside when neither side fits. |
+| Popup menu | `HomePopupMenu(anchor, menuRes)` | Card with 48 dp rows and icons. Every popup in the app goes through it: toolbar overflow, chat attach and message actions, access token actions; context-style menus are the same card. `popupMenuStyle`, `actionOverflowMenuStyle`, `android:contextPopupMenuStyle` and `listPopupWindowStyle` point at the same background and elevation, so any native `PopupMenu`, `ListPopupWindow` or exposed dropdown (`AutoCompleteTextView`) inherits it. The card surface is `homePopupSurface` (`colorSurfaceContainerHighest`), the 1 dp `homePopupStroke` is the accent at 50% alpha, icons use `homePopupItemIconTint` (`colorPrimary`), labels `homePopupItemTextColor` (`colorOnSurface`), and the ripple `homePopupItemRippleColor` shows pressed and hover states. Opens below the anchor when it fits, otherwise above; stays inside the window insets (system bars, IME, cutout) and never covers a view marked with `HomePopupMenu.markObstacle` (the bottom navigation); scrolls inside when neither side fits. |
 | List row | `ListRow` (`app:rowIcon`, `rowTitle`, `rowSubtitle`, `rowValue`, `rowChevron`, `rowSwitch`); child views in XML become the trailing slot | Min height 56 dp; `subtitleTone` = `NEUTRAL`/`ERROR`/`WARNING`/`SUCCESS`; `app:rowIconTint` (default `colorOnSurfaceVariant`, `colorPrimary` for accent icons such as permissions); titles use a 20sp line height so a wrapped title stays compact. |
 | Section header | `TextView` + `Widget.Home.SectionHeader` | TitleSmall in `colorPrimary`. |
 | Empty state | `EmptyState` (`app:emptyIcon`, `emptyText`, `emptyAction`) | Main action Filled M (`action`, `app:emptyAction`), optional secondary Tonal M (`secondaryAction`, `app:emptySecondaryAction`) in a centred equal-width `ButtonRow`. |
@@ -144,3 +145,6 @@ the new theme automatically.
   indeterminate animation.
 - `HomePopupMenu`: the popup background has an 8dp transparent inset, so the
   window touches the anchor (`ANCHOR_GAP` 0) and the card still sits 8dp away.
+  `ds_bg_popup_menu` paints the inset card from `homePopupSurface` with a 1dp
+  `homePopupStroke`; `PopupStylesTest` checks both tokens in every theme, dark
+  and light.

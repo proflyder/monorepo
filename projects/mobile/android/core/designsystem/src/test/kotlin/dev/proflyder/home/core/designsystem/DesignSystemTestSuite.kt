@@ -8,6 +8,8 @@ import org.junit.runners.Suite
     ButtonStylesTest::class,
     ButtonRowTest::class,
     PopupPlacementTest::class,
+    PopupStylesTest::class,
+    PopupScreenshotTest::class,
     FabStylesTest::class,
     CatalogScreenshotTest::class,
     LightParamsEditorScreenshotTest::class,

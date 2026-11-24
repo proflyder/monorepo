@@ -1,5 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <attr name="homePopupSurface" format="color|reference" />
+    <attr name="homePopupStroke" format="color|reference" />
+    <attr name="homePopupStrokeWidth" format="dimension|reference" />
+    <attr name="homePopupCornerRadius" format="dimension|reference" />
+    <attr name="homePopupElevation" format="dimension|reference" />
+    <attr name="homePopupItemTextColor" format="color|reference" />
+    <attr name="homePopupItemIconTint" format="color|reference" />
+    <attr name="homePopupItemRippleColor" format="color|reference" />
+
     <style name="Base.Theme.Home" parent="Theme.Material3.DayNight.NoActionBar">
         <item name="floatingActionButtonStyle">@style/Widget.Home.FloatingActionButton</item>
         <item name="extendedFloatingActionButtonStyle">@style/Widget.Home.ExtendedFloatingActionButton</item>
@@ -11,9 +20,20 @@
         <item name="shapeAppearanceLargeComponent">@style/ShapeAppearance.Home.Large</item>
 
         <item name="popupMenuStyle">@style/Widget.Home.PopupMenu</item>
+        <item name="actionOverflowMenuStyle">@style/Widget.Home.PopupMenu</item>
+        <item name="android:contextPopupMenuStyle">@style/Widget.Home.PopupMenu</item>
         <item name="listPopupWindowStyle">@style/Widget.Home.ListPopupWindow</item>
         <item name="textAppearanceLargePopupMenu">@style/TextAppearance.Home.PopupMenuItem</item>
         <item name="textAppearanceSmallPopupMenu">@style/TextAppearance.Home.PopupMenuItem</item>
+
+        <item name="homePopupSurface">?attr/colorSurfaceContainerHighest</item>
+        <item name="homePopupStroke">@color/ds_popup_stroke</item>
+        <item name="homePopupStrokeWidth">@dimen/ds_popup_stroke_width</item>
+        <item name="homePopupCornerRadius">@dimen/ds_radius_xl</item>
+        <item name="homePopupElevation">@dimen/ds_popup_elevation</item>
+        <item name="homePopupItemTextColor">?attr/colorOnSurface</item>
+        <item name="homePopupItemIconTint">?attr/colorPrimary</item>
+        <item name="homePopupItemRippleColor">@color/ds_popup_item_ripple</item>
 
         <item name="textInputStyle">@style/Widget.Home.TextInput</item>
         <item name="sliderStyle">@style/Widget.Home.Slider</item>

@@ -6,18 +6,18 @@
     </style>
 
     <style name="TextAppearance.Home.PopupMenuItem" parent="TextAppearance.Material3.BodyLarge">
-        <item name="android:textColor">?attr/colorOnSurface</item>
+        <item name="android:textColor">?attr/homePopupItemTextColor</item>
     </style>
 
     <style name="Widget.Home.PopupMenu" parent="Widget.Material3.PopupMenu">
         <item name="android:popupBackground">@drawable/ds_bg_popup_menu</item>
-        <item name="android:popupElevation">@dimen/ds_popup_elevation</item>
+        <item name="android:popupElevation">?attr/homePopupElevation</item>
         <item name="android:popupAnimationStyle">@style/Animation.Home.PopupMenu</item>
     </style>
 
     <style name="Widget.Home.ListPopupWindow" parent="Widget.Material3.PopupMenu.ListPopupWindow">
         <item name="android:popupBackground">@drawable/ds_bg_popup_menu</item>
-        <item name="android:popupElevation">@dimen/ds_popup_elevation</item>
+        <item name="android:popupElevation">?attr/homePopupElevation</item>
         <item name="android:popupAnimationStyle">@style/Animation.Home.PopupMenu</item>
     </style>
 </resources>
