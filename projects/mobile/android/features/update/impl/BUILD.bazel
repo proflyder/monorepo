@@ -1,0 +1,87 @@
+load("//platform/android:defs.bzl", "home_android_local_test", "home_jvm_library", "metro_android_library")
+
+package(default_visibility = ["//visibility:public"])
+
+config_setting(
+    name = "app_distribution_on",
+    define_values = {"home_app_distribution": "on"},
+)
+
+genrule(
+    name = "build_flag_on",
+    outs = ["build_flag/on/UpdateBuild.kt"],
+    cmd = "printf 'package dev.proflyder.home.feature.updatebuild\\n\\nobject UpdateBuild {\\n    const val APP_DISTRIBUTION = true\\n}\\n' > $@",
+)
+
+genrule(
+    name = "build_flag_off",
+    outs = ["build_flag/off/UpdateBuild.kt"],
+    cmd = "printf 'package dev.proflyder.home.feature.updatebuild\\n\\nobject UpdateBuild {\\n    const val APP_DISTRIBUTION = false\\n}\\n' > $@",
+)
+
+home_jvm_library(
+    name = "flag_on",
+    srcs = [":build_flag_on"],
+)
+
+home_jvm_library(
+    name = "flag_off",
+    srcs = [":build_flag_off"],
+)
+
+metro_android_library(
+    name = "impl",
+    srcs = glob(["src/main/kotlin/**/*.kt"]),
+    custom_package = "dev.proflyder.home.feature.update.impl",
+    manifest = "src/main/AndroidManifest.xml",
+    resource_files = glob(["src/main/res/**"]),
+    view_binding = True,
+    deps = [
+        "//packages/kotlin/core",
+        "//projects/mobile/android/core/designsystem",
+        "//projects/mobile/android/core/model",
+        "//projects/mobile/android/core/navigation",
+        "//projects/mobile/android/core/runtime",
+        "//projects/mobile/android/core/ui",
+        "//projects/mobile/android/features/update/api",
+        "@maven//:androidx_appcompat_appcompat",
+        "@maven//:androidx_core_core_ktx",
+        "@maven//:androidx_datastore_datastore_preferences",
+        "@maven//:androidx_lifecycle_lifecycle_runtime_ktx",
+        "@maven//:com_google_android_material_material",
+        "@maven//:com_google_firebase_firebase_appdistribution_api",
+        "@maven//:dev_zacsweers_metro_runtime_jvm",
+        "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_android",
+        "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_play_services",
+    ] + select({
+        ":app_distribution_on": [
+            ":flag_on",
+            "@maven//:com_google_firebase_firebase_appdistribution",
+        ],
+        "//conditions:default": [":flag_off"],
+    }),
+)
+
+home_android_local_test(
+    name = "robolectric_test",
+    srcs = glob(["src/test/kotlin/**/*.kt"]),
+    associates = [":impl"],
+    custom_package = "dev.proflyder.home.feature.update.impl",
+    manifest = "src/test/AndroidManifest.xml",
+    test_classes = [
+        "dev.proflyder.home.feature.update.AllUpdateTests",
+    ],
+    deps = [
+        "//projects/mobile/android/core/designsystem",
+        "//projects/mobile/android/core/model",
+        "//projects/mobile/android/core/runtime",
+        "//projects/mobile/android/core/testing",
+        "//projects/mobile/android/features/update/api",
+        "@maven//:androidx_appcompat_appcompat",
+        "@maven//:com_google_android_material_material",
+        "@maven//:junit_junit",
+        "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_core",
+        "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_test",
+        "@maven//:org_robolectric_robolectric",
+    ],
+)

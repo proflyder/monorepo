@@ -38,6 +38,8 @@
     "com.google.errorprone:error_prone_annotations": -1035138750,
     "com.google.firebase:firebase-abt": 1664004119,
     "com.google.firebase:firebase-annotations": 240092589,
+    "com.google.firebase:firebase-appdistribution": -2114281644,
+    "com.google.firebase:firebase-appdistribution-api": 814283623,
     "com.google.firebase:firebase-common": 438521636,
     "com.google.firebase:firebase-components": -800769588,
     "com.google.firebase:firebase-config": -91856259,
@@ -91,6 +93,7 @@
     "androidx.appcompat:appcompat:aar": 1103377523,
     "androidx.arch.core:core-common": -1515962432,
     "androidx.arch.core:core-runtime:aar": 1186749229,
+    "androidx.browser:browser:aar": 1359886212,
     "androidx.cardview:cardview:aar": -1211788058,
     "androidx.collection:collection": -327381855,
     "androidx.collection:collection-jvm": -1248826430,
@@ -203,6 +206,8 @@
     "com.google.errorprone:error_prone_annotations": 967586345,
     "com.google.firebase:firebase-abt:aar": -1034329370,
     "com.google.firebase:firebase-annotations": 1045434589,
+    "com.google.firebase:firebase-appdistribution-api:aar": -357329037,
+    "com.google.firebase:firebase-appdistribution:aar": -920625283,
     "com.google.firebase:firebase-common:aar": -391466273,
     "com.google.firebase:firebase-components:aar": 1272402741,
     "com.google.firebase:firebase-config-interop:aar": 1103503698,
@@ -391,6 +396,12 @@
         "jar": "a1be5e0caa2b07623862af6ae21b3ab0718123245184d0e30dea81b53f990a47"
       },
       "version": "2.2.0"
+    },
+    "androidx.browser:browser:aar": {
+      "shasums": {
+        "jar": "e740b1beeac82303415d68bee9d5c1f259716f560a829ca07c7ce97e60850e1b"
+      },
+      "version": "1.3.0"
     },
     "androidx.cardview:cardview:aar": {
       "shasums": {
@@ -1063,6 +1074,18 @@
         "jar": "cdb20e14f4f77463f6bb6d339cf95efe132a4196eb9592bf3c4dc83856e2670d"
       },
       "version": "18.0.0"
+    },
+    "com.google.firebase:firebase-appdistribution-api:aar": {
+      "shasums": {
+        "jar": "ce67c0a6a020b3739c2be5349ec9cd4250c905d36d1aaa0c1a45789a8f21f24f"
+      },
+      "version": "16.0.0-beta21"
+    },
+    "com.google.firebase:firebase-appdistribution:aar": {
+      "shasums": {
+        "jar": "aaf2e321eb56dcabc598785a4a12672259711caa4a5da74420284a09c1c08fbe"
+      },
+      "version": "16.0.0-beta21"
     },
     "com.google.firebase:firebase-common:aar": {
       "shasums": {
@@ -1932,6 +1955,14 @@
       "androidx.annotation:annotation",
       "androidx.arch.core:core-common"
     ],
+    "androidx.browser:browser:aar": [
+      "androidx.annotation:annotation",
+      "androidx.collection:collection",
+      "androidx.concurrent:concurrent-futures",
+      "androidx.core:core:aar",
+      "androidx.interpolator:interpolator:aar",
+      "com.google.guava:listenablefuture"
+    ],
     "androidx.cardview:cardview:aar": [
       "androidx.annotation:annotation"
     ],
@@ -2596,6 +2627,26 @@
       "javax.inject:javax.inject",
       "org.jetbrains.kotlin:kotlin-stdlib"
     ],
+    "com.google.firebase:firebase-appdistribution-api:aar": [
+      "androidx.annotation:annotation",
+      "com.google.android.gms:play-services-tasks:aar",
+      "com.google.firebase:firebase-common:aar",
+      "com.google.firebase:firebase-components:aar",
+      "org.jetbrains.kotlin:kotlin-stdlib"
+    ],
+    "com.google.firebase:firebase-appdistribution:aar": [
+      "androidx.appcompat:appcompat:aar",
+      "androidx.browser:browser:aar",
+      "androidx.constraintlayout:constraintlayout:aar",
+      "com.google.android.gms:play-services-tasks:aar",
+      "com.google.firebase:firebase-appdistribution-api:aar",
+      "com.google.firebase:firebase-common:aar",
+      "com.google.firebase:firebase-components:aar",
+      "com.google.firebase:firebase-installations-interop:aar",
+      "com.google.firebase:firebase-installations:aar",
+      "javax.inject:javax.inject",
+      "org.jetbrains.kotlin:kotlin-stdlib-jdk8"
+    ],
     "com.google.firebase:firebase-common:aar": [
       "androidx.annotation:annotation",
       "androidx.concurrent:concurrent-futures",
@@ -3175,6 +3226,15 @@
     "androidx.arch.core:core-runtime:aar": [
       "androidx.arch.core.executor"
     ],
+    "androidx.browser:browser:aar": [
+      "android.support.customtabs",
+      "android.support.customtabs.trusted",
+      "androidx.browser.browseractions",
+      "androidx.browser.customtabs",
+      "androidx.browser.trusted",
+      "androidx.browser.trusted.sharing",
+      "androidx.browser.trusted.splashscreens"
+    ],
     "androidx.cardview:cardview:aar": [
       "androidx.cardview.widget"
     ],
@@ -3689,6 +3749,17 @@
     "com.google.firebase:firebase-annotations": [
       "com.google.firebase.annotations",
       "com.google.firebase.annotations.concurrent"
+    ],
+    "com.google.firebase:firebase-appdistribution-api:aar": [
+      "com.google.firebase.appdistribution",
+      "com.google.firebase.appdistribution.internal"
+    ],
+    "com.google.firebase:firebase-appdistribution:aar": [
+      "com.google.firebase.appdistribution.impl",
+      "com.google.firebase.appdistribution.impl.dagger",
+      "com.google.firebase.appdistribution.impl.dagger.internal",
+      "com.google.firebase.appdistribution.impl.jakarta.inject",
+      "com.google.firebase.appdistribution.impl.org.jspecify.annotations"
     ],
     "com.google.firebase:firebase-common:aar": [
       "com.google.firebase",
@@ -7626,6 +7697,7 @@
       "androidx.appcompat:appcompat:aar",
       "androidx.arch.core:core-common",
       "androidx.arch.core:core-runtime:aar",
+      "androidx.browser:browser:aar",
       "androidx.cardview:cardview:aar",
       "androidx.collection:collection",
       "androidx.collection:collection-jvm",
@@ -7732,6 +7804,8 @@
       "com.google.android.material:material:aar",
       "com.google.firebase:firebase-abt:aar",
       "com.google.firebase:firebase-annotations",
+      "com.google.firebase:firebase-appdistribution-api:aar",
+      "com.google.firebase:firebase-appdistribution:aar",
       "com.google.firebase:firebase-common:aar",
       "com.google.firebase:firebase-components:aar",
       "com.google.firebase:firebase-config-interop:aar",

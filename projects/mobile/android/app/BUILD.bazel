@@ -57,6 +57,8 @@ metro_android_library(
         "//projects/mobile/android/features/timers/impl",
         "//projects/mobile/android/features/time/api",
         "//projects/mobile/android/features/time/impl",
+        "//projects/mobile/android/features/update/api",
+        "//projects/mobile/android/features/update/impl",
         "//projects/mobile/android/features/vpn/api",
         "//projects/mobile/android/features/vpn/impl",
         "@maven//:androidx_activity_activity_ktx",
@@ -84,6 +86,21 @@ metro_android_library(
 config_setting(
     name = "network_inspection_on",
     define_values = {"home_network_inspection": "on"},
+)
+
+config_setting(
+    name = "app_distribution_on",
+    define_values = {"home_app_distribution": "on"},
+)
+
+sh_test(
+    name = "apk_app_distribution_test",
+    srcs = ["//platform/android:apk_app_distribution_test.sh"],
+    args = ["$(location :app.apk)"] + select({
+        ":app_distribution_on": ["present"],
+        "//conditions:default": ["absent"],
+    }),
+    data = [":app.apk"],
 )
 
 home_android_binary(

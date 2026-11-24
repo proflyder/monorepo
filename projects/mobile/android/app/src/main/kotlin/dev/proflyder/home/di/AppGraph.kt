@@ -5,6 +5,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.lifecycle.ViewModelProvider
 import dev.proflyder.home.MainActivity
+import dev.proflyder.home.core.navigation.AppActivityContribution
 import dev.proflyder.home.core.navigation.DeepLinkResolver
 import dev.proflyder.home.core.navigation.DeepLinkSource
 import dev.proflyder.home.core.navigation.FeatureEntry
@@ -84,4 +85,7 @@ interface ChromeMultibindings {
 
     @Multibinds(allowEmpty = true)
     fun deepLinkSources(): Set<DeepLinkSource>
+
+    @Multibinds(allowEmpty = true)
+    fun appActivityContributions(): Set<AppActivityContribution>
 }
