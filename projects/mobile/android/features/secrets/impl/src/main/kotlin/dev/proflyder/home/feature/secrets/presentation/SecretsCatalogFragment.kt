@@ -92,11 +92,8 @@ internal class SecretsCatalogFragment :
     }
 
     private fun launchCredentials(intent: Intent) {
-        try {
-            credentials.launch(intent)
-        } catch (error: IllegalStateException) {
-            dispatch(SecretsCatalogIntent.AuthenticationFinished(false))
-        }
+        runCatching { credentials.launch(intent) }
+            .onFailure { dispatch(SecretsCatalogIntent.AuthenticationFinished(false)) }
     }
 
     override fun onDestroy() {

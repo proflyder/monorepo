@@ -13,21 +13,17 @@ import android.os.CancellationSignal
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyPermanentlyInvalidatedException
 import android.security.keystore.KeyProperties
-import android.security.keystore.StrongBoxUnavailableException
 import android.security.keystore.UserNotAuthenticatedException
 import android.util.Base64
 import androidx.annotation.RequiresApi
 import androidx.core.content.edit
 import androidx.fragment.app.FragmentActivity
 import dev.proflyder.home.feature.secrets.impl.R
-import java.io.IOException
-import java.security.GeneralSecurityException
 import java.security.InvalidKeyException
 import java.security.KeyPair
 import java.security.KeyPairGenerator
 import java.security.KeyStore
 import java.security.PrivateKey
-import java.security.ProviderException
 import java.security.Signature
 import java.security.SignatureException
 import java.security.spec.ECGenParameterSpec
@@ -131,24 +127,21 @@ internal class AndroidDeviceSigner(
         }
         staged?.let(::deleteAlias)
         sweepStagingAliases(keep = activeAlias())
-        return try {
-            val alias = STAGING_PREFIX + java.util.UUID.randomUUID()
-            val pair = createPair(alias, attestationChallenge)
-            val chain = certificateChain(alias)
-            if (chain.isEmpty()) {
-                deleteAlias(alias)
-                DeviceKeyResult.Failed(DeviceSignatureFailure.KEYSTORE)
-            } else {
-                staging.stage(alias, attestationChallenge)
-                DeviceKeyResult.Ready(DeviceKeyMaterial(encode(pair.public.encoded), chain))
-            }
-        } catch (error: GeneralSecurityException) {
-            DeviceKeyResult.Failed(DeviceSignatureFailure.KEYSTORE)
-        } catch (error: ProviderException) {
-            DeviceKeyResult.Failed(DeviceSignatureFailure.KEYSTORE)
-        } catch (error: IOException) {
-            DeviceKeyResult.Failed(DeviceSignatureFailure.KEYSTORE)
+        return runCatching { newEnrollmentKey(attestationChallenge) }
+            .getOrElse { DeviceKeyResult.Failed(DeviceSignatureFailure.KEYSTORE) }
+    }
+
+    private fun newEnrollmentKey(attestationChallenge: String): DeviceKeyResult {
+        val alias = STAGING_PREFIX + java.util.UUID.randomUUID()
+        val pair = createPair(alias, attestationChallenge)
+            ?: return DeviceKeyResult.Failed(DeviceSignatureFailure.KEYSTORE)
+        val chain = certificateChain(alias)
+        if (chain.isEmpty()) {
+            deleteAlias(alias)
+            return DeviceKeyResult.Failed(DeviceSignatureFailure.KEYSTORE)
         }
+        staging.stage(alias, attestationChallenge)
+        return DeviceKeyResult.Ready(DeviceKeyMaterial(encode(pair.public.encoded), chain))
     }
 
     override fun requestSignature(
@@ -224,43 +217,25 @@ internal class AndroidDeviceSigner(
     }
 
     private fun sweepStagingAliases(keep: String?) {
-        val aliases = try {
-            keyStore().aliases()
-        } catch (error: GeneralSecurityException) {
-            return
-        } catch (error: IOException) {
-            return
-        }
+        val aliases = runCatching { keyStore().aliases() }.getOrNull() ?: return
         while (aliases.hasMoreElements()) {
             val alias = aliases.nextElement()
             if (alias.startsWith(STAGING_PREFIX) && alias != keep) deleteAlias(alias)
         }
     }
 
-    private fun publicKey(alias: String): String? = try {
-        keyStore().getCertificate(alias)?.publicKey?.encoded?.let(::encode)
-    } catch (error: GeneralSecurityException) {
-        null
-    } catch (error: IOException) {
-        null
-    }
+    private fun publicKey(alias: String): String? =
+        runCatching {
+            keyStore().getCertificate(alias)?.publicKey?.encoded?.let(::encode)
+        }.getOrNull()
 
-    private fun certificateChain(alias: String): List<String> = try {
-        keyStore().getCertificateChain(alias)?.map { encode(it.encoded) }.orEmpty()
-    } catch (error: GeneralSecurityException) {
-        emptyList()
-    } catch (error: IOException) {
-        emptyList()
-    }
+    private fun certificateChain(alias: String): List<String> =
+        runCatching {
+            keyStore().getCertificateChain(alias)?.map { encode(it.encoded) }.orEmpty()
+        }.getOrElse { emptyList() }
 
     private fun deleteAlias(alias: String) {
-        try {
-            keyStore().deleteEntry(alias)
-        } catch (error: GeneralSecurityException) {
-            return
-        } catch (error: IOException) {
-            return
-        }
+        runCatching { keyStore().deleteEntry(alias) }.onFailure { return }
     }
 
     override fun cancel() {
@@ -271,15 +246,12 @@ internal class AndroidDeviceSigner(
 
     private fun keyStore(): KeyStore = KeyStore.getInstance(PROVIDER).apply { load(null) }
 
-    private fun createPair(alias: String, attestationChallenge: String): KeyPair {
-        try {
-            return pair(alias, attestationChallenge, unlockedRequired = true)
-        } catch (error: GeneralSecurityException) {
-            deleteAlias(alias)
-        } catch (error: ProviderException) {
-            deleteAlias(alias)
-        }
-        return pair(alias, attestationChallenge, unlockedRequired = false)
+    private fun createPair(alias: String, attestationChallenge: String): KeyPair? {
+        val first = runCatching { pair(alias, attestationChallenge, unlockedRequired = true) }
+            .onFailure { deleteAlias(alias) }
+            .getOrNull()
+        return first ?: runCatching { pair(alias, attestationChallenge, unlockedRequired = false) }
+            .getOrNull()
     }
 
     private fun pair(
@@ -295,11 +267,9 @@ internal class AndroidDeviceSigner(
         alias: String,
         attestationChallenge: String,
         unlockedRequired: Boolean,
-    ): KeyPair? = try {
+    ): KeyPair? = runCatching {
         generate(alias, attestationChallenge, strongBox = true, unlockedRequired)
-    } catch (error: StrongBoxUnavailableException) {
-        null
-    }
+    }.getOrNull()
 
     private fun regularPair(
         alias: String,
@@ -346,22 +316,22 @@ internal class AndroidDeviceSigner(
     }
 
     private fun signature(): SignatureResult {
-        val key = try {
+        val key = runCatching {
             keyStore().getKey(activeAlias(), null) as? PrivateKey
-        } catch (error: GeneralSecurityException) {
-            null
-        } catch (error: IOException) {
-            null
-        }
+        }.getOrNull()
         if (key == null) return SignatureResult.Failed(DeviceSignatureFailure.KEY_MISSING)
-        val signature = try {
+        return runCatching {
             Signature.getInstance(SIGNATURE).apply { initSign(key) }
-        } catch (error: KeyPermanentlyInvalidatedException) {
-            return SignatureResult.Failed(DeviceSignatureFailure.KEY_INVALIDATED)
-        } catch (error: GeneralSecurityException) {
-            return SignatureResult.Failed(DeviceSignatureFailure.KEYSTORE)
-        }
-        return SignatureResult.Ready(signature)
+        }.fold(
+            onSuccess = { SignatureResult.Ready(it) },
+            onFailure = { error ->
+                when (error) {
+                    is KeyPermanentlyInvalidatedException ->
+                        SignatureResult.Failed(DeviceSignatureFailure.KEY_INVALIDATED)
+                    else -> SignatureResult.Failed(DeviceSignatureFailure.KEYSTORE)
+                }
+            },
+        )
     }
 
     private fun callback(payload: String): BiometricPrompt.AuthenticationCallback =
@@ -372,23 +342,26 @@ internal class AndroidDeviceSigner(
                     finish(DeviceSignatureResult.Failed(DeviceSignatureFailure.KEYSTORE))
                     return
                 }
-                val bytes = try {
+                val signed = runCatching {
                     crypto.update(payload.toByteArray(Charsets.UTF_8))
                     crypto.sign()
-                } catch (error: KeyPermanentlyInvalidatedException) {
-                    finish(DeviceSignatureResult.Failed(DeviceSignatureFailure.KEY_INVALIDATED))
-                    return
-                } catch (error: UserNotAuthenticatedException) {
-                    finish(DeviceSignatureResult.Failed(DeviceSignatureFailure.AUTHENTICATION))
-                    return
-                } catch (error: InvalidKeyException) {
-                    finish(DeviceSignatureResult.Failed(DeviceSignatureFailure.KEYSTORE))
-                    return
-                } catch (error: SignatureException) {
-                    finish(DeviceSignatureResult.Failed(DeviceSignatureFailure.KEYSTORE))
-                    return
-                }
-                finish(DeviceSignatureResult.Signed(encode(bytes)))
+                }.fold(
+                    onSuccess = { bytes -> DeviceSignatureResult.Signed(encode(bytes)) },
+                    onFailure = { error ->
+                        when (error) {
+                            is KeyPermanentlyInvalidatedException ->
+                                DeviceSignatureResult.Failed(DeviceSignatureFailure.KEY_INVALIDATED)
+                            is UserNotAuthenticatedException ->
+                                DeviceSignatureResult.Failed(DeviceSignatureFailure.AUTHENTICATION)
+                            is InvalidKeyException ->
+                                DeviceSignatureResult.Failed(DeviceSignatureFailure.KEYSTORE)
+                            is SignatureException ->
+                                DeviceSignatureResult.Failed(DeviceSignatureFailure.KEYSTORE)
+                            else -> DeviceSignatureResult.Failed(DeviceSignatureFailure.KEYSTORE)
+                        }
+                    },
+                )
+                finish(signed)
             }
 
             override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {

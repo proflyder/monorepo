@@ -23,7 +23,6 @@ import dev.proflyder.home.feature.secrets.impl.databinding.DialogSecretEditBindi
 import dev.proflyder.home.feature.secrets.impl.databinding.DialogSecretStepupBinding
 import dev.proflyder.home.feature.secrets.impl.databinding.FragmentSecretPathBinding
 import java.time.Instant
-import java.time.format.DateTimeParseException
 import java.util.Date
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -269,11 +268,7 @@ internal class SecretPathFragment :
 
     private fun createdLabel(raw: String): String {
         if (raw.isBlank()) return ""
-        val instant = try {
-            Instant.parse(raw)
-        } catch (error: DateTimeParseException) {
-            return raw
-        }
+        val instant = runCatching { Instant.parse(raw) }.getOrNull() ?: return raw
         val date = Date.from(instant)
         return DateFormat.getMediumDateFormat(requireContext()).format(date) +
             " " + DateFormat.getTimeFormat(requireContext()).format(date)
