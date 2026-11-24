@@ -866,6 +866,73 @@ export function planNativePromotion({
   };
 }
 
+export function verifyReleaseVersion({ repository, tree, exec }) {
+  const ref = nativeRepository(repository);
+  const tag = treeTag(tree);
+  let digest;
+  try {
+    digest = parseDigest(exec("crane", ["digest", `${ref}:${tag}`]));
+  } catch (error) {
+    throw new Error(`${tag} is not published: ${message(error)}`);
+  }
+  if (!digest) {
+    throw new Error(`${tag} did not resolve to a sha256 digest`);
+  }
+  const candidate = readManifestWithAnnotations(exec, `${ref}@${digest}`);
+  const version = String(candidate.annotations[VERSION_ANNOTATION] || "").trim();
+  if (!VERSION.test(version)) {
+    throw new Error(
+      `${tag} has no usable ${VERSION_ANNOTATION} annotation (got '${version}'); ` +
+        "the PR build must annotate the release version it prints",
+    );
+  }
+  let existing = null;
+  try {
+    existing = parseDigest(exec("crane", ["digest", `${ref}:${version}`]));
+  } catch {
+    existing = null;
+  }
+  if (!existing) {
+    return { repository: ref, tag, version, digest, status: "available" };
+  }
+  if (existing === digest) {
+    return { repository: ref, tag, version, digest, status: "unchanged" };
+  }
+  const published = readManifest(exec, `${ref}:${version}`);
+  if (sameManifestContent(published, candidate.content)) {
+    return { repository: ref, tag, version, digest: existing, status: "unchanged" };
+  }
+  throw new Error(
+    `${ref}:${version} is already published with different content; the computed version ` +
+      "did not increase for this tree. A merged change that alters the artifact must also " +
+      "increase the version: add a commit under the unit's paths or raise its VERSION floor " +
+      "before merge, or repair an already-published release with the explicit rebuild path",
+  );
+}
+
+export function verifyNativeReleases({ units, tree, exec, log = console.log }) {
+  const failures = [];
+  let checked = 0;
+  for (const unit of units || []) {
+    if (!unit || unit.publish === false || !unit.publish_repository) {
+      continue;
+    }
+    checked += 1;
+    try {
+      const result = verifyReleaseVersion({ repository: unit.publish_repository, tree, exec });
+      log(`${unit.id}: ${result.version} ${result.status}`);
+    } catch (error) {
+      failures.push(`${unit.id}: ${message(error)}`);
+    }
+  }
+  if (failures.length) {
+    throw new Error(
+      `the release version guard refused ${failures.length} native unit(s):\n- ${failures.join("\n- ")}`,
+    );
+  }
+  return { checked, failures };
+}
+
 export function formatNativeSummary(result) {
   const lines = [`### native promotion (${result.tag})`, ""];
   lines.push(`- repository: \`${result.repository}\``);
@@ -948,6 +1015,8 @@ function parseArgs(argv) {
     version: "",
     tags: [],
     githubRepository: "",
+    verifyNativeReleases: false,
+    nativeUnits: "",
   };
   for (let index = 0; index < argv.length; index += 1) {
     const flag = argv[index];
@@ -966,6 +1035,13 @@ function parseArgs(argv) {
         break;
       case "--github-repository":
         args.githubRepository = value;
+        index += 1;
+        break;
+      case "--verify-native-releases":
+        args.verifyNativeReleases = true;
+        break;
+      case "--native-units":
+        args.nativeUnits = value;
         index += 1;
         break;
       case "--images":
@@ -1093,11 +1169,23 @@ export async function main(argv = process.argv.slice(2)) {
         "   or: promote.mjs --native --repository ghcr.io/owner/name --tree <40-hex> " +
         "--commit <sha> --version <vX.Y.Z> --tags '{version} latest' " +
         "[--allow-pr-head --unit <id>] --github-repository owner/repo\n" +
+        "   or: promote.mjs --verify-native-releases --tree <40-hex> --native-units '<json>'\n" +
         "\n" +
         "--repository is where the artifact lives (images: GitHub owner/repo; native: the " +
         "GHCR publish repository). PR lookups always use --github-repository or " +
         "GITHUB_REPOSITORY, never a native publish repository.",
     );
+    return 0;
+  }
+  if (args.verifyNativeReleases) {
+    const units = JSON.parse(args.nativeUnits || "[]");
+    if (!Array.isArray(units)) {
+      throw new Error("--native-units must be a JSON array of routed native units");
+    }
+    if (!args.tree) {
+      throw new Error("--verify-native-releases needs --tree");
+    }
+    verifyNativeReleases({ units, tree: args.tree, exec: spawnExec });
     return 0;
   }
   const prHead = args.allowPrHead

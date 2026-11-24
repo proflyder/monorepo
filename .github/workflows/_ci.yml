@@ -275,6 +275,53 @@ jobs:
     secrets:
       NEXUS_CI_PASSWORD: ${{ secrets.NEXUS_CI_PASSWORD }}
 
+  native-version:
+    name: native / version guard
+    needs: [changes, native]
+    if: >-
+      !cancelled() &&
+      inputs.same_repository &&
+      needs.changes.result == 'success' &&
+      needs.native.result == 'success' &&
+      needs.changes.outputs.native_units != '[]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: read
+    env:
+      CRANE_VERSION: "v0.22.1"
+      CRANE_SHA256: "0ab7a1d6932a213aed964ce97666c3077fe691c8606413674a8b3e0b9ec4cda0"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Install pinned crane
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/crane_${CRANE_VERSION}_linux_amd64.tar.gz"
+          curl -fsSL --retry 3 --retry-delay 5 -o "$archive" \
+            "https://github.com/google/go-containerregistry/releases/download/${CRANE_VERSION}/go-containerregistry_Linux_x86_64.tar.gz"
+          echo "${CRANE_SHA256}  $archive" | sha256sum -c -
+          tar -xzf "$archive" -C "$RUNNER_TEMP" crane
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Verify the routed native versions are unused
+        env:
+          NATIVE_UNITS: ${{ needs.changes.outputs.native_units }}
+        run: |
+          set -euo pipefail
+          tree=$(git rev-parse 'HEAD^{tree}')
+          node platform/ci/promote.mjs --verify-native-releases \
+            --tree "$tree" \
+            --native-units "$NATIVE_UNITS"
+
   deploy-control:
     needs: changes
     if: ${{ !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.deploy_control == 'true' }}
@@ -284,7 +331,7 @@ jobs:
 
 
   gate:
-    needs: [changes, quality, android, unit, python, js, native, deploy-control]
+    needs: [changes, quality, android, unit, python, js, native, native-version, deploy-control]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 5

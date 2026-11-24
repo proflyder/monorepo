@@ -137,17 +137,42 @@ jobs:
           DISK_CACHE_LIMIT_BYTES: "4294967296"
         run: |
           set -euo pipefail
-          du -sh ~/.cache/bazel-disk
+          cache=~/.cache/bazel-disk
+          disk_cache_bytes() {
+            local errors output status
+            errors="$(mktemp)"
+            status=0
+            output="$(LC_ALL=C du -sb "$cache" 2>"$errors")" || status=$?
+            if [ "$status" -gt 1 ]; then
+              echo "::error title=Android disk cache::du failed with status $status" >&2
+              cat "$errors" >&2
+              rm -f "$errors"
+              return 1
+            fi
+            if [ "$status" -eq 1 ] && grep -vqE "^du: cannot access '.*': No such file or directory$" "$errors"; then
+              echo "::error title=Android disk cache::du reported an error other than a vanished cache entry" >&2
+              cat "$errors" >&2
+              rm -f "$errors"
+              return 1
+            fi
+            rm -f "$errors"
+            if [ -z "$output" ]; then
+              echo "::error title=Android disk cache::du printed no total for $cache" >&2
+              return 1
+            fi
+            printf '%s\n' "$output" | cut -f1
+          }
+          du -sh "$cache" || true
           for _ in $(seq 1 60); do
-            size="$(du -sb ~/.cache/bazel-disk | cut -f1)"
+            size="$(disk_cache_bytes)"
             if [ "$size" -le "$DISK_CACHE_LIMIT_BYTES" ]; then
               break
             fi
             sleep 5
           done
           bazel shutdown
-          du -sh ~/.cache/bazel-disk
-          size="$(du -sb ~/.cache/bazel-disk | cut -f1)"
+          du -sh "$cache" || true
+          size="$(disk_cache_bytes)"
           if [ "$size" -gt "$DISK_CACHE_LIMIT_BYTES" ]; then
             echo "::error title=Android disk cache::$size bytes after GC, limit $DISK_CACHE_LIMIT_BYTES"
             exit 1
