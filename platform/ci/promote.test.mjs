@@ -27,6 +27,9 @@ import {
   signerIdentityPattern,
   treeTag,
   verifyArgs,
+  verifyNativeReleases,
+  verifyReleaseVersion,
+  VERSION_ANNOTATION,
 } from "./promote.mjs";
 
 const TREE = "a".repeat(40);
@@ -624,6 +627,129 @@ test("unverified native provenance falls back and tags nothing", () => {
   assert.equal(result.mode, "build");
   assert.equal(result.decisions[0].status, "unverified");
   assert.equal(tagsWritten(calls).length, 0);
+});
+
+test("the version guard accepts an unused computed version", () => {
+  const ref = "ghcr.io/proflyder/pulsar-firmware";
+  const { calls, exec } = recorder(
+    nativeHandlers({
+      ref,
+      tree: TREE,
+      digest: DIGEST_A,
+      candidate: artifactManifest({
+        annotations: { [VERSION_ANNOTATION]: "v0.6.55" },
+      }),
+    }),
+  );
+  const result = verifyReleaseVersion({ repository: ref, tree: TREE, exec });
+  assert.equal(result.version, "v0.6.55");
+  assert.equal(result.status, "available");
+  assert.equal(result.digest, DIGEST_A);
+  assert.equal(tagsWritten(calls).length, 0);
+});
+
+test("the version guard refuses a reused version with different content", () => {
+  const ref = "ghcr.io/proflyder/pulsar-firmware";
+  const changed = artifactManifest({
+    layerDigests: { ...LAYER_DIGESTS, "pulsar-aarch64.bin": `sha256:${"9".repeat(64)}` },
+  });
+  const { calls, exec } = recorder(
+    nativeHandlers({
+      ref,
+      tree: TREE,
+      digest: DIGEST_A,
+      existing: { "v0.6.54": DIGEST_B },
+      manifests: { "v0.6.54": changed },
+      candidate: artifactManifest({
+        annotations: { [VERSION_ANNOTATION]: "v0.6.54" },
+      }),
+    }),
+  );
+  assert.throws(
+    () => verifyReleaseVersion({ repository: ref, tree: TREE, exec }),
+    /v0\.6\.54 is already published with different content.*VERSION floor/s,
+  );
+  assert.equal(tagsWritten(calls).length, 0);
+});
+
+test("the version guard accepts a rebuilt tree with identical content", () => {
+  const ref = "ghcr.io/proflyder/pulsar-firmware";
+  const { exec } = recorder(
+    nativeHandlers({
+      ref,
+      tree: TREE,
+      digest: DIGEST_A,
+      existing: { "v0.6.54": DIGEST_B },
+      manifests: { "v0.6.54": artifactManifest() },
+      candidate: artifactManifest({
+        annotations: { [VERSION_ANNOTATION]: "v0.6.54" },
+      }),
+    }),
+  );
+  const result = verifyReleaseVersion({ repository: ref, tree: TREE, exec });
+  assert.equal(result.status, "unchanged");
+  assert.equal(result.digest, DIGEST_B);
+});
+
+test("the version guard requires the published tree tag and its version annotation", () => {
+  const ref = "ghcr.io/proflyder/pulsar-firmware";
+  const missing = recorder([
+    [(command, args) => command === "crane" && args[0] === "digest", new Error("MANIFEST_UNKNOWN")],
+  ]);
+  assert.throws(
+    () => verifyReleaseVersion({ repository: ref, tree: TREE, exec: missing.exec }),
+    /tree-.* is not published/,
+  );
+  const unannotated = recorder(
+    nativeHandlers({ ref, tree: TREE, digest: DIGEST_A, candidate: artifactManifest() }),
+  );
+  assert.throws(
+    () => verifyReleaseVersion({ repository: ref, tree: TREE, exec: unannotated.exec }),
+    /no usable org\.opencontainers\.image\.version annotation/,
+  );
+});
+
+test("verifyNativeReleases checks only publishing units and reports every failure", () => {
+  const ref = "ghcr.io/proflyder/pulsar-firmware";
+  const other = "ghcr.io/proflyder/windows-logon-provider";
+  const changed = artifactManifest({
+    layerDigests: { ...LAYER_DIGESTS, "pulsar-aarch64.bin": `sha256:${"9".repeat(64)}` },
+  });
+  const { calls, exec } = recorder(
+    nativeHandlers({
+      ref,
+      tree: TREE,
+      digest: DIGEST_A,
+      existing: { "v0.6.54": DIGEST_B },
+      manifests: { "v0.6.54": changed },
+      candidate: artifactManifest({
+        annotations: { [VERSION_ANNOTATION]: "v0.6.54" },
+      }),
+    }),
+  );
+  const lines = [];
+  assert.throws(
+    () =>
+      verifyNativeReleases({
+        units: [
+          { id: "pulsar", publish: true, publish_repository: ref },
+          { id: "logon-provider", publish: false, publish_repository: other },
+        ],
+        tree: TREE,
+        exec,
+        log: (line) => lines.push(line),
+      }),
+    (error) => {
+      assert.match(error.message, /refused 1 native unit\(s\)/);
+      assert.ok(error.message.includes(`pulsar: ${ref}:v0.6.54`));
+      return true;
+    },
+  );
+  assert.equal(lines.length, 0);
+  assert.equal(
+    calls.some(([command, ...args]) => command === "crane" && String(args[1]).includes(other)),
+    false,
+  );
 });
 
 test("an existing version tag with different layer content is refused", () => {

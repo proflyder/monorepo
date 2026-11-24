@@ -415,7 +415,7 @@ test("real repo: a native provider change routes to its unit and is a release", 
   ]);
 });
 
-test("real repo: native workflow change runs native units", () => {
+test("real repo: native workflow change runs native units without releasing them", () => {
   const config = affected.loadConfig();
   const result = withDeps({}, () =>
     affected.route(config, [".github/workflows/_native.yml"], { root: REPO, base: "b" }),
@@ -425,6 +425,8 @@ test("real repo: native workflow change runs native units", () => {
     "logon-provider",
     "pulsar",
   ]);
+  const entries = affected.matrixEntries(result, config);
+  assert.deepEqual(entries.native.map((entry) => entry.publish), [false, false]);
 });
 
 test("real repo: pulsar change routes to the native pulsar unit", () => {
@@ -460,7 +462,7 @@ test("real repo: pulsar change routes to the native pulsar unit", () => {
   ]);
 });
 
-test("real repo: every affected native change is a release (computed version)", () => {
+test("real repo: every changed unit path is a release (computed version)", () => {
   const config = affected.loadConfig();
   const entryFor = (changed, id) => {
     const result = withDeps({}, () =>
@@ -470,7 +472,7 @@ test("real repo: every affected native change is a release (computed version)", 
   };
   assert.equal(entryFor(["projects/station/pulsar/satellite/crates/pulsar/src/main.rs"], "pulsar").publish, true);
   assert.equal(entryFor(["projects/station/pulsar/VERSION"], "pulsar").publish, true);
-  assert.equal(entryFor(["MODULE.bazel"], "pulsar").publish, true);
+  assert.equal(entryFor(["MODULE.bazel"], "pulsar").publish, false);
 
   assert.equal(
     entryFor(["solutions/windows-logon-provider/crates/provider/src/worker.rs"], "logon-provider")
@@ -482,6 +484,28 @@ test("real repo: every affected native change is a release (computed version)", 
     true,
   );
   assert.equal(entryFor(["MODULE.bazel"], "logon-provider").publish, true);
+});
+
+test("real repo: a shared input rebuilds native units without releasing them", () => {
+  const config = affected.loadConfig();
+  const result = withDeps({}, () =>
+    affected.route(config, ["platform/mise-tasks/admin/service-token-init.sh"], {
+      root: REPO,
+      base: "b",
+    }),
+  );
+  assert.deepEqual(result.routes.native.units.map((unit) => unit.id), [
+    "logon-provider",
+    "pulsar",
+  ]);
+  const entries = affected.matrixEntries(result, config);
+  assert.deepEqual(
+    entries.native.map((entry) => [entry.id, entry.publish]),
+    [
+      ["logon-provider", false],
+      ["pulsar", false],
+    ],
+  );
 });
 
 test("real repo: js worker change routes to its unit", () => {

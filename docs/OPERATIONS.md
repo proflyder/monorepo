@@ -58,16 +58,40 @@ mise run admin:scheduler-backup
 #    не печатает, существующие значения не трогает
 mise run admin:service-token-init
 
-# 2. merge -> deploy-home: scheduler и сервисы стартуют на service_token,
-#    телефоны/HA продолжают работать на legacy «Мама»
-# 3. сразу после деплоя: в runtime-values (voice-proxy) HERMES_SCHEDULER_TOKEN
+# 2. до merge: ESO обновляет scheduler-auth только раз в час, а init уже
+#    записал service_token, service_token_previous и app_tokens в OpenBao.
+#    Форсировать синк и убедиться, что ключи уже в Secret: иначе новый
+#    scheduler стартует без них и падает в crash-loop до следующего refresh
+mise run kubectl -- -n home-assistant annotate externalsecret scheduler-auth \
+  force-sync="$(date +%s)" --overwrite
+mise run kubectl -- -n home-assistant wait --for=condition=Ready \
+  externalsecret/scheduler-auth --timeout=120s
+mise run kubectl -- -n home-assistant get secret scheduler-auth \
+  -o go-template='{{range $k, $v := .data}}{{$k}}{{"\n"}}{{end}}' |
+  grep -Ex 'service_token|service_token_previous|app_tokens'
+
+# 3. merge -> deploy-home: scheduler и сервисы стартуют на service_token,
+#    телефоны/HA продолжают работать на legacy «Мама». Pins с digest'ами и
+#    манифесты develop Flux применяет разными ревизиями, поэтому сначала
+#    дождаться ревизии merge-коммита в app-ha-executors и app-intercom
+#    (иначе новый образ работает со старым манифестом — так intercom падал
+#    в crash-loop около 5 минут)
+mise run kubectl -- -n flux-system get kustomization app-ha-executors app-intercom \
+  -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.status.lastAppliedRevision}{"\n"}{end}'
+mise run kubectl -- -n home-assistant rollout status \
+  deploy/scheduler deploy/intercom --timeout=300s
+
+# 4. сразу после деплоя: в runtime-values (voice-proxy) HERMES_SCHEDULER_TOKEN
 #    из scheduler-auth#service_token и рестарт hermes (см. ниже)
 
-# 4. отдельный шаг: owner-токен (файл 0600, путь печатается, сам токен нет)
+# 5. отдельный шаг: owner-токен (файл 0600, путь печатается, сам токен нет)
 mise run admin:app-token-bootstrap
 # ротация service-token (тот же шаг, но с окном previous и финализацией)
 mise run admin:app-token-bootstrap -- --rotate-service
 ```
+
+`lastAppliedRevision` в шаге 3 должен совпасть с merge-коммитом `develop`
+(не с коммитом pins в `deploy/home-apps`); только после этого проверять поды.
 
 Откат этого релиза: одного `mise run rollback scheduler` (предыдущий digest)
 мало: старый бинарь отказывается открывать схему v10 (`NewerSchema`), а
@@ -311,6 +335,18 @@ WAN и Яндекс — DROP. Снятие guard не снимает Яндек�
 Сборка один раз на PR, после merge только promotion (решение 36); механика,
 PR-head fallback и карта воркфлоу — `DECISIONS.md` и `TESTING.md` (CI).
 Профилактика уехавшей базы — `mise run pr:merge <N>` (`GIT.md`).
+
+PR CI проверяет версию до merge: `native / version guard` сравнивает содержимое
+опубликованного `tree-<hash>` с уже существующим тегом вычисленной версии
+(`platform/ci/promote.mjs`, `verifyReleaseVersion`). Если тег занят другим
+содержимым, PR красный: нужен коммит по путям юнита или подъём `VERSION`
+floor. Уже опубликованный сломанный тег чинится только явной пересборкой
+(`replace_artifacts`), не повторным promotion.
+
+Релиз native-юнита запускает только изменение его собственных путей
+(`publish_when`, иначе `paths`). Общие входы (`MODULE.bazel`, `Cargo.lock`,
+`platform/mise-tasks/**`, `_native.yml`) пересобирают и тестируют юнит, но не
+публикуют и не деплоят его: иначе версия не растёт, а байты меняются.
 
 Честная пересборка: Actions → «Пересобрать и задеплоить сервисы»
 (`deploy-services.yml`) на `develop`. Галочки групп — `platform/ci/rebuild.mjs`,
