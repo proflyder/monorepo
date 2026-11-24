@@ -19,6 +19,11 @@ class PushApiTest {
     fun aHomeDeepLinkIsParsedIntoItsRoute() {
         assertEquals("alarms", PushDeepLink.parse("home://alarms")?.route)
         assertEquals("time/alarms", PushDeepLink.parse("  home://time/alarms/  ")?.route)
+        assertEquals(
+            "secrets/path/infra%2Fbackup%2Fha",
+            PushDeepLink.parse("home://secrets/path/infra%2Fbackup%2Fha")?.route,
+        )
+        assertEquals("secrets/path/user+tag@host", PushDeepLink.parse("home://secrets/path/user+tag@host")?.route)
     }
 
     @Test

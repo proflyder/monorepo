@@ -10,6 +10,7 @@ import org.junit.runners.Suite
     PopupPlacementTest::class,
     PopupStylesTest::class,
     PopupScreenshotTest::class,
+    RowRippleTest::class,
     FabStylesTest::class,
     CatalogScreenshotTest::class,
     LightParamsEditorScreenshotTest::class,

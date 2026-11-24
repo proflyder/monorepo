@@ -114,7 +114,15 @@ fn push_body(event: &Event<'_>) -> PushBody {
         module: "secrets".to_owned(),
         title: "Секреты".to_owned(),
         body,
-        deep_link: Some("home://secrets".to_owned()),
+        deep_link: Some(deep_link(path)),
+    }
+}
+
+fn deep_link(path: &str) -> String {
+    if path.is_empty() {
+        "home://secrets".to_owned()
+    } else {
+        format!("home://secrets/path/{}", path.replace('/', "%2F"))
     }
 }
 
@@ -196,12 +204,47 @@ mod tests {
         });
         assert_eq!(body.module, "secrets");
         assert_eq!(body.body, "Показ секрета: k8s/test");
-        assert_eq!(body.deep_link.as_deref(), Some("home://secrets"));
+        assert_eq!(
+            body.deep_link.as_deref(),
+            Some("home://secrets/path/k8s%2Ftest")
+        );
         assert!(!body.body.contains("password"));
         assert!(
             !serde_json::to_string(&body)
                 .expect("json")
                 .contains("value")
+        );
+    }
+
+    #[test]
+    fn a_catalog_attempt_links_to_the_catalog() {
+        let body = push_body(&Event {
+            action: Action::List,
+            principal: "owner",
+            path: None,
+            key: None,
+            version: None,
+            outcome: "ok",
+            detail: None,
+        });
+        assert_eq!(body.deep_link.as_deref(), Some("home://secrets"));
+        assert_eq!(body.body, "Просмотр каталога секретов");
+    }
+
+    #[test]
+    fn a_nested_secret_path_becomes_a_path_link() {
+        let body = push_body(&Event {
+            action: Action::Metadata,
+            principal: "owner",
+            path: Some("infra/backup/ha"),
+            key: None,
+            version: None,
+            outcome: "ok",
+            detail: None,
+        });
+        assert_eq!(
+            body.deep_link.as_deref(),
+            Some("home://secrets/path/infra%2Fbackup%2Fha")
         );
     }
 

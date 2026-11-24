@@ -8,6 +8,7 @@
     <attr name="homePopupItemTextColor" format="color|reference" />
     <attr name="homePopupItemIconTint" format="color|reference" />
     <attr name="homePopupItemRippleColor" format="color|reference" />
+    <attr name="homeRowItemRippleColor" format="color|reference" />
 
     <style name="Base.Theme.Home" parent="Theme.Material3.DayNight.NoActionBar">
         <item name="floatingActionButtonStyle">@style/Widget.Home.FloatingActionButton</item>
@@ -34,6 +35,7 @@
         <item name="homePopupItemTextColor">?attr/colorOnSurface</item>
         <item name="homePopupItemIconTint">?attr/colorPrimary</item>
         <item name="homePopupItemRippleColor">@color/ds_popup_item_ripple</item>
+        <item name="homeRowItemRippleColor">@color/ds_row_item_ripple</item>
 
         <item name="textInputStyle">@style/Widget.Home.TextInput</item>
         <item name="sliderStyle">@style/Widget.Home.Slider</item>

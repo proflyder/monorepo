@@ -39,6 +39,7 @@ class SecretsFeatureEntry : FeatureEntry {
     override val order: Int = 21
     override val isTab: Boolean = false
     override val module: AppModule = AppModule.SECRETS
+    override val ownerOnly: Boolean = true
     override val titleRes: Int = R.string.secrets_title
     override val iconRes: Int = R.drawable.secrets_ic_key
     override val rootDestination: Destination = SecretsCatalogDestination

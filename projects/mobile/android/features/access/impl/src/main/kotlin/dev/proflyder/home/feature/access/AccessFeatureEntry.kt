@@ -23,6 +23,7 @@ class AccessFeatureEntry : FeatureEntry {
     override val order: Int = 20
     override val isTab: Boolean = false
     override val module: AppModule = AppModule.ADMIN
+    override val notificationLink: Boolean = false
     override val titleRes: Int = R.string.access_title
     override val iconRes: Int = R.drawable.access_ic_key
     override val rootDestination: Destination = AccessTokensDestination

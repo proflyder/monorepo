@@ -1,12 +1,15 @@
 package dev.proflyder.home.feature.settings.presentation
 
 import androidx.lifecycle.ViewModel
+import dev.proflyder.home.core.access.AppAccessSource
 import dev.proflyder.home.core.data.FeatureScope
 import dev.proflyder.home.core.data.PagedState
 import dev.proflyder.home.core.model.Clock
 import dev.proflyder.home.core.model.NotificationHistory
 import dev.proflyder.home.core.model.RemoteFailure
+import dev.proflyder.home.core.navigation.NotificationTargets
 import dev.proflyder.home.core.navigation.Route
+import dev.proflyder.home.core.navigation.routeWhenAllowed
 import dev.proflyder.home.core.presentation.PagedScreenState
 import dev.proflyder.home.core.presentation.PagedStateViewModel
 import dev.proflyder.home.core.presentation.viewModel
@@ -44,6 +47,8 @@ internal sealed interface HistoryEvent {
 
 internal class NotificationHistoryViewModel(
     private val repository: NotificationHistoryRepository,
+    private val targets: NotificationTargets,
+    private val access: AppAccessSource,
     clock: Clock,
     appScope: CoroutineScope,
 ) : PagedStateViewModel<NotificationHistory, NotificationHistoryUiState, HistoryIntent, HistoryEvent>(
@@ -52,14 +57,21 @@ internal class NotificationHistoryViewModel(
     appScope,
     repository::remove,
     derive = { pages, pendingRemoval ->
+        val state = access.state.value
         NotificationHistoryUiState(
             pages = pages,
             pendingRemoval = pendingRemoval,
-            rows = HistoryRows.of(pages.items, historyToday(clock, historyZone), historyZone),
+            rows = HistoryRows.of(pages.items, historyToday(clock, historyZone), historyZone) { entry ->
+                targets.of(entry.deepLink)?.routeWhenAllowed(state)
+            },
             hasUnread = pages.items.any { !it.read },
         )
     },
 ) {
+    init {
+        launch { access.state.collect { rederive() } }
+    }
+
     override fun pagingFailure(failure: RemoteFailure): HistoryEvent = HistoryEvent.Failure(failure)
 
     override fun handle(intent: HistoryIntent) {
@@ -72,8 +84,9 @@ internal class NotificationHistoryViewModel(
     }
 
     private fun open(entry: NotificationHistory) {
+        val route = targets.of(entry.deepLink)?.routeWhenAllowed(access.state.value) ?: return
         if (!entry.read) setRead(entry, true)
-        entry.deepLink?.let { emit(HistoryEvent.OpenRoute(Route.Link(it))) }
+        emit(HistoryEvent.OpenRoute(route))
     }
 
     private fun toggleRead(key: String) {
@@ -102,10 +115,13 @@ internal class NotificationHistoryViewModel(
 @Inject
 class NotificationHistoryViewModelSource internal constructor(
     private val history: FeatureScope<NotificationHistoryRepository>,
+    private val targets: NotificationTargets,
+    private val access: AppAccessSource,
     private val clock: Clock,
     private val appScope: CoroutineScope,
 ) : ViewModelSource {
-    override fun create(): ViewModel = history.viewModel { NotificationHistoryViewModel(it, clock, appScope) }
+    override fun create(): ViewModel =
+        history.viewModel { NotificationHistoryViewModel(it, targets, access, clock, appScope) }
 }
 
 private val historyZone: ZoneId = ZoneId.systemDefault()

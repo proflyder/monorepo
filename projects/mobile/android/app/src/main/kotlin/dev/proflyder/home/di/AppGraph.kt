@@ -4,12 +4,14 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.lifecycle.ViewModelProvider
+import dev.proflyder.home.core.access.AppAccessSource
 import dev.proflyder.home.MainActivity
 import dev.proflyder.home.core.navigation.AppActivityContribution
 import dev.proflyder.home.core.navigation.DeepLinkResolver
 import dev.proflyder.home.core.navigation.DeepLinkSource
 import dev.proflyder.home.core.navigation.FeatureEntry
 import dev.proflyder.home.core.navigation.FeatureRegistry
+import dev.proflyder.home.core.navigation.NotificationTargets
 import dev.proflyder.home.core.navigation.ToolbarAction
 import dev.proflyder.home.core.navigation.ToolbarContribution
 import dev.proflyder.home.core.presentation.ScreenSections
@@ -71,7 +73,15 @@ object AppBindings {
 
     @Provides
     @SingleIn(AppScope::class)
-    fun provideDeepLinkResolver(sources: Set<DeepLinkSource>): DeepLinkResolver = DeepLinkResolver(sources)
+    fun provideDeepLinkResolver(
+        sources: Set<DeepLinkSource>,
+        targets: NotificationTargets,
+        access: AppAccessSource,
+    ): DeepLinkResolver = DeepLinkResolver(sources, targets, access)
+
+    @Provides
+    @SingleIn(AppScope::class)
+    fun provideNotificationTargets(features: FeatureRegistry): NotificationTargets = NotificationTargets(features)
 }
 
 @ContributesTo(AppScope::class)

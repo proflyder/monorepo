@@ -20,6 +20,10 @@ interface FeatureEntry {
 
     val module: AppModule get() = AppModule.BASE
 
+    val ownerOnly: Boolean get() = false
+
+    val notificationLink: Boolean get() = true
+
     @get:StringRes
     val titleRes: Int
 

@@ -33,6 +33,10 @@ abstract class PagedStateViewModel<T : Keyed, S : PagedScreenState<T>, I : Any, 
 
     fun dispatch(intent: ListItemIntent) = paging.dispatch(intent)
 
+    protected fun rederive() {
+        updateState { derive(pages, pendingRemoval) }
+    }
+
     override fun onCleared() {
         paging.close()
     }
