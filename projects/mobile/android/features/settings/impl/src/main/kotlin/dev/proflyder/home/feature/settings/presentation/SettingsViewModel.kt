@@ -1,6 +1,11 @@
 package dev.proflyder.home.feature.settings.presentation
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import dev.proflyder.home.core.access.AppAccessSource
+import dev.proflyder.home.core.access.AppAccessState
+import dev.proflyder.home.core.access.allows
+import dev.proflyder.home.core.model.AppModule
 import dev.proflyder.home.core.navigation.Route
 import dev.proflyder.home.core.presentation.StateViewModel
 import dev.proflyder.home.core.runtime.AppVersion
@@ -12,15 +17,20 @@ import dev.zacsweers.metro.ClassKey
 import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.binding
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 
-internal data class SettingsUiState(val designSystemVisible: Boolean = false)
+internal data class SettingsUiState(
+    val designSystemVisible: Boolean = false,
+    val links: Set<SettingsLink> = SettingsLink.entries.toSet(),
+)
 
-internal enum class SettingsLink(val route: Route) {
-    CONNECTION(Route.Tab("connection")),
-    VPN(Route.Tab("vpn")),
-    NOTIFICATIONS(Route.Tab("push")),
-    APPEARANCE(Route.Screen(AppearanceDestination)),
-    DESIGN_SYSTEM(Route.Screen(DesignSystemDestination)),
+internal enum class SettingsLink(val route: Route, val module: AppModule) {
+    CONNECTION(Route.Tab("connection"), AppModule.BASE),
+    VPN(Route.Tab("vpn"), AppModule.VPN),
+    NOTIFICATIONS(Route.Tab("push"), AppModule.NOTIFICATIONS),
+    APPEARANCE(Route.Screen(AppearanceDestination), AppModule.BASE),
+    DESIGN_SYSTEM(Route.Screen(DesignSystemDestination), AppModule.BASE),
 }
 
 internal sealed interface SettingsIntent {
@@ -34,11 +44,23 @@ internal sealed interface SettingsEvent {
 @Inject
 internal class SettingsViewModel(
     version: AppVersion,
-) : StateViewModel<SettingsUiState, SettingsIntent, SettingsEvent>(SettingsUiState(version.debuggable)) {
+    access: AppAccessSource,
+) : StateViewModel<SettingsUiState, SettingsIntent, SettingsEvent>(
+    SettingsUiState(designSystemVisible = version.debuggable),
+) {
+    init {
+        access.state.onEach(::applyAccess).launchIn(viewModelScope)
+    }
+
     override fun handle(intent: SettingsIntent) {
         when (intent) {
             is SettingsIntent.Open -> emit(SettingsEvent.OpenRoute(intent.link.route))
         }
+    }
+
+    private fun applyAccess(access: AppAccessState) {
+        val links = SettingsLink.entries.filter { access.allows(it.module) }.toSet()
+        updateState { copy(links = links) }
     }
 }
 

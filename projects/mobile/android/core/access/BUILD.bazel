@@ -1,0 +1,33 @@
+load("//platform/android:defs.bzl", "metro_jvm_library", "metro_jvm_test")
+
+package(default_visibility = ["//visibility:public"])
+
+metro_jvm_library(
+    name = "access",
+    srcs = glob(["src/main/kotlin/**/*.kt"]),
+    deps = [
+        "//packages/kotlin/core",
+        "//projects/mobile/android/core/data",
+        "//projects/mobile/android/core/model",
+        "//projects/mobile/android/core/network/api",
+        "//projects/mobile/android/core/runtime",
+        "@maven//:dev_zacsweers_metro_runtime_jvm",
+        "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_core",
+    ],
+)
+
+metro_jvm_test(
+    name = "access_test",
+    srcs = glob(["src/test/kotlin/**/*.kt"]),
+    test_class = "dev.proflyder.home.core.access.AppAccessSessionTest",
+    deps = [
+        ":access",
+        "//projects/mobile/android/core/data",
+        "//projects/mobile/android/core/model",
+        "//projects/mobile/android/core/network/api",
+        "//projects/mobile/android/core/testing",
+        "@maven//:junit_junit",
+        "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_core",
+        "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_test",
+    ],
+)

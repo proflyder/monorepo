@@ -22,14 +22,21 @@ import kotlin.math.roundToInt
 internal class SystemRows(private val context: Context) {
     private val separator get() = context.getString(R.string.system_separator)
 
-    fun overview(snapshot: SystemSnapshot): List<SystemRow> = buildList {
+    fun overview(snapshot: SystemSnapshot, administrator: Boolean = false): List<SystemRow> = buildList {
         add(status(snapshot))
         addAll(alerts(snapshot))
         add(hostCard(snapshot.hosts))
         add(guestsCard(snapshot.hosts))
         add(clusterCard(snapshot.cluster))
         add(devicesCard(snapshot.devices))
+        if (administrator) add(accessCard())
     }
+
+    private fun accessCard(): SystemRow.Link = SystemRow.Link(
+        key = "access",
+        title = context.getString(R.string.system_card_access),
+        subtitle = context.getString(R.string.system_card_access_subtitle),
+    )
 
     fun detail(section: SystemSection, snapshot: SystemSnapshot): List<SystemRow> = when (section) {
         SystemSection.HOST -> hostDetail(snapshot.hosts)

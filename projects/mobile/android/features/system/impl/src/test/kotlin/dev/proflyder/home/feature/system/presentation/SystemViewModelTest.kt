@@ -1,5 +1,9 @@
 package dev.proflyder.home.feature.system.presentation
 
+import dev.proflyder.home.core.access.AppAccessSource
+import dev.proflyder.home.core.access.AppAccessState
+import dev.proflyder.home.core.model.AppAccess
+import dev.proflyder.home.core.model.AppModule
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.model.SystemSnapshot
@@ -45,6 +49,11 @@ class SystemViewModelTest {
         }
     }
 
+    private class FakeAccess : AppAccessSource {
+        val mutable = MutableStateFlow<AppAccessState>(AppAccessState.Unknown)
+        override val state: StateFlow<AppAccessState> = mutable
+    }
+
     @Before
     fun setUp() = Dispatchers.setMain(UnconfinedTestDispatcher())
 
@@ -54,16 +63,22 @@ class SystemViewModelTest {
     @Test
     fun theScreenMirrorsTheRepositoryAndReportsAFailedRefreshOnce() = runTest(UnconfinedTestDispatcher()) {
         val repository = FakeRepository()
-        val viewModel = SystemViewModel(repository)
+        val access = FakeAccess()
+        val viewModel = SystemViewModel(repository, access)
         val events = mutableListOf<SystemEvent>()
         backgroundScope.launch { viewModel.events.toList(events) }
 
         repository.mutable.value = SystemState(loading = false, snapshot = SystemFixtures.snapshot)
-        assertEquals(SystemFixtures.snapshot, viewModel.state.value.snapshot)
+        assertEquals(SystemFixtures.snapshot, viewModel.state.value.snapshot.snapshot)
 
         repository.mutable.value = repository.mutable.value.copy(loading = true)
         repository.mutable.value = SystemState(false, SystemFixtures.snapshot, RemoteFailure.Offline("down"))
         assertEquals(listOf(SystemEvent.RefreshFailed(RemoteFailure.Offline("down"))), events)
+
+        access.mutable.value = AppAccessState.Ready(
+            AppAccess("Owner", AppModule.entries.toSet(), owner = true),
+        )
+        assertTrue(viewModel.state.value.administrator)
 
         viewModel.dispatch(SystemIntent.Refresh)
         viewModel.dispatch(SystemIntent.OpenSection(SystemSection.CLUSTER))

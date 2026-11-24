@@ -3,6 +3,7 @@ package dev.proflyder.home.core.navigation
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.fragment.app.Fragment
+import dev.proflyder.home.core.model.AppModule
 
 interface Destination {
     val featureId: String
@@ -16,6 +17,8 @@ interface FeatureEntry {
     val isTab: Boolean get() = true
 
     val hidesBottomBar: Boolean get() = false
+
+    val module: AppModule get() = AppModule.BASE
 
     @get:StringRes
     val titleRes: Int

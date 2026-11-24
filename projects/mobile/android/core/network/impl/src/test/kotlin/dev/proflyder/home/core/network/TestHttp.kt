@@ -18,6 +18,7 @@ internal fun testHttp(
     baseClient: OkHttpClient = OkHttpClient(),
     interceptors: Set<Interceptor> = emptySet(),
     gate: RouteGate = OpenRouteGate,
+    forbidden: () -> Set<ModuleForbiddenSink> = { emptySet() },
 ): HomeHttp = HomeHttp(
     baseClient = baseClient,
     settings = settings,
@@ -27,6 +28,7 @@ internal fun testHttp(
     scope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
     io = Dispatchers.IO,
     identity = TestIdentity,
+    forbidden = forbidden,
 )
 
 internal object TestIdentity : DeviceIdentity {

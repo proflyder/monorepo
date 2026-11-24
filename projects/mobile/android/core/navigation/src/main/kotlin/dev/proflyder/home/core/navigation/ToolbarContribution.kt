@@ -5,6 +5,7 @@ import androidx.annotation.DrawableRes
 import androidx.annotation.IdRes
 import androidx.annotation.StringRes
 import androidx.appcompat.app.AppCompatActivity
+import dev.proflyder.home.core.model.AppModule
 
 class ToolbarSlots(
     val start: ViewGroup,
@@ -15,6 +16,8 @@ class ToolbarSlots(
 interface ToolbarContribution {
     val order: Int
 
+    val module: AppModule get() = AppModule.BASE
+
     fun attach(activity: AppCompatActivity, slots: ToolbarSlots, navigator: Navigator)
 }
 
@@ -23,6 +26,8 @@ interface ToolbarAction {
     val itemId: Int
 
     val order: Int
+
+    val module: AppModule get() = AppModule.BASE
 
     @get:StringRes
     val titleRes: Int

@@ -13,6 +13,7 @@ internal fun RemoteFailure.toCallFailure(stationLookup: Boolean = false): CallFa
     is RemoteFailure.Offline -> if (stationLookup) CallFailure.StationOffline else CallFailure.Remote(this)
     is RemoteFailure.Server -> if (isBusy) CallFailure.Busy else CallFailure.Remote(this)
     RemoteFailure.Unauthorized,
+    is RemoteFailure.ModuleForbidden,
     is RemoteFailure.Tls,
     is RemoteFailure.ProtocolFailure,
     is RemoteFailure.Storage,

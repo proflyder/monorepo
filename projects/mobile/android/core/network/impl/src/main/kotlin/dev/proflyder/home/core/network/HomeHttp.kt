@@ -31,11 +31,12 @@ class HomeHttp(
     private val scope: CoroutineScope,
     @IoDispatcher private val io: CoroutineDispatcher,
     private val identity: DeviceIdentity,
+    private val forbidden: () -> Set<ModuleForbiddenSink>,
 ) {
     private val origin by lazy { DeviceOriginInterceptor(identity) }
     private val userAgent by lazy { "home-android/${version.name}" }
     private val clients = ConcurrentHashMap<Pair<Target, Boolean>, OkHttpClient>()
-    private val callAdapters by lazy { OutcomeCallAdapterFactory(gate, scope) }
+    private val callAdapters by lazy { OutcomeCallAdapterFactory(gate, scope, forbidden) }
     private val converters by lazy {
         BoundedResponseConverterFactory(NetworkJson.asConverterFactory(JSON_MEDIA_TYPE), JSON_MEDIA_TYPE)
     }

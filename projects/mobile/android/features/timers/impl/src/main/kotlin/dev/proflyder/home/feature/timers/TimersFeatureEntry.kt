@@ -1,6 +1,7 @@
 package dev.proflyder.home.feature.timers
 
 import androidx.fragment.app.Fragment
+import dev.proflyder.home.core.model.AppModule
 import dev.proflyder.home.core.navigation.Destination
 import dev.proflyder.home.core.navigation.FeatureEntry
 import dev.proflyder.home.feature.timers.impl.R
@@ -19,6 +20,7 @@ internal object TimerListDestination : Destination {
 class TimersFeatureEntry : FeatureEntry {
     override val id: String = "timers"
     override val order: Int = 3
+    override val module: AppModule = AppModule.ALARMS_TIMERS
     override val isTab: Boolean = false
     override val titleRes: Int = R.string.timers_title
     override val iconRes: Int = R.drawable.timers_ic_tab

@@ -3,6 +3,7 @@ package dev.proflyder.home.core.model
 sealed interface RemoteFailure {
     data object NotConfigured : RemoteFailure
     data object Unauthorized : RemoteFailure
+    data class ModuleForbidden(val module: String) : RemoteFailure
     data class Offline(val detail: String) : RemoteFailure
     data object Timeout : RemoteFailure
     data class Tls(val detail: String) : RemoteFailure
@@ -35,6 +36,7 @@ fun RemoteFailure.isAmbiguousRetryable(): Boolean = when (this) {
     -> true
     RemoteFailure.NotConfigured,
     RemoteFailure.Unauthorized,
+    is RemoteFailure.ModuleForbidden,
     is RemoteFailure.Validation,
     is RemoteFailure.Storage,
     RemoteFailure.RemoteConfig,

@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="DuplicateStrings">
+    <string name="access_title">Access</string>
+    <string name="access_intro">Named application tokens. Each token sees only the modules you grant.</string>
+    <string name="access_create">New token</string>
+    <string name="access_empty">No named tokens yet</string>
+    <string name="access_empty_hint">Create a token for a phone, a bridge or another application instead of sharing the owner token.</string>
+    <string name="access_owner_badge">Owner</string>
+    <string name="access_modules_base_only">Base access only</string>
+    <string name="access_edit_title">Token settings</string>
+    <string name="access_new_title">New token</string>
+    <string name="access_name_label">Name</string>
+    <string name="access_name_error">Enter a name of up to 64 characters</string>
+    <string name="access_owner_note">The owner token always has every module and cannot be renamed or revoked.</string>
+    <string name="access_modules_label">Modules</string>
+    <string name="access_editor_save">Save</string>
+    <string name="access_action_edit">Rename and modules</string>
+    <string name="access_action_revoke">Revoke</string>
+    <string name="access_created_title">Token created</string>
+    <string name="access_created_warning">Copy the token now. The server stores only its hash and will never show it again.</string>
+    <string name="access_created_copy">Copy</string>
+    <string name="access_created_copied">Token copied</string>
+    <string name="access_created_done">Done</string>
+    <string name="access_revoke_message">The token will stop working immediately, and its push devices and VPN peers will be removed.</string>
+    <string name="access_revoke_yes">Revoke</string>
+    <string name="access_revoke_keep">Keep</string>
+    <string name="access_error_invalid">The server rejected the name or modules. Check them and retry.</string>
+    <string name="access_error_name_taken">This name is already used by another token.</string>
+    <string name="access_error_limit">The server reached the limit of 64 active tokens.</string>
+    <string name="access_token_description">Token %1$s</string>
+    <string name="access_module_base">Base access</string>
+    <string name="access_module_home">Home</string>
+    <string name="access_module_scenarios">Scenarios</string>
+    <string name="access_module_alarms_timers">Alarms and timers</string>
+    <string name="access_module_intercom_call">Calls</string>
+    <string name="access_module_notifications">Notifications</string>
+    <string name="access_module_chat">Chat</string>
+    <string name="access_module_vpn">VPN</string>
+    <string name="access_module_system">System</string>
+    <string name="access_module_infra_reports">Infrastructure reports</string>
+    <string name="access_module_alerts">Alerts</string>
+    <string name="access_module_admin">Administration</string>
+</resources>

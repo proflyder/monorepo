@@ -1,0 +1,1 @@
+{"code":"permission_denied","message":"module_forbidden","details":[{"type":"home.v1.ModuleForbidden","debug":{"module":"chat"}}]}

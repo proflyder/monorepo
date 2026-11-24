@@ -12,6 +12,7 @@ metro_android_library(
     deps = [
         "//projects/mobile/android/core/data",
         "//packages/kotlin/core",
+        "//projects/mobile/android/core/access",
         "//projects/mobile/android/core/model",
         "//projects/mobile/android/core/navigation",
         "//projects/mobile/android/core/presentation",

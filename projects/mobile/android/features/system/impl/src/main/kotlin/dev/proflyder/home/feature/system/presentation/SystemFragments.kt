@@ -11,27 +11,32 @@ import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.core.ui.setupPullToRefresh
 import dev.proflyder.home.core.ui.userMessage
 import dev.proflyder.home.feature.system.SystemDetailDestination
-import dev.proflyder.home.feature.system.SystemState
 import dev.proflyder.home.feature.system.impl.databinding.FragmentSystemBinding
 
 internal abstract class SystemScreenFragment :
-    ScreenFragment<FragmentSystemBinding, SystemState, SystemIntent, SystemEvent>(FragmentSystemBinding.Companion::inflate) {
+    ScreenFragment<FragmentSystemBinding, SystemUiState, SystemIntent, SystemEvent>(FragmentSystemBinding.Companion::inflate) {
     override val viewModel: SystemViewModel by screenViewModel()
 
-    private val adapter by lazy { SystemAdapter(IntentAdapterCallback(::dispatch, ::sectionIntent)) }
+    private val adapter by lazy { SystemAdapter(IntentAdapterCallback(::dispatch, ::rowIntent)) }
 
-    abstract fun rows(snapshot: SystemSnapshot): List<SystemRow>
+    abstract fun rows(snapshot: SystemSnapshot, administrator: Boolean): List<SystemRow>
 
     override fun onViewReady(binding: FragmentSystemBinding, savedInstanceState: Bundle?) {
         binding.systemList.adapter = adapter
         binding.systemRefresh.setupPullToRefresh(binding.systemList) { dispatch(SystemIntent.Refresh) }
         binding.systemRetry.setOnClickListener { dispatch(SystemIntent.Refresh) }
-        render(SystemState::snapshot) { snapshot -> adapter.submitList(snapshot?.let { rows(it) }.orEmpty()) }
-        render({ SystemStatus(it.loading, it.error, it.snapshot != null) }, ::renderStatus)
+        render(::rowsOf) { rows -> adapter.submitList(rows) }
+        render({ SystemStatus(it.loading, it.error, it.snapshot.snapshot != null) }, ::renderStatus)
     }
 
-    private fun sectionIntent(row: SystemRow): SystemIntent? =
-        (row as? SystemRow.Card)?.let { SystemIntent.OpenSection(it.section) }
+    private fun rowsOf(state: SystemUiState): List<SystemRow> =
+        state.snapshot.snapshot?.let { rows(it, state.administrator) }.orEmpty()
+
+    private fun rowIntent(row: SystemRow): SystemIntent? = when (row) {
+        is SystemRow.Card -> SystemIntent.OpenSection(row.section)
+        is SystemRow.Link -> SystemIntent.OpenAccess
+        else -> null
+    }
 
     override fun onBindingDestroyed() {
         binding.systemList.adapter = null
@@ -55,13 +60,14 @@ internal abstract class SystemScreenFragment :
 }
 
 internal class SystemFragment : SystemScreenFragment() {
-    override fun rows(snapshot: SystemSnapshot): List<SystemRow> = SystemRows(requireContext()).overview(snapshot)
+    override fun rows(snapshot: SystemSnapshot, administrator: Boolean): List<SystemRow> =
+        SystemRows(requireContext()).overview(snapshot, administrator)
 }
 
 internal class SystemDetailFragment : SystemScreenFragment() {
     private val destination by destination(SystemDetailDestination)
 
-    override fun rows(snapshot: SystemSnapshot): List<SystemRow> =
+    override fun rows(snapshot: SystemSnapshot, administrator: Boolean): List<SystemRow> =
         SystemRows(requireContext()).detail(destination?.section ?: SystemSection.HOST, snapshot)
 }
 

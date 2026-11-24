@@ -1,6 +1,7 @@
 package dev.proflyder.home.feature.reminders
 
 import androidx.fragment.app.Fragment
+import dev.proflyder.home.core.model.AppModule
 import dev.proflyder.home.core.navigation.Destination
 import dev.proflyder.home.core.navigation.FeatureEntry
 import dev.proflyder.home.core.navigation.RouteCodec
@@ -36,6 +37,7 @@ internal data class ReminderEditorDestination(
 class RemindersFeatureEntry : FeatureEntry {
     override val id: String = "reminders"
     override val order: Int = 4
+    override val module: AppModule = AppModule.ALARMS_TIMERS
     override val isTab: Boolean = false
     override val titleRes: Int = R.string.reminders_title
     override val iconRes: Int = R.drawable.reminders_ic_tab

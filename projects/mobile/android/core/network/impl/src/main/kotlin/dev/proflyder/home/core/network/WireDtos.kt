@@ -60,6 +60,7 @@ internal data class ConnectDetailDto(
 internal data class LocalizedDebugDto(
     val key: String = "",
     val args: Map<String, String> = emptyMap(),
+    val module: String = "",
 )
 
 @Serializable

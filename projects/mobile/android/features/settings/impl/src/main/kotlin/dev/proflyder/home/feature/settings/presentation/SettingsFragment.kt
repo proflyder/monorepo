@@ -22,12 +22,20 @@ internal class SettingsFragment :
         link(binding.settingsAppearance, SettingsLink.APPEARANCE)
         link(binding.settingsDesignSystem, SettingsLink.DESIGN_SYSTEM)
         render(SettingsUiState::designSystemVisible) { binding.settingsDesignSystem.isVisible = it }
+        render(SettingsUiState::links) { renderLinks(it) }
     }
 
     override fun onEvent(event: SettingsEvent) {
         when (event) {
             is SettingsEvent.OpenRoute -> navigate(event.route)
         }
+    }
+
+    private fun renderLinks(links: Set<SettingsLink>) {
+        binding.settingsConnection.isVisible = SettingsLink.CONNECTION in links
+        binding.settingsVpn.isVisible = SettingsLink.VPN in links
+        binding.settingsNotifications.isVisible = SettingsLink.NOTIFICATIONS in links
+        binding.settingsAppearance.isVisible = SettingsLink.APPEARANCE in links
     }
 
     private fun link(view: View, link: SettingsLink) {

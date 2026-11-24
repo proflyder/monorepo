@@ -71,9 +71,11 @@ class AppGraphBindingsTest {
             "ProcessAppForeground",
             "FirebaseRemoteConnectionSource",
             "AppearanceInstaller",
+            "AppAccessSession",
         )
 
         val VIEW_MODELS = listOf(
+            "dev.proflyder.home.feature.access.presentation.AccessViewModel",
             "dev.proflyder.home.feature.alarms.presentation.AlarmEditorViewModel",
             "dev.proflyder.home.feature.alarms.presentation.AlarmsViewModel",
             "dev.proflyder.home.feature.call.presentation.CallViewModel",

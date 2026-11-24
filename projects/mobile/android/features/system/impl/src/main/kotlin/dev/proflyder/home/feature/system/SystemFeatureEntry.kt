@@ -1,6 +1,7 @@
 package dev.proflyder.home.feature.system
 
 import androidx.fragment.app.Fragment
+import dev.proflyder.home.core.model.AppModule
 import dev.proflyder.home.core.navigation.Destination
 import dev.proflyder.home.core.navigation.FeatureEntry
 import dev.proflyder.home.core.navigation.RouteCodec
@@ -33,6 +34,7 @@ internal data class SystemDetailDestination(val section: SystemSection) : Destin
 class SystemFeatureEntry : FeatureEntry {
     override val id: String = "system"
     override val order: Int = 3
+    override val module: AppModule = AppModule.SYSTEM
     override val titleRes: Int = R.string.system_title
     override val iconRes: Int = R.drawable.system_ic_tab
     override val rootDestination: Destination = SystemOverviewDestination

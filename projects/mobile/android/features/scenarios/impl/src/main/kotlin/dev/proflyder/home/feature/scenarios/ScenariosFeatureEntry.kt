@@ -1,6 +1,7 @@
 package dev.proflyder.home.feature.scenarios
 
 import androidx.fragment.app.Fragment
+import dev.proflyder.home.core.model.AppModule
 import dev.proflyder.home.core.navigation.Destination
 import dev.proflyder.home.core.navigation.FeatureEntry
 import dev.proflyder.home.core.navigation.RouteCodec
@@ -36,6 +37,7 @@ internal data class ScenarioEditorDestination(
 class ScenariosFeatureEntry : FeatureEntry {
     override val id: String = "scenarios"
     override val order: Int = 1
+    override val module: AppModule = AppModule.SCENARIOS
     override val titleRes: Int = R.string.scenarios_title
     override val iconRes: Int = R.drawable.scenarios_ic_tab
     override val rootDestination: Destination = ScenarioListDestination

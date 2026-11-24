@@ -9,6 +9,9 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.google.android.material.color.MaterialColors
+import dev.proflyder.home.core.access.AppAccessSource
+import dev.proflyder.home.core.access.allows
+import dev.proflyder.home.core.model.AppModule
 import dev.proflyder.home.core.navigation.Navigator
 import dev.proflyder.home.core.navigation.ToolbarContribution
 import dev.proflyder.home.core.navigation.ToolbarSlots
@@ -20,12 +23,17 @@ import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesIntoSet
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.binding
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
 @ContributesIntoSet(AppScope::class, binding = binding<ToolbarContribution>())
 @Inject
-class NotificationBellContribution : ToolbarContribution {
+class NotificationBellContribution(
+    private val access: AppAccessSource,
+) : ToolbarContribution {
     override val order: Int = 20
+
+    override val module: AppModule = AppModule.NOTIFICATIONS
 
     override fun attach(activity: AppCompatActivity, slots: ToolbarSlots, navigator: Navigator) {
         val bell = SettingsToolbarBellBinding.inflate(LayoutInflater.from(activity), slots.end, false)
@@ -35,7 +43,9 @@ class NotificationBellContribution : ToolbarContribution {
         activity.lifecycleScope.launch {
             activity.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 launch { model.state.collect { NotificationBell.render(bell, it) } }
-                navigator.chrome.collect { bell.root.isVisible = !it.overlay }
+                combine(navigator.chrome, access.state) { chrome, state ->
+                    !chrome.overlay && state.allows(module)
+                }.collect { bell.root.isVisible = it }
             }
         }
     }

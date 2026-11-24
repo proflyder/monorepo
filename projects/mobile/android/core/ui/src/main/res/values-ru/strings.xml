@@ -2,6 +2,7 @@
 <resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="DuplicateStrings">
     <string name="ui_error_not_configured">Сервер не настроен. Откройте «Подключение» и укажите адрес домашнего сервера.</string>
     <string name="ui_error_unauthorized">Сервер отклонил токен. Проверьте токен в «Подключении».</string>
+    <string name="ui_error_no_access">Нет доступа к этому разделу. Попросите владельца выдать токен с нужным модулем.</string>
     <string name="ui_error_offline">Сервер недоступен. Проверьте локальную сеть или VPN и повторите.</string>
     <string name="ui_error_timeout">Сервер не ответил до истечения тайм-аута.</string>
     <string name="ui_error_tls">Не удалось проверить TLS. Используйте HTTPS-адрес сервера с доверенным сертификатом.</string>

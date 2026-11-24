@@ -1,6 +1,7 @@
 package dev.proflyder.home.feature.vpn
 
 import androidx.fragment.app.Fragment
+import dev.proflyder.home.core.model.AppModule
 import dev.proflyder.home.core.navigation.Destination
 import dev.proflyder.home.core.navigation.FeatureEntry
 import dev.proflyder.home.feature.vpn.impl.R
@@ -19,6 +20,7 @@ internal object VpnDestination : Destination {
 class VpnFeatureEntry : FeatureEntry {
     override val id: String = "vpn"
     override val order: Int = 8
+    override val module: AppModule = AppModule.VPN
     override val isTab: Boolean = false
     override val hidesBottomBar: Boolean = true
     override val titleRes: Int = R.string.vpn_title

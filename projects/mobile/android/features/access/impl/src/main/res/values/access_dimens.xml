@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="access_screen_margin">16dp</dimen>
+    <dimen name="access_row_padding">16dp</dimen>
+    <dimen name="access_row_gap">8dp</dimen>
+    <dimen name="access_dialog_padding">24dp</dimen>
+    <dimen name="access_dialog_gap">12dp</dimen>
+    <dimen name="access_token_text">16sp</dimen>
+    <dimen name="access_empty_padding">32dp</dimen>
+</resources>
