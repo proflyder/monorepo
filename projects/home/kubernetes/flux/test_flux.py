@@ -162,7 +162,7 @@ class Cluster(unittest.TestCase):
             "home-app-pins", "app-wakegrant",
             "app-intercom", "app-currency-bot", "app-mcp-gateway",
             "app-ha-executors", "app-ha-config-sync", "app-hermes",
-            "app-phone-push", "pve-exporter",
+            "app-phone-push", "app-secrets-gateway", "pve-exporter",
         })
         sources = {
             "home-app-pins": ("GitRepository", "flux-pins"),
@@ -217,6 +217,7 @@ class Cluster(unittest.TestCase):
             "app-ha-executors": "./projects/home/kubernetes/scheduler/manifests",
             "app-ha-config-sync": "./projects/home/kubernetes/ha-config-sync/manifests",
             "app-hermes": "./projects/home-assistant/deploy/flux",
+            "app-secrets-gateway": "./projects/home/kubernetes/secrets-gateway/manifests",
         }
         for name, path in expected.items():
             with self.subTest(app=name):
@@ -252,6 +253,7 @@ class Cluster(unittest.TestCase):
             "ha-bridge": K8S / "scheduler/manifests",
             "ha-config-sync": K8S / "ha-config-sync/manifests",
             "phone-push": K8S / "phone-push/manifests",
+            "secrets-gateway": K8S / "secrets-gateway/manifests",
             "hermes": ROOT / "projects/home-assistant/deploy/flux",
             "hermes-config": ROOT / "projects/home-assistant/deploy/flux",
         }

@@ -21,7 +21,7 @@ patches in `patches/`.
 | `nexus` / `nexus-provision` | `nexus/manifests`, `nexus/provision` |
 | `pve-exporter` | `pve-exporter/manifests` |
 | `home-app-pins` | `./pins` of branch `deploy/home-apps` |
-| `app-wakegrant`, `app-intercom`, `app-phone-push`, `app-currency-bot`, `app-mcp-gateway` | `<unit>/manifests` |
+| `app-wakegrant`, `app-intercom`, `app-phone-push`, `app-secrets-gateway`, `app-currency-bot`, `app-mcp-gateway` | `<unit>/manifests` |
 | `app-ha-executors` | `scheduler/manifests` (scheduler + ha-bridge + ha-control + ha-scenario) |
 | `app-ha-config-sync` | `ha-config-sync/manifests` |
 | `app-hermes` | `projects/home-assistant/deploy/flux` (`HelmRelease/runtime`) |

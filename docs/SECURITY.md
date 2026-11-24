@@ -147,6 +147,12 @@
   `openbao`); политика `k8s-read` — read только `secret/k8s/*`. Роль
   `external-secrets` используется External Secrets Operator (namespace
   `external-secrets`), который создаёт Secrets приложений из OpenBao.
+  Роль `secrets-gateway` (SA `secrets-gateway`, namespace `home-assistant`)
+  даёт сервису секретов приложения read/update KV v2 `secret/data|metadata/*`
+  без delete/destroy/sys/auth/identity; `infra/*`, `ci/*`, Flux-ключи,
+  `scheduler-auth`, собственный TOTP и OpenBao internals закрыты политикой и
+  кодом (`projects/home/kubernetes/secrets-gateway/policy.hcl`). Root и
+  operator token в под не попадают.
 - Audit — декларативный девайс `stdout/`: kubelet ротирует лог, Alloy
   отправляет его в Loki (7 дней). Значения в записях HMAC-хэшированы, но пути
   и metadata запросов видны — Loki доступен только из LAN/VPN.

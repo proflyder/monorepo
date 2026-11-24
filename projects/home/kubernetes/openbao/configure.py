@@ -12,6 +12,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[4]
 SECRETS = ROOT / "secrets" / "openbao"
+SECRETS_GATEWAY_POLICY = (
+    ROOT / "projects" / "home" / "kubernetes" / "secrets-gateway" / "policy.hcl"
+).read_text(encoding="utf-8")
 
 GITHUB_ISSUER = "https://token.actions.githubusercontent.com"
 GITHUB_STATION_ENVIRONMENT = "Station"
@@ -356,6 +359,7 @@ def ensure_kubernetes(bao: Bao) -> None:
         "external-secrets": (["external-secrets"], ["external-secrets"], ["k8s-read"]),
         "k8s-smoke": (["openbao-smoke"], ["openbao-smoke"], ["k8s-read"]),
         "backup": (["openbao-backup"], ["openbao"], ["backup"]),
+        "secrets-gateway": (["secrets-gateway"], ["home-assistant"], ["secrets-gateway"]),
     }
     for name, (accounts, namespaces, policies) in roles.items():
         bao.expect("POST", f"/v1/auth/kubernetes/role/{name}", {
@@ -491,6 +495,7 @@ def main() -> None:
         ensure_policy(bao, "ci-station", STATION_POLICY)
     ensure_policy(bao, "k8s-read", K8S_POLICY)
     ensure_policy(bao, "backup", BACKUP_POLICY)
+    ensure_policy(bao, "secrets-gateway", SECRETS_GATEWAY_POLICY)
     ensure_policy(bao, "operator-kv", OPERATOR_KV_POLICY)
     ensure_userpass(bao, args.user)
     ensure_github(bao, audience, args.repository, station_repository)

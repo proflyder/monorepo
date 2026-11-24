@@ -15,6 +15,7 @@
 | `intercom/` | Rust | сигналинг WebRTC-звонка телефон ↔ колонка: endpoint-регистрация, состояние звонка, SDP/ICE relay, `Watch` |
 | `ha-config-sync/` | Rust | доставка YAML Home Assistant на HAOS-хост, периодическая синхронизация и автооткат |
 | `phone-push/` | Rust | доставка на телефон через FCM HTTP v1: «найди телефон» и уведомления |
+| `secrets-gateway/` | Rust | owner-only API секретов приложения поверх OpenBao KV v2: каталог, метаданные, reveal/update/rollback/soft-delete, TOTP step-up и audit-push |
 | `heartbeat/` | JS | Cloudflare Worker: внешний dead-man switch для Alertmanager `Watchdog` |
 | `bb-home-dispatcher/` | TS | плагин bb: детерминированный исполнитель голосовых команд от `mcp-gateway` |
 | `bb-profiles/` | TS | плагин bb: изолированные профили (логины, конфиги, провайдеры, машины) |

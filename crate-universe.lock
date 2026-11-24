@@ -1,5 +1,5 @@
 {
-  "checksum": "d7ee9d168db3270df380ddc1c004d2174ac862b75010ce3a38dc4aacaa5f4ed8",
+  "checksum": "cc6611863786a124527108d15913c6df534ea9f4b310949f3205817071cc126a",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -7411,6 +7411,77 @@
       ],
       "version": "0.1.0"
     },
+    "home-app-auth 0.1.0": {
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "hex 0.4.3",
+            "target": "hex"
+          },
+          {
+            "id": "http 1.5.0",
+            "target": "http"
+          },
+          {
+            "id": "reqwest 0.13.5",
+            "target": "reqwest"
+          },
+          {
+            "id": "rustls 0.23.46",
+            "target": "rustls"
+          },
+          {
+            "id": "serde 1.0.229",
+            "target": "serde"
+          },
+          {
+            "id": "serde_json 1.0.154",
+            "target": "serde_json"
+          },
+          {
+            "id": "sha2 0.11.1",
+            "target": "sha2"
+          },
+          {
+            "id": "subtle 2.6.1",
+            "target": "subtle"
+          },
+          {
+            "id": "thiserror 2.0.21",
+            "target": "thiserror"
+          },
+          {
+            "id": "tokio 1.54.1",
+            "target": "tokio"
+          },
+          {
+            "id": "tokio-util 0.7.20",
+            "target": "tokio_util"
+          },
+          {
+            "id": "tracing 0.1.44",
+            "target": "tracing"
+          }
+        ],
+        "edition": "2024"
+      },
+      "library_target_name": "home_app_auth",
+      "license": "AGPL-3.0-only",
+      "license_ids": [
+        "AGPL-3.0"
+      ],
+      "name": "home-app-auth",
+      "repository": null,
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "home_app_auth",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.1.0"
+    },
     "home-clients 0.1.0": {
       "common_attrs": {
         "deps": [
@@ -9408,6 +9479,10 @@
             "target": "rustls"
           },
           {
+            "id": "serde_json 1.0.154",
+            "target": "serde_json"
+          },
+          {
             "id": "thiserror 2.0.21",
             "target": "thiserror"
           },
@@ -9433,10 +9508,6 @@
           }
         ],
         "deps_dev": [
-          {
-            "id": "serde_json 1.0.154",
-            "target": "serde_json"
-          },
           {
             "id": "tempfile 3.27.0",
             "target": "tempfile"
@@ -12382,6 +12453,10 @@
           {
             "id": "tracing 0.1.44",
             "target": "tracing"
+          },
+          {
+            "id": "uuid 1.29.1",
+            "target": "uuid"
           }
         ],
         "deps_dev": [
@@ -17351,6 +17426,91 @@
         }
       ],
       "version": "0.8.1"
+    },
+    "secrets-gateway 0.1.0": {
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "anyhow 1.0.104",
+            "target": "anyhow"
+          },
+          {
+            "id": "axum 0.8.9",
+            "target": "axum"
+          },
+          {
+            "id": "hmac 0.13.0",
+            "target": "hmac"
+          },
+          {
+            "id": "http 1.5.0",
+            "target": "http"
+          },
+          {
+            "id": "reqwest 0.13.5",
+            "target": "reqwest"
+          },
+          {
+            "id": "serde 1.0.229",
+            "target": "serde"
+          },
+          {
+            "id": "serde_json 1.0.154",
+            "target": "serde_json"
+          },
+          {
+            "id": "sha1 0.11.0",
+            "target": "sha1"
+          },
+          {
+            "id": "subtle 2.6.1",
+            "target": "subtle"
+          },
+          {
+            "id": "thiserror 2.0.21",
+            "target": "thiserror"
+          },
+          {
+            "id": "tokio 1.54.1",
+            "target": "tokio"
+          },
+          {
+            "id": "tokio-util 0.7.20",
+            "target": "tokio_util"
+          },
+          {
+            "id": "tracing 0.1.44",
+            "target": "tracing"
+          }
+        ],
+        "deps_dev": [
+          {
+            "id": "http-body-util 0.1.5",
+            "target": "http_body_util"
+          },
+          {
+            "id": "tower 0.5.3",
+            "target": "tower"
+          }
+        ],
+        "edition": "2024"
+      },
+      "library_target_name": "secrets_gateway",
+      "license": "AGPL-3.0-only",
+      "license_ids": [
+        "AGPL-3.0"
+      ],
+      "name": "secrets-gateway",
+      "repository": null,
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "secrets_gateway",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.1.0"
     },
     "security-framework 3.7.0": {
       "common_attrs": {
@@ -25387,6 +25547,7 @@
     "ha-config-sync 0.1.0": "solutions/ha-config-sync/crates/ha-config-sync",
     "health-exporter 0.1.0": "projects/home-assistant/deploy/health-exporter/crates/health-exporter",
     "home-actor 0.1.0": "packages/rust/home-actor",
+    "home-app-auth 0.1.0": "packages/rust/home-app-auth",
     "home-clients 0.1.0": "packages/rust/home-clients",
     "home-config 0.1.0": "packages/rust/home-config",
     "home-contracttest 0.1.0": "packages/rust/home-contracttest",
@@ -25431,6 +25592,7 @@
     "pulsar-zbhci 0.0.0": "projects/station/pulsar/satellite/crates/pulsar-zbhci",
     "pulsar-zigbee 0.0.0": "projects/station/pulsar/satellite/crates/pulsar-zigbee",
     "scheduler 0.1.0": "solutions/scheduler/crates/scheduler",
+    "secrets-gateway 0.1.0": "solutions/secrets-gateway/crates/secrets-gateway",
     "voice-contract 0.1.0": "packages/rust/voice-contract",
     "voice-proxy 0.1.0": "solutions/voice-proxy/crates/voice-proxy",
     "voicestream 0.1.0": "projects/station/tools/voice-recorder/helper",

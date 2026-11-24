@@ -9,7 +9,14 @@ import { deployImageFields, loadConfig } from "./affected.mjs";
 export const GROUPS = {
   scheduler: ["scheduler"],
   "ha-bridge": ["ha-bridge"],
-  "home-services": ["wakegrant", "intercom", "phone-push", "currency-bot", "mcp-gateway"],
+  "home-services": [
+    "wakegrant",
+    "intercom",
+    "phone-push",
+    "secrets-gateway",
+    "currency-bot",
+    "mcp-gateway",
+  ],
   "ha-config": ["ha-config-sync", "hermes-config"],
   hermes: ["hermes"],
   pulsar: ["pulsar"],

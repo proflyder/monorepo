@@ -20,7 +20,7 @@ overview: |
 
   - `home-assistant` — голосовой контур и планировщик: Hermes + voice-proxy,
     GigaAM/Whisper/Piper, health exporter, scheduler, ha-bridge, ha-control,
-    phone-push, а также сам mcp-gateway.
+    phone-push, secrets-gateway, а также сам mcp-gateway.
   - `monitoring` — Prometheus, Alertmanager, Grafana, kube-state-metrics,
     node-exporter, pve-exporter, Prometheus Operator, Loki и Alloy.
   - `currency-bot` — бот курсов и Cloudflare Tunnel для его webhook.
@@ -650,6 +650,34 @@ services:
       allowed: true
       warning: "Поиск телефона и уведомления не будут доставляться около тридцати секунд; реестр устройств и токены остаются в scheduler."
     description: "FCM-доставка на телефон: поиск телефона, уведомления и sync-пуши приложения."
+
+  - id: secrets-gateway
+    title: Secrets Gateway
+    group: Приложения
+    aliases:
+      ru: [секреты приложения, хранилище секретов]
+      en: [secrets-gateway, secrets gateway, app secrets]
+    kind: k8s
+    namespace: home-assistant
+    workload:
+      kind: Deployment
+      name: secrets-gateway
+    containers: [secrets-gateway]
+    signals:
+      - promql: kube_deployment_status_replicas_available{namespace="home-assistant",deployment="secrets-gateway"} < 1
+        meaning: API секретов приложения недоступен
+        status: true
+    checks:
+      - type: http
+        label: готовность
+        url: "http://secrets-gateway.home-assistant.svc.cluster.local:8096/readyz"
+        expect_status: 200
+    logs:
+      source: pods
+    restart:
+      allowed: true
+      warning: "Открытые step-up-сессии сбросятся (до 5 минут), значения в OpenBao не затрагиваются."
+    description: "Owner-only API секретов приложения поверх OpenBao KV v2."
 
   - id: wakegrant
     title: Wake Grant

@@ -1,0 +1,14 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - secrets-gateway.yaml
+  - network-policies.yaml
+  - external-secrets.yaml
+patches:
+  - target:
+      kind: Deployment
+      name: secrets-gateway
+    patch: |-
+      - op: replace
+        path: /spec/template/metadata/annotations/proflyder.dev~1rollout
+        value: ${SECRETS_GATEWAY_IMAGE}

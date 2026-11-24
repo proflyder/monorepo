@@ -61,7 +61,8 @@
   health exporter `9116`, config-drift sidecar Hermes `9118`, scheduler
   (NodePort `30098`), ha-bridge, ha-control (NodePort `30099`), ha-scenario,
   intercom (NodePort `30097`), wakegrant (NodePort `30130`), mcp-gateway
-  (ClusterIP `:8080`), phone-push (ClusterIP `:8095`), ha-config-sync
+  (ClusterIP `:8080`), phone-push (ClusterIP `:8095`), secrets-gateway
+  (ClusterIP `:8096`), ha-config-sync
   (ClusterIP `:9119`). Отдельно: currency-bot + cloudflared, Nexus `:8081`,
   pve-exporter (`monitoring`).
 - Версии платформы — `projects/home/kubernetes/versions.sh` и HelmRelease'ы:
@@ -166,8 +167,10 @@
 - scheduler (`solutions/scheduler`): SQLite на PVC `scheduler-data`, схема v10,
   хранит только UTC, клиентская зона — заголовок `Time-Zone`; app-доступ —
   модули `base/home/scenarios/alarms_timers/intercom_call/notifications/chat/
-  vpn/system/infra_reports/alerts/admin` (токены в `app_tokens`, только sha256),
-  owner — один, остальные токены выпускает admin API; push-устройства привязаны к токену регистрации. Исполнители:
+  vpn/system/infra_reports/alerts/secrets/admin` (токены в `app_tokens`, только
+  sha256; `secrets` — owner-only, как и `admin`), owner — один, остальные
+  токены выпускает admin API; push-устройства привязаны к токену регистрации.
+  Исполнители:
   ha-bridge (очередь `home`, execute), ha-control (`control`), ha-scenario
   (`scenario`); voice-proxy — consumer очередей озвучивания. Второго
   исполнителя на те же расписания нет.
@@ -195,6 +198,9 @@
   `phone`, голосовые маршруты `/v1/voice/*`, API приложения `/v1/system/*` и
   `/v1/chat/*`. Мост в bb — SSH forced command на CT 103.
 - phone-push (`solutions/phone-push`): FCM HTTP v1; телефоны хранит scheduler.
+- secrets-gateway (`solutions/secrets-gateway`): owner-only API секретов
+  приложения поверх OpenBao KV v2 (роль `secrets-gateway`), модуль `secrets`,
+  TOTP step-up, audit в лог и phone-push; значения не хранит и не логирует.
 - Чат приложения с Hermes — отдельная сессия `home-app` через chat relay
   voice-proxy `:8644`.
 

@@ -676,6 +676,7 @@ test("deploy: platform/deploy-rs change runs the Rust unit and routes deploy uni
     "wakegrant",
     "intercom",
     "phone-push",
+    "secrets-gateway",
     "currency-bot",
     "mcp-gateway",
     "ha-bridge",
@@ -691,6 +692,7 @@ test("deploy: platform/deploy-rs change runs the Rust unit and routes deploy uni
     "mcp-gateway",
     "phone-push",
     "scheduler",
+    "secrets-gateway",
     "wakegrant",
   ]);
 });
@@ -701,8 +703,8 @@ test("deploy: the pins job covers every deployable unit", () => {
     affectedRules: () => new Set(),
   });
   const expected = ["scheduler", "ha-bridge", "wakegrant", "intercom",
-                    "phone-push", "currency-bot", "mcp-gateway", "hermes",
-                    "hermes-config"];
+                    "phone-push", "secrets-gateway", "currency-bot",
+                    "mcp-gateway", "hermes", "hermes-config"];
   const entries = affected.deployEntries(result, config);
   assert.deepEqual(entries.map((entry) => entry.id).sort(), [...expected].sort());
   assert.ok(entries.every((entry) => !("runtime" in entry)));
@@ -2032,6 +2034,7 @@ test("module routing: native-only edit reaches native and every Rust Bazel unit"
     "wakegrant",
     "intercom",
     "phone-push",
+    "secrets-gateway",
     "currency-bot",
     "mcp-gateway",
     "ha-bridge",
@@ -2045,7 +2048,7 @@ test("module routing: native-only edit reaches native and every Rust Bazel unit"
   assert.deepEqual(
     affected.deployEntries(result, config).map((entry) => entry.id).sort(),
     ["currency-bot", "ha-bridge", "ha-config-sync", "hermes-config", "intercom",
-     "mcp-gateway", "phone-push", "scheduler", "wakegrant"],
+     "mcp-gateway", "phone-push", "scheduler", "secrets-gateway", "wakegrant"],
   );
   assert.equal(result.androidDistribute, false);
 });

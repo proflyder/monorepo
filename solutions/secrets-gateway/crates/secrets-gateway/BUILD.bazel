@@ -1,0 +1,101 @@
+load("@rules_rust//cargo:defs.bzl", "extract_cargo_lints")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_clippy_test", "rust_library", "rust_test", "rustfmt_test")
+
+package(default_visibility = ["//visibility:public"])
+
+PACKAGE_VERSION = "0.1.0"
+
+LIB_DEPS = [
+    "//packages/rust/home-app-auth:home_app_auth",
+    "//packages/rust/home-config:home_config",
+    "//packages/rust/home-http:home_http",
+    "//packages/rust/home-runtime:home_runtime",
+    "//packages/rust/home-secret:home_secret",
+    "//packages/rust/home-telemetry:home_telemetry",
+    "//packages/rust/home-tls:home_tls",
+    "@crates//:anyhow",
+    "@crates//:axum",
+    "@crates//:hmac",
+    "@crates//:http",
+    "@crates//:reqwest",
+    "@crates//:serde",
+    "@crates//:serde_json",
+    "@crates//:sha1",
+    "@crates//:subtle",
+    "@crates//:thiserror",
+    "@crates//:tokio",
+    "@crates//:tokio-util",
+    "@crates//:tracing",
+]
+
+rust_library(
+    name = "secrets_gateway_lib",
+    crate_name = "secrets_gateway",
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = ["src/main.rs"],
+    ),
+    compile_data = ["//platform/workstation:catalog"],
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    version = PACKAGE_VERSION,
+    deps = LIB_DEPS,
+)
+
+rust_binary(
+    name = "secrets-gateway",
+    srcs = ["src/main.rs"],
+    rustc_flags = ["-C", "strip=symbols"],
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    version = PACKAGE_VERSION,
+    deps = LIB_DEPS + [":secrets_gateway_lib"],
+)
+
+rust_test(
+    name = "unit_tests",
+    size = "small",
+    crate = ":secrets_gateway_lib",
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    deps = LIB_DEPS,
+)
+
+rust_test(
+    name = "gateway_tests",
+    size = "small",
+    srcs = ["tests/gateway.rs"],
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    deps = LIB_DEPS + [
+        ":secrets_gateway_lib",
+        "@crates//:http-body-util",
+        "@crates//:tower",
+    ],
+)
+
+extract_cargo_lints(
+    name = "workspace_lints",
+    manifest = "Cargo.toml",
+    workspace = "//:Cargo.toml",
+)
+
+rustfmt_test(
+    name = "rustfmt",
+    size = "small",
+    targets = [
+        ":secrets_gateway_lib",
+        ":secrets-gateway",
+        ":gateway_tests",
+    ],
+)
+
+rust_clippy_test(
+    name = "clippy",
+    size = "small",
+    targets = [
+        ":secrets_gateway_lib",
+        ":secrets-gateway",
+        ":gateway_tests",
+    ],
+)
