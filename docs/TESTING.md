@@ -332,7 +332,11 @@ Maven-часть `MODULE.bazel`).
 (`platform/ci/ci_gate.mjs`). `deploy-home` ничего не собирает: `pins`
 продвигает проверенные `tree-<hash>` и коммитит digest'ы в `deploy/home-apps`,
 `native-release` ставит релизные теги, `deploy-station` ставит версию после
-approve (решения 36, 54, 55).
+approve (решения 36, 54, 55). Релиз native-юнита запускают только его
+собственные пути (`publish_when`, иначе `paths`); общие входы пересобирают и
+тестируют юнит без публикации. Job `native / version guard` в `_ci.yml`
+проверяет до merge, что вычисленная версия ещё не занята другим содержимым
+(`promote.mjs`, `verifyReleaseVersion`).
 
 ### Локальное воспроизведение
 
