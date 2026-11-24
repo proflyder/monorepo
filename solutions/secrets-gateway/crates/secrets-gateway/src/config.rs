@@ -20,7 +20,7 @@ pub struct Config {
     pub service_token: Token,
     pub openbao_url: String,
     pub openbao_role: String,
-    pub sa_token: Token,
+    pub sa_token_file: String,
     pub catalog_file: String,
     pub deny_file: String,
     pub state_file: String,
@@ -82,7 +82,7 @@ impl Config {
             .unwrap_or_else(|| DEFAULT_OPENBAO_URL.to_owned());
         let openbao_role = value(getenv, "SECRETS_GATEWAY_OPENBAO_ROLE")
             .unwrap_or_else(|| DEFAULT_OPENBAO_ROLE.to_owned());
-        let sa_token = secret(read_file, getenv, "SECRETS_GATEWAY_SA_TOKEN_FILE")?;
+        let sa_token_file = token_path(read_file, getenv, "SECRETS_GATEWAY_SA_TOKEN_FILE")?;
         let catalog_file = value(getenv, "SECRETS_GATEWAY_CATALOG_FILE")
             .ok_or(ConfigError::Required("SECRETS_GATEWAY_CATALOG_FILE"))?;
         let deny_file = value(getenv, "SECRETS_GATEWAY_DENY_FILE")
@@ -120,7 +120,7 @@ impl Config {
             service_token,
             openbao_url: openbao_url.trim_end_matches('/').to_owned(),
             openbao_role,
-            sa_token,
+            sa_token_file,
             catalog_file,
             deny_file,
             state_file,
@@ -177,6 +177,19 @@ fn token_file(
     Ok(Token::new(value))
 }
 
+fn token_path(
+    read_file: &dyn Fn(&str) -> std::io::Result<Vec<u8>>,
+    getenv: &dyn Fn(&str) -> Option<String>,
+    key: &'static str,
+) -> Result<String, ConfigError> {
+    let path = value(getenv, key).ok_or(ConfigError::Required(key))?;
+    let data = read_file(&path).map_err(|_| ConfigError::File(key))?;
+    if String::from_utf8_lossy(&data).trim().is_empty() {
+        return Err(ConfigError::Empty(key));
+    }
+    Ok(path)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -225,6 +238,7 @@ mod tests {
         assert_eq!(config.deny_file, "/deny");
         assert_eq!(config.state_file, DEFAULT_STATE_FILE);
         assert_eq!(config.device_path, DEFAULT_DEVICE_PATH);
+        assert_eq!(config.sa_token_file, "/sa");
         assert!(config.service_token.ct_eq("secret"));
         assert!(config.phone_push_token.ct_eq("secret"));
         assert!(!format!("{config:?}").contains("secret\n"));
@@ -256,6 +270,7 @@ mod tests {
         pairs.push(("SECRETS_GATEWAY_PHONE_PUSH_TOKEN_FILE", "/push"));
         let config = Config::load_from(&env(&pairs), &read).expect("config");
         assert!(config.phone_push_token.ct_eq("push-secret"));
+        assert_eq!(config.sa_token_file, "/sa");
         assert!(config.service_token.ct_eq("secret"));
     }
 

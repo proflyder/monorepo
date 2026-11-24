@@ -600,6 +600,7 @@ struct Harness {
     app: Router,
     openbao: OpenBaoState,
     pushes: UnboundedReceiver<Value>,
+    _token_file: tempfile::NamedTempFile,
 }
 
 async fn serve(app: Router) -> String {
@@ -674,11 +675,13 @@ async fn harness_with_challenge(challenge: Option<String>) -> Harness {
     .expect("catalog");
     let deny = Deny::parse(DENY).expect("deny");
     openbao_state.set_device(&public_key(&signing_key()));
+    let token_file = tempfile::NamedTempFile::new().expect("token file");
+    std::fs::write(token_file.path(), b"service-account-jwt\n").expect("token");
     let openbao = Arc::new(
         OpenBao::new(
             &openbao_url,
             "secrets-gateway",
-            Token::new("service-account-jwt"),
+            token_file.path().to_str().expect("token path"),
             Duration::from_secs(5),
         )
         .expect("openbao"),
@@ -706,6 +709,7 @@ async fn harness_with_challenge(challenge: Option<String>) -> Harness {
         app,
         openbao: openbao_state,
         pushes,
+        _token_file: token_file,
     }
 }
 

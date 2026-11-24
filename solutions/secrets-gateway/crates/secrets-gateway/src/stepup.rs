@@ -494,7 +494,7 @@ mod tests {
             crate::openbao::OpenBao::new(
                 "http://127.0.0.1:1",
                 "role",
-                home_secret::Token::new("jwt"),
+                "/tmp/stepup-service-account-jwt",
                 Duration::from_secs(1),
             )
             .expect("openbao"),

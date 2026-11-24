@@ -75,6 +75,7 @@ rust_test(
     deps = LIB_DEPS + [
         ":secrets_gateway_lib",
         "@crates//:http-body-util",
+        "@crates//:tempfile",
         "@crates//:tower",
     ],
 )

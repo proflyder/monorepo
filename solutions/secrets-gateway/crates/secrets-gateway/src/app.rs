@@ -43,7 +43,7 @@ pub async fn run() -> anyhow::Result<()> {
         OpenBao::new(
             &config.openbao_url,
             &config.openbao_role,
-            config.sa_token.clone(),
+            &config.sa_token_file,
             config.timeout,
         )
         .map_err(anyhow::Error::msg)?,
