@@ -34,7 +34,8 @@ internal class OutcomeCallAdapterFactory(
         if (getRawType(outcomeType) != Outcome::class.java) return null
         val bodyType = getParameterUpperBound(0, outcomeType as ParameterizedType)
         val retry = if (annotations.any { it is Idempotent }) CallRetry.Idempotent else CallRetry.Once
-        return OutcomeCallAdapter<Any>(bodyType, OutcomeExecutor(gate, retry, scope, forbiddenSinks))
+        val detailed = annotations.any { it is DetailedServerErrors }
+        return OutcomeCallAdapter<Any>(bodyType, OutcomeExecutor(gate, retry, scope, forbiddenSinks, detailed))
     }
 }
 
@@ -52,6 +53,7 @@ internal class OutcomeExecutor(
     private val retry: CallRetry,
     val scope: CoroutineScope,
     private val forbiddenSinks: () -> Set<ModuleForbiddenSink> = { emptySet() },
+    private val detailed: Boolean = false,
 ) {
     suspend fun <T> execute(call: Call<T>): Outcome<T> {
         gate.await()
@@ -60,7 +62,7 @@ internal class OutcomeExecutor(
 
     private suspend fun <T> attempt(call: Call<T>, number: Int): Outcome<T> {
         val result = runCatching { call.awaitResponse() }
-        val failure = result.exceptionOrNull() ?: return result.getOrThrow().toOutcome().also(::report)
+        val failure = result.exceptionOrNull() ?: return result.getOrThrow().toOutcome(detailed).also(::report)
         if (!retry.allows(number, failure)) return Outcome.Failure(failure.toCallFailure())
         delay(retry.delayAfter(number, failure))
         gate.await()
@@ -111,13 +113,15 @@ private class OutcomeCall<T>(
     override fun timeout(): Timeout = delegate.timeout()
 }
 
-internal fun <T> Response<T>.toOutcome(): Outcome<T> = when {
+internal fun <T> Response<T>.toOutcome(detailed: Boolean = false): Outcome<T> = when {
     isSuccessful -> body()?.let { Outcome.Success(it) }
         ?: Outcome.Failure(RemoteFailure.ProtocolFailure("empty response body"))
     code() in 300..399 -> Outcome.Failure(RemoteFailure.ProtocolFailure("HTTP ${code()} redirect refused"))
     code() == 401 -> Outcome.Failure(RemoteFailure.Unauthorized)
-    code() == 403 -> Outcome.Failure(forbiddenOrUnauthorized(errorText()))
-    else -> Outcome.Failure(parseConnectFailure(code(), errorText()))
+    code() == 403 && !detailed -> Outcome.Failure(forbiddenOrUnauthorized(errorText()))
+    else -> Outcome.Failure(
+        parseConnectFailure(code(), errorText(), detailed, headers()["Retry-After"]),
+    )
 }
 
 private fun forbiddenOrUnauthorized(text: String): RemoteFailure {

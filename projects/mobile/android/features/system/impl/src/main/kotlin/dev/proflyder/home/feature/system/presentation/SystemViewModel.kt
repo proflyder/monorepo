@@ -4,11 +4,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dev.proflyder.home.core.access.AppAccessSource
 import dev.proflyder.home.core.access.administrator
+import dev.proflyder.home.core.access.secretsAllowed
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.navigation.Route
 import dev.proflyder.home.core.presentation.StateViewModel
 import dev.proflyder.home.core.ui.ViewModelSource
-import dev.proflyder.home.feature.access.AccessRoutes
 import dev.proflyder.home.feature.system.SystemDetailDestination
 import dev.proflyder.home.feature.system.SystemRepository
 import dev.proflyder.home.feature.system.SystemState
@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.runningFold
 internal data class SystemUiState(
     val snapshot: SystemState = SystemState(),
     val administrator: Boolean = false,
+    val secrets: Boolean = false,
 ) {
     val loading: Boolean get() = snapshot.loading
 
@@ -34,7 +35,7 @@ internal data class SystemUiState(
 internal sealed interface SystemIntent {
     data object Refresh : SystemIntent
     data class OpenSection(val section: SystemSection) : SystemIntent
-    data object OpenAccess : SystemIntent
+    data class OpenLink(val route: Route) : SystemIntent
 }
 
 internal sealed interface SystemEvent {
@@ -49,7 +50,7 @@ internal class SystemViewModel(
 ) : StateViewModel<SystemUiState, SystemIntent, SystemEvent>(SystemUiState()) {
     init {
         combine(repository.state, access.state) { state, accessState ->
-            SystemUiState(state, accessState.administrator)
+            SystemUiState(state, accessState.administrator, accessState.secretsAllowed)
         }
             .runningFold(state.value to state.value) { (_, previous), next -> previous to next }
             .onEach { (previous, next) -> publish(previous, next) }
@@ -61,7 +62,7 @@ internal class SystemViewModel(
             SystemIntent.Refresh -> repository.refresh()
             is SystemIntent.OpenSection ->
                 emit(SystemEvent.OpenRoute(Route.Screen(SystemDetailDestination(intent.section))))
-            SystemIntent.OpenAccess -> emit(SystemEvent.OpenRoute(Route.Link(AccessRoutes.TOKENS)))
+            is SystemIntent.OpenLink -> emit(SystemEvent.OpenRoute(intent.route))
         }
     }
 

@@ -110,6 +110,7 @@ enum class Field {
     ENDPOINT,
     CONTROL_ENDPOINT,
     INTERCOM_ENDPOINT,
+    SECRETS_ENDPOINT,
     TOKEN,
     TIMEOUT,
     LABEL,

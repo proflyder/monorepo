@@ -218,7 +218,7 @@ ssh -F ~/.ssh/home-lab/config pve|k3s|haos               # после secrets:pu
 
 HA `http://192.0.2.28:8123`, MA `:8095`, Grafana LAN
 `http://192.0.2.27:30300/`. HTTPS (LAN/VPN):
-`https://{ha,grafana,alarms,control,currency,intercom,vault,passwords,nexus}.home.example.com/`.
+`https://{ha,grafana,alarms,control,currency,intercom,secrets,vault,passwords,nexus}.home.example.com/`.
 Реальные адреса — `secrets/NETWORK.md`. Не пробрасывать на роутере
 `8123/8095/8099/6053/6638` и `80/443`.
 

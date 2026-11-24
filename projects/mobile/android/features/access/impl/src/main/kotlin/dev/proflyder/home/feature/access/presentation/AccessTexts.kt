@@ -6,7 +6,7 @@ import dev.proflyder.home.core.model.AppModule
 import dev.proflyder.home.feature.access.impl.R
 
 internal val OFFERED_MODULES: List<AppModule> =
-    AppModule.entries.filter { it != AppModule.BASE && it != AppModule.ADMIN }
+    AppModule.entries.filter { it != AppModule.BASE && it != AppModule.ADMIN && it != AppModule.SECRETS }
 
 internal fun moduleTitleRes(module: AppModule): Int = when (module) {
     AppModule.BASE -> R.string.access_module_base
@@ -20,6 +20,7 @@ internal fun moduleTitleRes(module: AppModule): Int = when (module) {
     AppModule.SYSTEM -> R.string.access_module_system
     AppModule.INFRA_REPORTS -> R.string.access_module_infra_reports
     AppModule.ALERTS -> R.string.access_module_alerts
+    AppModule.SECRETS -> R.string.access_module_secrets
     AppModule.ADMIN -> R.string.access_module_admin
 }
 

@@ -217,6 +217,7 @@ loopback, DHCP, multicast, NTP и `tcp/443` к диапазонам GitHub дл�
   `https://grafana.home.example.com/`,
   `https://alarms.home.example.com/` (scheduler),
   `https://control.home.example.com/` (ha-control),
+  `https://secrets.home.example.com/` (secrets-gateway, owner-only API),
   `https://currency.home.example.com/` (currency-bot API, Bearer),
   `https://intercom.home.example.com/` (intercom signaling, Bearer;
   аварийный путь — NodePort `30097`),
@@ -261,7 +262,7 @@ cert-manager с ACME DNS-01 Cloudflare. Wildcard-сертификат
 `*.home.example.com` выпускается автоматически и продлевается cert-manager.
 
 - A-записи `ha`, `grafana`, `alarms`, `control`, `currency`, `intercom`,
-  `passwords`, `vault`, `nexus` → `192.0.2.27`, Cloudflare DNS only (не
+  `secrets`, `passwords`, `vault`, `nexus` → `192.0.2.27`, Cloudflare DNS only (не
   proxied), TTL auto; apex и прочие записи не меняются. Записи создаются
   вручную `projects/home/kubernetes/cloudflare_dns.py` (Flux их не трогает);
   `nexus` — Flux/README Nexus.

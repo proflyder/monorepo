@@ -12,7 +12,8 @@ Let's Encrypt. Прямые LAN-адреса и NodePort остаются ава
 
 Маршруты (`routes/routes.yaml`): `ha` → HAOS, `grafana`, `alarms` → scheduler,
 `currency` → currency-bot, `control` → ha-control (`/v1/system/` и
-`/v1/chat/` → mcp-gateway), `intercom`. `vault` обслуживает
+`/v1/chat/` → mcp-gateway), `secrets` → secrets-gateway (owner-only API
+секретов), `intercom`. `vault` обслуживает
 `openbao/deploy.sh`, `passwords` — `vaultwarden/`, `nexus` — `nexus/`.
 
 Применение и порядок — `../flux/README.md`; версии чартов — `../versions.sh`

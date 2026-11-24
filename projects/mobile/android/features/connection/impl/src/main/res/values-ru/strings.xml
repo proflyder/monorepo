@@ -45,6 +45,9 @@
     <string name="connection_notification_note">Уведомления напоминаний на телефоне в этой основе не реализованы.</string>
     <string name="connection_not_tested">Конфигурация загружена. Нажмите «Сохранить и проверить подключение», чтобы проверить сервер.</string>
     <string name="connection_remote_intercom_label">Адрес intercom (звонки)</string>
+    <string name="connection_remote_secrets_label">Адрес секретов</string>
+    <string name="connection_remote_not_set_secrets">Не задан (секреты выключены)</string>
+    <string name="connection_remote_invalid_secrets">В Remote Config неверный адрес секретов. Используйте полный URL http:// или https:// либо оставьте поле пустым.</string>
     <string name="connection_remote_not_set_calls">Не задан (звонки выключены)</string>
     <string name="connection_remote_invalid_intercom">В Remote Config неверный адрес intercom. Используйте полный URL http:// или https:// либо оставьте поле пустым.</string>
     <string name="connection_token_placeholder">Вставьте токен</string>

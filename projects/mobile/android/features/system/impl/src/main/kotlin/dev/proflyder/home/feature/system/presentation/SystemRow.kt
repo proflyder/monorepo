@@ -1,6 +1,7 @@
 package dev.proflyder.home.feature.system.presentation
 
 import dev.proflyder.home.core.model.HealthLevel
+import dev.proflyder.home.core.navigation.Route
 
 internal sealed interface SystemRow {
     val key: String
@@ -33,5 +34,6 @@ internal sealed interface SystemRow {
         override val key: String,
         val title: String,
         val subtitle: String,
+        val route: Route,
     ) : SystemRow
 }

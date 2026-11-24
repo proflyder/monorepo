@@ -9,6 +9,7 @@ import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.model.SystemSnapshot
 import dev.proflyder.home.core.navigation.Route
 import dev.proflyder.home.feature.system.SystemDetailDestination
+import dev.proflyder.home.feature.secrets.SecretsRoutes
 import dev.proflyder.home.feature.system.SystemFixtures
 import dev.proflyder.home.feature.system.SystemRepository
 import dev.proflyder.home.feature.system.SystemState
@@ -79,11 +80,15 @@ class SystemViewModelTest {
             AppAccess("Owner", AppModule.entries.toSet(), owner = true),
         )
         assertTrue(viewModel.state.value.administrator)
+        assertTrue(viewModel.state.value.secrets)
 
         viewModel.dispatch(SystemIntent.Refresh)
         viewModel.dispatch(SystemIntent.OpenSection(SystemSection.CLUSTER))
         assertEquals(1, repository.refreshes)
         assertEquals(SystemEvent.OpenRoute(Route.Screen(SystemDetailDestination(SystemSection.CLUSTER))), events.last())
+
+        viewModel.dispatch(SystemIntent.OpenLink(Route.Link(SecretsRoutes.CATALOG)))
+        assertEquals(SystemEvent.OpenRoute(Route.Link(SecretsRoutes.CATALOG)), events.last())
     }
 
     @Test

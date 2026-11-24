@@ -15,6 +15,9 @@ import dev.proflyder.home.core.model.SystemDevices
 import dev.proflyder.home.core.model.SystemHosts
 import dev.proflyder.home.core.model.SystemSnapshot
 import dev.proflyder.home.core.model.Usage
+import dev.proflyder.home.core.navigation.Route
+import dev.proflyder.home.feature.access.AccessRoutes
+import dev.proflyder.home.feature.secrets.SecretsRoutes
 import dev.proflyder.home.feature.system.impl.R
 import java.util.Date
 import kotlin.math.roundToInt
@@ -22,7 +25,11 @@ import kotlin.math.roundToInt
 internal class SystemRows(private val context: Context) {
     private val separator get() = context.getString(R.string.system_separator)
 
-    fun overview(snapshot: SystemSnapshot, administrator: Boolean = false): List<SystemRow> = buildList {
+    fun overview(
+        snapshot: SystemSnapshot,
+        administrator: Boolean = false,
+        secrets: Boolean = false,
+    ): List<SystemRow> = buildList {
         add(status(snapshot))
         addAll(alerts(snapshot))
         add(hostCard(snapshot.hosts))
@@ -30,12 +37,21 @@ internal class SystemRows(private val context: Context) {
         add(clusterCard(snapshot.cluster))
         add(devicesCard(snapshot.devices))
         if (administrator) add(accessCard())
+        if (secrets) add(secretsCard())
     }
 
     private fun accessCard(): SystemRow.Link = SystemRow.Link(
         key = "access",
         title = context.getString(R.string.system_card_access),
         subtitle = context.getString(R.string.system_card_access_subtitle),
+        route = Route.Link(AccessRoutes.TOKENS),
+    )
+
+    private fun secretsCard(): SystemRow.Link = SystemRow.Link(
+        key = "secrets",
+        title = context.getString(R.string.system_card_secrets),
+        subtitle = context.getString(R.string.system_card_secrets_subtitle),
+        route = Route.Link(SecretsRoutes.CATALOG),
     )
 
     fun detail(section: SystemSection, snapshot: SystemSnapshot): List<SystemRow> = when (section) {

@@ -139,6 +139,26 @@ class RemoteConnectionSourceTest {
     }
 
     @Test
+    fun secretsAddressIsOptionalAndParsed() {
+        val loaded = parseRemoteConnection(
+            TestFixtures.read("secrets_present.json"),
+        ) as RemoteConnectionState.Loaded
+        assertEquals("https://secrets.example.test", loaded.secretsEndpoint?.baseUrl())
+
+        val absent = parseRemoteConnection(TestFixtures.read("scheduler_only.json"))
+            as RemoteConnectionState.Loaded
+        assertNull(absent.secretsEndpoint)
+    }
+
+    @Test
+    fun invalidSecretsAddressIsReported() {
+        val state = parseRemoteConnection(
+            TestFixtures.read("secrets_not_url.json"),
+        )
+        assertEquals(Field.SECRETS_ENDPOINT, (state as RemoteConnectionState.Invalid).field)
+    }
+
+    @Test
     fun unknownKeysAreIgnored() {
         val loaded = parseRemoteConnection(
             """
@@ -157,8 +177,10 @@ class RemoteConnectionSourceTest {
     fun wrongFieldTypeReportsThatField() {
         val control = parseRemoteConnection(TestFixtures.read("control_not_string.json"))
         val intercom = parseRemoteConnection(TestFixtures.read("intercom_not_string.json"))
+        val secrets = parseRemoteConnection(TestFixtures.read("secrets_not_string.json"))
 
         assertEquals(Field.CONTROL_ENDPOINT, (control as RemoteConnectionState.Invalid).field)
         assertEquals(Field.INTERCOM_ENDPOINT, (intercom as RemoteConnectionState.Invalid).field)
+        assertEquals(Field.SECRETS_ENDPOINT, (secrets as RemoteConnectionState.Invalid).field)
     }
 }

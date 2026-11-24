@@ -45,6 +45,9 @@
     <string name="connection_notification_note">Phone-side reminder notifications are not implemented in this foundation.</string>
     <string name="connection_not_tested">Configuration loaded. Use “Save and test connection” to verify the server.</string>
     <string name="connection_remote_intercom_label">Intercom address (calls)</string>
+    <string name="connection_remote_secrets_label">Secrets address</string>
+    <string name="connection_remote_not_set_secrets">Not set (secrets disabled)</string>
+    <string name="connection_remote_invalid_secrets">Remote Config has an invalid secrets address. Use a full http:// or https:// URL, or leave it empty.</string>
     <string name="connection_remote_not_set_calls">Not set (calls disabled)</string>
     <string name="connection_remote_invalid_intercom">Remote Config has an invalid intercom address. Use a full http:// or https:// URL, or leave it empty.</string>
     <string name="connection_token_placeholder">Paste the token</string>

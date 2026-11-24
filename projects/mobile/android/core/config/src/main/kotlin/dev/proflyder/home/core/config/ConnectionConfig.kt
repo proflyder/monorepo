@@ -12,6 +12,7 @@ data class ConnectionConfig(
     val endpoint: ServerEndpoint? = null,
     val controlEndpoint: ServerEndpoint? = null,
     val intercomEndpoint: ServerEndpoint? = null,
+    val secretsEndpoint: ServerEndpoint? = null,
     val bearerToken: String? = null,
     val connectTimeoutMillis: Long = DEFAULT_CONNECT_TIMEOUT_MILLIS,
     val readTimeoutMillis: Long = DEFAULT_READ_TIMEOUT_MILLIS,
@@ -19,6 +20,8 @@ data class ConnectionConfig(
     val isConfigured: Boolean get() = endpoint != null
     val isIntercomConfigured: Boolean
         get() = intercomEndpoint != null && isTokenValid(bearerToken)
+    val isSecretsConfigured: Boolean
+        get() = secretsEndpoint != null && isTokenValid(bearerToken)
     val hasToken: Boolean get() = isTokenValid(bearerToken)
 
     fun validatedForStorage(): Outcome<ConnectionConfig> = validatedBy(STORAGE_RULES)
@@ -34,6 +37,7 @@ data class ConnectionConfig(
         "ConnectionConfig(endpoint=${endpoint?.baseUrl() ?: "<unset>"}, " +
             "controlEndpoint=${controlEndpoint?.baseUrl() ?: "<unset>"}, " +
             "intercomEndpoint=${intercomEndpoint?.baseUrl() ?: "<unset>"}, " +
+            "secretsEndpoint=${secretsEndpoint?.baseUrl() ?: "<unset>"}, " +
             "token=${if (hasToken) "<set>" else "<unset>"}, " +
             "connectTimeoutMillis=$connectTimeoutMillis, readTimeoutMillis=$readTimeoutMillis)"
 
