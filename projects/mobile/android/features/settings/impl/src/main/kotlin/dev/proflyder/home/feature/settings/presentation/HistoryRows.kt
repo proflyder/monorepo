@@ -1,6 +1,7 @@
 package dev.proflyder.home.feature.settings.presentation
 
 import dev.proflyder.home.core.model.NotificationHistory
+import dev.proflyder.home.core.navigation.Route
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -14,14 +15,20 @@ internal sealed interface HistoryRow {
         override val key: String get() = "day:$date"
     }
 
-    data class Item(val entry: NotificationHistory) : HistoryRow {
+    data class Item(val entry: NotificationHistory, val target: Route? = null) : HistoryRow {
         override val key: String get() = "entry:${entry.id}"
     }
 }
 
 internal object HistoryRows {
-    fun of(entries: List<NotificationHistory>, today: LocalDate, zone: ZoneId): List<HistoryRow> =
-        entries.groupBy { dateOf(it, zone) }.flatMap { (date, items) -> listOf(day(date, today)) + items.map(HistoryRow::Item) }
+    fun of(
+        entries: List<NotificationHistory>,
+        today: LocalDate,
+        zone: ZoneId,
+        targetOf: (NotificationHistory) -> Route? = { null },
+    ): List<HistoryRow> = entries
+        .groupBy { dateOf(it, zone) }
+        .flatMap { (date, items) -> listOf(day(date, today)) + items.map { HistoryRow.Item(it, targetOf(it)) } }
 
     private fun dateOf(entry: NotificationHistory, zone: ZoneId): LocalDate =
         Instant.ofEpochSecond(entry.createdUnix).atZone(zone).toLocalDate()

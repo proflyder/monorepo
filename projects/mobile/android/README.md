@@ -500,8 +500,9 @@ badges are selectors in `render`.
   with the same key.
 - Navigation is typed: a destination owns its route and `RouteCodec`, the
   router passes Parcelable `RouteArgs`, a ViewModel emits `OpenRoute`.
-  Deep links (push, notification history) go through `DeepLinkResolver` and
-  `FeatureEntry.parse`; only the app's own `home://` scheme is accepted.
+  Deep links (push, notification history) go through `NotificationTargets`,
+  `DeepLinkResolver` and `FeatureEntry.parse`; only the app's own `home://`
+  scheme is accepted.
 - `MainActivity` has no feature knowledge: it renders `AppChromeState` and
   attaches `Set<ToolbarContribution>`, `Set<ToolbarAction>`,
   `Set<DeepLinkSource>`. Home quick-action tiles of other features come from
@@ -701,3 +702,16 @@ unread (`NotificationHistoryEntry.read`); tapping an entry or "Mark all read"
 marks it read, and the bell badge shows the unread count (capped at `99+`).
 Entries saved before read state existed decode as read, so an upgrade does not
 light the badge with old history.
+
+The history row and the system notification share `NotificationTargets`
+(`core/navigation`): the stored `deepLink` is normalized (`home://` optional)
+and resolved through `FeatureRegistry`. `chat/message/<id>` opens Chat with
+that message focused, `alarms`/`timers`/`reminders` and `time/<section>` select
+the Time tab on that section, and `secrets`/`secrets/path/<path>` open System →
+Secrets; the gateway writes the audited path into the deep link. The target is
+resolved against `AppAccessState` at render and at tap time (secrets need the
+owner and the `secrets` module, every other target its `FeatureEntry.module`),
+so a row whose module the token lacks has no chevron and is not clickable.
+`settings/impl`'s rows show the chevron only when a gated target exists.
+Sync pushes carry no notification, and the Access screen (`notificationLink =
+false`) has no target, so both never open from the history.

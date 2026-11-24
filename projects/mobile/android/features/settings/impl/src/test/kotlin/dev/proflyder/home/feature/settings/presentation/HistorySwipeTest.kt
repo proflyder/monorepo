@@ -9,6 +9,7 @@ import androidx.appcompat.view.ContextThemeWrapper
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.google.android.material.color.MaterialColors
+import dev.proflyder.home.core.access.AppAccessState
 import dev.proflyder.home.core.data.Page
 import dev.proflyder.home.core.data.PageRequest
 import dev.proflyder.home.core.data.PagedList
@@ -16,9 +17,12 @@ import dev.proflyder.home.core.data.PagedSource
 import dev.proflyder.home.core.data.PagingAction
 import dev.proflyder.home.core.data.RefreshMode
 import dev.proflyder.home.core.data.ListEdit
+import dev.proflyder.home.core.model.AppAccess
+import dev.proflyder.home.core.model.AppModule
 import dev.proflyder.home.core.model.NotificationHistory
 import dev.proflyder.home.core.model.NotificationHistoryType
 import dev.proflyder.home.core.model.Outcome
+import dev.proflyder.home.core.navigation.Route
 import dev.proflyder.home.core.presentation.ListItemIntent
 import dev.proflyder.home.core.testing.FakeClock
 import dev.proflyder.home.core.ui.BaseAdapterCallback
@@ -40,6 +44,9 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.After
 import org.junit.Before
 import org.junit.Assert.assertEquals
@@ -76,7 +83,7 @@ class HistorySwipeTest {
     @Test
     fun deletingKeepsTheEntryForUndoAndUndoPutsItBack() {
         val repository = FakeRepository(entries)
-        val model = NotificationHistoryViewModel(repository, FakeClock(now), CoroutineScope(Dispatchers.Main))
+        val model = model(repository)
         idle()
         assertEquals(listOf("a", "b", "c"), model.state.value.pages.items.map { it.key })
 
@@ -94,7 +101,7 @@ class HistorySwipeTest {
     @Test
     fun swipingRightTogglesReadBothWays() {
         val repository = FakeRepository(entries)
-        val model = NotificationHistoryViewModel(repository, FakeClock(now), CoroutineScope(Dispatchers.Main))
+        val model = model(repository)
         idle()
 
         model.dispatch(HistoryIntent.ToggleRead("a"))
@@ -108,7 +115,7 @@ class HistorySwipeTest {
     @Test
     fun readingAllMarksEveryEntry() {
         val repository = FakeRepository(entries)
-        val model = NotificationHistoryViewModel(repository, FakeClock(now), CoroutineScope(Dispatchers.Main))
+        val model = model(repository)
         idle()
 
         model.dispatch(HistoryIntent.ReadAll)
@@ -117,6 +124,67 @@ class HistorySwipeTest {
         assertTrue(repository.paged.state.value.items.all { it.read })
         assertTrue(!model.state.value.hasUnread)
         assertTrue(model.state.value.rows.isNotEmpty())
+    }
+
+    @Test
+    fun anEntryWithATargetOpensItsRouteAndMarksItRead() {
+        val entry = entry("a", now, read = false, deepLink = "home://time/timers")
+        val repository = FakeRepository(listOf(entry))
+        val model = model(repository, FakeAccessSource(accessState(AppModule.ALARMS_TIMERS)))
+        idle()
+
+        model.dispatch(HistoryIntent.Open(entry))
+        idle()
+        val event = nextEvent(model)
+
+        assertEquals(HistoryEvent.OpenRoute(Route.Tab("timers")), event)
+        assertEquals(true, repository.paged.state.value.item("a")?.read)
+    }
+
+    @Test
+    fun anEntryWithoutATargetIsNeitherOpenedNorMarkedRead() {
+        val entry = entry("a", now, read = false)
+        val repository = FakeRepository(listOf(entry))
+        val model = model(repository)
+        idle()
+
+        model.dispatch(HistoryIntent.Open(entry))
+        idle()
+        val event = nextEvent(model)
+
+        assertNull(event)
+        assertEquals(false, repository.paged.state.value.item("a")?.read)
+        assertNull(model.state.value.rows.filterIsInstance<HistoryRow.Item>().single().target)
+    }
+
+    @Test
+    fun aTargetOfAModuleTheTokenLacksHasNoRoute() {
+        val entry = entry("a", now, read = false, deepLink = "home://chat/message/m_1")
+        val repository = FakeRepository(listOf(entry))
+        val model = model(repository, FakeAccessSource(accessState(AppModule.ALARMS_TIMERS)))
+        idle()
+
+        model.dispatch(HistoryIntent.Open(entry))
+        idle()
+        val event = nextEvent(model)
+
+        assertNull(event)
+        assertEquals(false, repository.paged.state.value.item("a")?.read)
+        assertNull(model.state.value.rows.filterIsInstance<HistoryRow.Item>().single().target)
+    }
+
+    @Test
+    fun accessChangesRerenderTheRowTargets() {
+        val entry = entry("a", now, read = false, deepLink = "home://chat/message/m_1")
+        val access = FakeAccessSource(accessState())
+        val model = model(FakeRepository(listOf(entry)), access)
+        idle()
+        assertNull(model.state.value.rows.filterIsInstance<HistoryRow.Item>().single().target)
+
+        access.state.value = accessState(AppModule.CHAT)
+        idle()
+
+        assertEquals(Route.Link("chat/message/m_1"), model.state.value.rows.filterIsInstance<HistoryRow.Item>().single().target)
     }
 
     @Test
@@ -213,6 +281,18 @@ class HistorySwipeTest {
         return binding
     }
 
+    private fun model(
+        repository: NotificationHistoryRepository,
+        access: FakeAccessSource = FakeAccessSource(),
+    ): NotificationHistoryViewModel =
+        NotificationHistoryViewModel(repository, testTargets(), access, FakeClock(now), CoroutineScope(Dispatchers.Main))
+
+    private fun nextEvent(model: NotificationHistoryViewModel): HistoryEvent? =
+        runBlocking { withTimeoutOrNull(EVENT_TIMEOUT_MS) { model.events.first() } }
+
+    private fun accessState(vararg modules: AppModule): AppAccessState =
+        AppAccessState.Ready(AppAccess(name = "test", modules = modules.toSet(), owner = false))
+
     private class FakeRepository(initial: List<NotificationHistory>) : NotificationHistoryRepository {
         private var all = initial
         private val scope = CoroutineScope(Dispatchers.Main)
@@ -260,11 +340,12 @@ class HistorySwipeTest {
 
     private class NoopCallback : BaseAdapterCallback<HistoryRow>(), NotificationHistoryAdapterCallback
 
-    private fun entry(id: String, at: Long, read: Boolean) = NotificationHistory(
+    private fun entry(id: String, at: Long, read: Boolean, deepLink: String? = null) = NotificationHistory(
         id = id,
         type = NotificationHistoryType.NOTIFY,
         title = "Дверь открыта $id",
         body = "Кто-то у двери",
+        deepLink = deepLink,
         createdUnix = at / MILLIS_PER_SECOND,
         read = read,
     )
@@ -296,5 +377,6 @@ class HistorySwipeTest {
         const val HEIGHT_DP = 891
         const val SWIPE_PX = 360f
         const val PNG_QUALITY = 100
+        const val EVENT_TIMEOUT_MS = 50L
     }
 }

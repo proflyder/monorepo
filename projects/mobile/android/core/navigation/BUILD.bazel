@@ -10,6 +10,7 @@ kt_android_library(
     manifest = "src/main/AndroidManifest.xml",
     deps = [
         "//packages/kotlin/core",
+        "//projects/mobile/android/core/access",
         "//projects/mobile/android/core/model",
         "@maven//:androidx_appcompat_appcompat",
         "@maven//:androidx_core_core_ktx",
@@ -28,9 +29,12 @@ home_android_local_test(
     manifest = "src/test/AndroidManifest.xml",
     test_classes = [
         "dev.proflyder.home.core.navigation.FragmentRouterTest",
+        "dev.proflyder.home.core.navigation.NotificationTargetsTest",
     ],
     deps = [
         ":navigation",
+        "//projects/mobile/android/core/access",
+        "//projects/mobile/android/core/model",
         "//projects/mobile/android/core/testing",
         "@maven//:androidx_fragment_fragment_ktx",
         "@maven//:junit_junit",

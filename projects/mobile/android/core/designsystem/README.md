@@ -23,6 +23,7 @@ the colour roles.
 | Stroke `ds_stroke_*` | thin 1, thick 2 dp |
 | Typography | Material 3 roles through the theme (`?attr/textAppearanceTitleMedium`, `…BodyLarge`, `…LabelLarge`, …) plus `TextAppearance.Home.{Time,Countdown,ToolbarTitle,Pill,PillTab,ChatMeta,PopupMenuItem}` |
 | Popup `homePopup*` | surface `colorSurfaceContainerHighest` (lighter than card surfaces in dark themes, darker in light), stroke `colorPrimary` at 50% alpha, stroke width 1 dp, radius `ds_radius_xl` 28 dp, elevation `ds_popup_elevation` 8 dp; item text `colorOnSurface`, item icons `colorPrimary`, pressed/hover ripple `colorPrimary` at 20%/8% |
+| Row ripple `homeRowItemRippleColor` | `colorPrimary` at 20% pressed, 8% hovered; `GroupedRowRipple` clips it to the row's card corners |
 | Motion | `HomeMotion` (enter/exit/selection durations and easings from the theme) |
 
 ## Components
@@ -148,3 +149,9 @@ the new theme automatically.
   `ds_bg_popup_menu` paints the inset card from `homePopupSurface` with a 1dp
   `homePopupStroke`; `PopupStylesTest` checks both tokens in every theme, dark
   and light.
+- `GroupedRowRipple` (`list`) binds the design-system row ripple to a row inside
+  `GroupCards`: a `RippleDrawable` whose colour is `homeRowItemRippleColor` and
+  whose `MaterialShapeDrawable` mask takes the row's `GroupSlot` top or bottom
+  radius, so the pressed state never paints square corners over a rounded first
+  or last row. A row without a target clears the foreground and is not
+  clickable.

@@ -96,7 +96,7 @@ data class PushDeepLink(val route: String) {
             if (!value.startsWith("$SCHEME://")) return null
             val route = value.removePrefix("$SCHEME://").trim('/')
             if (route.isBlank() || route.length > MAX_ROUTE_CHARS) return null
-            if (!route.all { it.isLetterOrDigit() || it in "/-_.?=&" }) return null
+            if (!route.all { it.isLetterOrDigit() || it in "/-_.?=&%+@" }) return null
             return PushDeepLink(route)
         }
 

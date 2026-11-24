@@ -6,9 +6,11 @@ import android.view.LayoutInflater
 import android.view.View
 import androidx.appcompat.view.ContextThemeWrapper
 import androidx.recyclerview.widget.LinearLayoutManager
+import dev.proflyder.home.core.access.AppAccessState
 import dev.proflyder.home.core.ui.BaseAdapterCallback
 import dev.proflyder.home.core.model.NotificationHistory
 import dev.proflyder.home.core.model.NotificationHistoryType
+import dev.proflyder.home.core.navigation.routeWhenAllowed
 import dev.proflyder.home.feature.settings.impl.R
 import dev.proflyder.home.feature.settings.impl.databinding.FragmentNotificationHistoryBinding
 import dev.proflyder.home.feature.settings.impl.databinding.SettingsToolbarBellBinding
@@ -80,8 +82,12 @@ class SettingsScreensScreenshotTest {
         assertEquals(listOf("day", "entry", "entry", "day", "entry", "day", "entry"), rows.map { it.key.substringBefore(':') })
     }
 
+    private val targets = testTargets()
+
     private fun rows(entries: List<NotificationHistory>): List<HistoryRow> =
-        HistoryRows.of(entries, LocalDate.now(), ZoneId.systemDefault())
+        HistoryRows.of(entries, LocalDate.now(), ZoneId.systemDefault()) { entry ->
+            targets.of(entry.deepLink)?.routeWhenAllowed(AppAccessState.Unknown)
+        }
 
     @Test
     fun theEmptyHistoryExplainsWhatWillAppear() {

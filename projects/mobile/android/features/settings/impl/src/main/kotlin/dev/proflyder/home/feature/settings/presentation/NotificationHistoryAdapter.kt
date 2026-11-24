@@ -4,19 +4,23 @@ import android.graphics.Typeface
 import android.view.LayoutInflater
 import android.view.ViewGroup
 import androidx.core.view.ViewCompat
+import dev.proflyder.home.core.designsystem.list.GroupSlot
+import dev.proflyder.home.core.designsystem.list.GroupedRowRipple
 import dev.proflyder.home.core.designsystem.list.SectionedAdapter
+import dev.proflyder.home.core.designsystem.list.slotOf
+import dev.proflyder.home.core.model.NotificationHistoryType
 import dev.proflyder.home.core.presentation.KeyedDiff
 import dev.proflyder.home.core.ui.AdapterCallback
 import dev.proflyder.home.core.ui.BaseListAdapter
 import dev.proflyder.home.core.ui.BaseViewHolder
 import dev.proflyder.home.core.ui.ViewBinding
 import dev.proflyder.home.core.ui.setVisible
-import dev.proflyder.home.core.model.NotificationHistoryType
 import dev.proflyder.home.feature.settings.impl.R
 import dev.proflyder.home.feature.settings.impl.databinding.ItemHistoryDayBinding
 import dev.proflyder.home.feature.settings.impl.databinding.ItemNotificationHistoryBinding
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
+import dev.proflyder.home.core.designsystem.R as DesignR
 
 internal interface NotificationHistoryAdapterCallback : AdapterCallback<HistoryRow>
 
@@ -34,8 +38,10 @@ internal class NotificationHistoryAdapter(
         if (viewType == DAY) {
             DayHolder(ItemHistoryDayBinding.inflate(inflater, parent, false), callback)
         } else {
-            EntryHolder(ItemNotificationHistoryBinding.inflate(inflater, parent, false), callback)
+            EntryHolder(ItemNotificationHistoryBinding.inflate(inflater, parent, false), callback, ::slotAt)
         }
+
+    private fun slotAt(position: Int): GroupSlot? = slotOf(position, itemCount)
 
     private class DayHolder(
         private val views: ItemHistoryDayBinding,
@@ -58,21 +64,32 @@ internal class NotificationHistoryAdapter(
     private class EntryHolder(
         private val views: ItemNotificationHistoryBinding,
         callback: NotificationHistoryAdapterCallback,
+        private val slotAt: (Int) -> GroupSlot?,
     ) : HistoryHolder(views, callback) {
-        init {
-            forwardRowClicks()
-        }
+        private val ripple = GroupedRowRipple(
+            views.root,
+            views.root.resources.getDimension(DesignR.dimen.ds_radius_l),
+        )
 
         override fun bind(item: HistoryRow) {
-            val entry = (item as? HistoryRow.Item)?.entry ?: return
+            val row = item as? HistoryRow.Item ?: return
+            val entry = row.entry
+            val open = row.target != null
             views.historyItemTitle.text = entry.title.ifBlank { views.root.context.getString(fallbackTitle(entry.type)) }
             views.historyItemBody.text = entry.body
             views.historyItemTime.text = HistoryFormat.relative(entry.createdUnix * MILLIS_PER_SECOND)
             views.historyItemIcon.setImageResource(icon(entry.type))
             views.historyItemIcon.contentDescription = views.root.context.getString(label(entry.type))
-            views.historyItemChevron.setVisible(entry.deepLink != null)
+            views.historyItemChevron.setVisible(open)
             views.historyItemUnread.setVisible(!entry.read)
             views.historyItemTitle.setTypeface(null, if (entry.read) Typeface.NORMAL else Typeface.BOLD)
+            if (open) forwardRowClicks() else clearClicks()
+            ripple.bind(slotAt(bindingAdapterPosition), open)
+        }
+
+        private fun clearClicks() {
+            views.root.setOnClickListener(null)
+            views.root.setOnLongClickListener(null)
         }
     }
 
