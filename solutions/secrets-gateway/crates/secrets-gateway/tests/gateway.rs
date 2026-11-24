@@ -23,6 +23,7 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use tower::ServiceExt;
 
 const OWNER_TOKEN: &str = "owner-token";
+const SECOND_OWNER_TOKEN: &str = "second-owner-token";
 const MEMBER_TOKEN: &str = "member-token";
 const SERVICE_TOKEN: &str = "service-token";
 const TOTP_SECRET: &str = "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP";
@@ -517,6 +518,17 @@ async fn harness() -> Harness {
                     .collect(),
             },
             TokenRecord {
+                id: "second-owner".to_owned(),
+                name: "second-owner".to_owned(),
+                sha256: sha256_hex(SECOND_OWNER_TOKEN),
+                owner: true,
+                modules: Modules::owner()
+                    .ids()
+                    .into_iter()
+                    .map(str::to_owned)
+                    .collect(),
+            },
+            TokenRecord {
                 id: "member".to_owned(),
                 name: "member".to_owned(),
                 sha256: sha256_hex(MEMBER_TOKEN),
@@ -822,6 +834,34 @@ async fn a_step_up_session_expires_after_five_minutes() {
         "/v1/secrets/reveal/k8s/test",
         Some(OWNER_TOKEN),
         &[(STEP_UP_SESSION_HEADER, &session)],
+        Some(json!({"key": "password", "version": 2})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(body["error"], "step_up_required");
+}
+
+#[tokio::test]
+async fn a_step_up_session_is_bound_to_the_token_that_started_it() {
+    let harness = harness().await;
+    let owner_session = session(&harness).await;
+    let (status, _, _) = call(
+        &harness.app,
+        Method::POST,
+        "/v1/secrets/reveal/k8s/test",
+        Some(OWNER_TOKEN),
+        &[(STEP_UP_SESSION_HEADER, &owner_session)],
+        Some(json!({"key": "password", "version": 2})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let other_session = session(&harness).await;
+    let (status, _, body) = call(
+        &harness.app,
+        Method::POST,
+        "/v1/secrets/reveal/k8s/test",
+        Some(SECOND_OWNER_TOKEN),
+        &[(STEP_UP_SESSION_HEADER, &other_session)],
         Some(json!({"key": "password", "version": 2})),
     )
     .await;
