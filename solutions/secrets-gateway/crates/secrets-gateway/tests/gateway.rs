@@ -9,7 +9,7 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{any, get, post};
 use axum::{Json, Router};
 use base64::Engine as _;
-use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use base64::engine::general_purpose::{STANDARD, STANDARD_NO_PAD, URL_SAFE, URL_SAFE_NO_PAD};
 use home_app_auth::{AccessClient, AccessSnapshot, Modules, TokenRecord, sha256_hex};
 use home_secret::Token;
 use p256::ecdsa::SigningKey;
@@ -19,7 +19,7 @@ use p256::pkcs8::EncodePublicKey as _;
 use secrets_gateway::api::{
     self, GatewayState, STEP_UP_CHALLENGE_HEADER, STEP_UP_SESSION_HEADER, STEP_UP_SIGNATURE_HEADER,
 };
-use secrets_gateway::attestation::Roots;
+use secrets_gateway::attestation::{Attestation, Error as AttestationError, Roots};
 use secrets_gateway::audit::{Auditor, PushClient};
 use secrets_gateway::catalog::Catalog;
 use secrets_gateway::deny::Deny;
@@ -51,6 +51,17 @@ const ATTESTATION_LEAF_LEVEL_NINE: &str = include_str!("fixtures/attestation/lea
 const ATTESTATION_LEAF_EXPIRED: &str = include_str!("fixtures/attestation/leaf-expired.pem");
 const ATTESTATION_INTERMEDIATE_NO_CA: &str = include_str!("fixtures/attestation/inter-no-ca.pem");
 const ATTESTATION_LEAF_NO_CA: &str = include_str!("fixtures/attestation/leaf-no-ca.pem");
+const LONG_ROOT: &str = include_str!("fixtures/attestation/long-root.pem");
+const LONG_INTERMEDIATE_ONE: &str = include_str!("fixtures/attestation/long-inter-1.pem");
+const LONG_INTERMEDIATE_TWO: &str = include_str!("fixtures/attestation/long-inter-2.pem");
+const LONG_INTERMEDIATE_TWO_EXPIRED: &str =
+    include_str!("fixtures/attestation/long-inter-2-expired.pem");
+const LONG_INTERMEDIATE_THREE: &str = include_str!("fixtures/attestation/long-inter-3.pem");
+const LONG_INTERMEDIATE_FOUR: &str = include_str!("fixtures/attestation/long-inter-4.pem");
+const LONG_LEAF: &str = include_str!("fixtures/attestation/long-leaf.pem");
+const STALE_ROOT: &str = include_str!("fixtures/attestation/stale-root.pem");
+const STALE_INTERMEDIATE: &str = include_str!("fixtures/attestation/stale-inter.pem");
+const STALE_LEAF: &str = include_str!("fixtures/attestation/stale-leaf.pem");
 const LEAF_ONE_KEY: &[u8] = include_bytes!("fixtures/attestation/leaf1-key.der");
 const LEAF_TWO_KEY: &[u8] = include_bytes!("fixtures/attestation/leaf2-key.der");
 const POLICY: &str =
@@ -766,13 +777,27 @@ fn attestation_chain(leaf: &str) -> Vec<String> {
 }
 
 fn certificate_der(pem: &str) -> String {
+    encoded(&certificate_bytes(pem))
+}
+
+fn certificate_bytes(pem: &str) -> Vec<u8> {
     let (_, parsed) =
         x509_parser::pem::parse_x509_pem(pem.as_bytes()).expect("fixture certificate");
-    encoded(&parsed.contents)
+    parsed.contents
+}
+
+fn leaf_public_key(pem: &str) -> Vec<u8> {
+    let der = certificate_bytes(pem);
+    let (_, certificate) = x509_parser::parse_x509_certificate(&der).expect("fixture certificate");
+    certificate.public_key().raw.to_vec()
 }
 
 fn test_roots() -> Roots {
     Roots::parse_pems(&[ATTESTATION_ROOT]).expect("fixture roots")
+}
+
+fn long_roots() -> Roots {
+    Roots::parse_pems(&[LONG_ROOT]).expect("fixture roots")
 }
 
 fn encoded(bytes: &[u8]) -> String {
@@ -882,33 +907,39 @@ async fn session(harness: &Harness) -> String {
 
 #[test]
 fn the_fixture_attestation_chain_verifies() {
-    let key = signing_key();
-    let der = URL_SAFE_NO_PAD
-        .decode(public_key(&key))
-        .expect("public key DER");
-    let chain = attestation_chain(ATTESTATION_LEAF_ONE);
-    let result = secrets_gateway::attestation::verify(
-        &chain,
-        ATTESTATION_CHALLENGE,
-        &der,
+    let result = verify_pem_chain(
+        &[
+            ATTESTATION_LEAF_ONE,
+            ATTESTATION_INTERMEDIATE,
+            ATTESTATION_ROOT,
+        ],
         &test_roots(),
         unix_now(),
     );
     assert!(result.is_ok(), "{result:?}");
 }
 
-fn verify_fixture(
-    leaf: &str,
+fn verify_pem_chain(
+    pems: &[&str],
+    roots: &Roots,
     now: u64,
-) -> Result<secrets_gateway::attestation::Attestation, secrets_gateway::attestation::Error> {
-    let key = signing_key();
-    let der = URL_SAFE_NO_PAD
-        .decode(public_key(&key))
-        .expect("public key DER");
+) -> Result<Attestation, AttestationError> {
+    let leaf = pems.first().expect("chain has a leaf");
     secrets_gateway::attestation::verify(
-        &attestation_chain(leaf),
+        &pems
+            .iter()
+            .map(|pem| certificate_der(pem))
+            .collect::<Vec<_>>(),
         ATTESTATION_CHALLENGE,
-        &der,
+        &leaf_public_key(leaf),
+        roots,
+        now,
+    )
+}
+
+fn verify_fixture(leaf: &str, now: u64) -> Result<Attestation, AttestationError> {
+    verify_pem_chain(
+        &[leaf, ATTESTATION_INTERMEDIATE, ATTESTATION_ROOT],
         &test_roots(),
         now,
     )
@@ -917,71 +948,255 @@ fn verify_fixture(
 #[test]
 fn the_negative_attestation_fixtures_are_rejected() {
     let now = unix_now();
-    assert!(verify_fixture(ATTESTATION_LEAF_SOFTWARE, now).is_err());
-    assert!(verify_fixture(ATTESTATION_LEAF_UNVERIFIED, now).is_err());
-    assert!(verify_fixture(ATTESTATION_LEAF_UNLOCKED, now).is_err());
+    assert_eq!(
+        verify_fixture(ATTESTATION_LEAF_SOFTWARE, now),
+        Err(AttestationError::SecurityLevel)
+    );
+    assert_eq!(
+        verify_fixture(ATTESTATION_LEAF_UNVERIFIED, now),
+        Err(AttestationError::VerifiedBoot)
+    );
+    assert_eq!(
+        verify_fixture(ATTESTATION_LEAF_UNLOCKED, now),
+        Err(AttestationError::VerifiedBoot)
+    );
     assert!(verify_fixture(ATTESTATION_LEAF_NO_TRUST, now).is_err());
     assert!(verify_fixture(ATTESTATION_LEAF_MALFORMED, now).is_err());
-    assert!(verify_fixture(ATTESTATION_LEAF_LEVEL_NINE, now).is_err());
-    assert!(verify_fixture(ATTESTATION_LEAF_EXPIRED, now).is_err());
-    assert!(verify_fixture(ATTESTATION_LEAF_ONE, 0).is_err());
-
-    let no_ca = [
-        ATTESTATION_LEAF_NO_CA,
-        ATTESTATION_INTERMEDIATE_NO_CA,
-        ATTESTATION_ROOT,
-    ]
-    .into_iter()
-    .map(certificate_der)
-    .collect::<Vec<_>>();
-    let key = signing_key();
-    let der = URL_SAFE_NO_PAD
-        .decode(public_key(&key))
-        .expect("public key DER");
-    assert!(
-        secrets_gateway::attestation::verify(
-            &no_ca,
-            ATTESTATION_CHALLENGE,
-            &der,
-            &test_roots(),
-            now,
-        )
-        .is_err()
+    assert_eq!(
+        verify_fixture(ATTESTATION_LEAF_LEVEL_NINE, now),
+        Err(AttestationError::SecurityLevel)
     );
+    assert!(matches!(
+        verify_fixture(ATTESTATION_LEAF_EXPIRED, now),
+        Err(AttestationError::Expired { index: 0, .. })
+    ));
+    assert!(matches!(
+        verify_fixture(ATTESTATION_LEAF_ONE, 0),
+        Err(AttestationError::Expired { index: 0, .. })
+    ));
+}
 
+#[test]
+fn an_out_of_range_verification_time_is_reported() {
+    let result = verify_pem_chain(
+        &[
+            ATTESTATION_LEAF_ONE,
+            ATTESTATION_INTERMEDIATE,
+            ATTESTATION_ROOT,
+        ],
+        &test_roots(),
+        u64::MAX,
+    );
+    assert_eq!(result, Err(AttestationError::Clock));
+}
+
+#[test]
+fn a_chain_that_is_not_signed_upward_is_a_link_error() {
+    let result = verify_pem_chain(
+        &[ATTESTATION_LEAF_ONE, LONG_INTERMEDIATE_FOUR, LONG_ROOT],
+        &test_roots(),
+        unix_now(),
+    );
+    assert_eq!(result, Err(AttestationError::Link(0, 1)));
+}
+
+#[test]
+fn an_unparseable_certificate_reports_its_index() {
+    let chain = [
+        certificate_der(ATTESTATION_LEAF_ONE),
+        STANDARD_NO_PAD.encode(b"not a certificate"),
+        certificate_der(ATTESTATION_ROOT),
+    ];
+    let result = secrets_gateway::attestation::verify(
+        &chain,
+        ATTESTATION_CHALLENGE,
+        &leaf_public_key(ATTESTATION_LEAF_ONE),
+        &test_roots(),
+        unix_now(),
+    );
+    assert_eq!(result, Err(AttestationError::Parse(1)));
+}
+
+#[test]
+fn an_undecodable_certificate_is_an_encoding_error() {
+    let chain = [
+        certificate_der(ATTESTATION_LEAF_ONE),
+        String::from("!!!"),
+        certificate_der(ATTESTATION_ROOT),
+    ];
+    let result = secrets_gateway::attestation::verify(
+        &chain,
+        ATTESTATION_CHALLENGE,
+        &leaf_public_key(ATTESTATION_LEAF_ONE),
+        &test_roots(),
+        unix_now(),
+    );
+    assert_eq!(result, Err(AttestationError::Encoding));
+}
+
+#[test]
+fn a_chain_outside_the_length_window_reports_its_size() {
+    let leaf = leaf_public_key(ATTESTATION_LEAF_ONE);
     let mut too_long = attestation_chain(ATTESTATION_LEAF_ONE);
-    too_long.push(certificate_der(ATTESTATION_ROOT));
-    too_long.push(certificate_der(ATTESTATION_ROOT));
-    assert!(
+    too_long.extend(std::iter::repeat_n(certificate_der(ATTESTATION_ROOT), 6));
+    assert_eq!(
         secrets_gateway::attestation::verify(
             &too_long,
             ATTESTATION_CHALLENGE,
-            &der,
+            &leaf,
             &test_roots(),
-            now,
-        )
-        .is_err()
+            unix_now(),
+        ),
+        Err(AttestationError::Length(9))
+    );
+    assert_eq!(
+        secrets_gateway::attestation::verify(
+            &[certificate_der(ATTESTATION_LEAF_ONE)],
+            ATTESTATION_CHALLENGE,
+            &leaf,
+            &test_roots(),
+            unix_now(),
+        ),
+        Err(AttestationError::Length(1))
     );
 }
 
 #[test]
+fn a_chain_to_an_unpinned_top_is_an_anchor_error() {
+    let result = verify_pem_chain(
+        &[
+            LONG_LEAF,
+            LONG_INTERMEDIATE_FOUR,
+            LONG_INTERMEDIATE_THREE,
+            LONG_INTERMEDIATE_TWO,
+            LONG_INTERMEDIATE_ONE,
+        ],
+        &test_roots(),
+        unix_now(),
+    );
+    assert_eq!(result, Err(AttestationError::Anchor));
+}
+
+#[test]
+fn a_non_ca_certificate_reports_its_index() {
+    let result = verify_pem_chain(
+        &[
+            ATTESTATION_LEAF_NO_CA,
+            ATTESTATION_INTERMEDIATE_NO_CA,
+            ATTESTATION_ROOT,
+        ],
+        &test_roots(),
+        unix_now(),
+    );
+    assert_eq!(result, Err(AttestationError::Authority(1)));
+}
+
+#[test]
 fn the_fixture_chain_is_rejected_by_an_untrusted_root() {
-    let key = signing_key();
-    let der = URL_SAFE_NO_PAD
-        .decode(public_key(&key))
-        .expect("public key DER");
-    let chain = attestation_chain(ATTESTATION_LEAF_ONE);
     let roots = Roots::parse_pems(&[ATTESTATION_INTERMEDIATE]).expect("roots");
+    let result = verify_pem_chain(
+        &[
+            ATTESTATION_LEAF_ONE,
+            ATTESTATION_INTERMEDIATE,
+            ATTESTATION_ROOT,
+        ],
+        &roots,
+        unix_now(),
+    );
+    assert_eq!(result, Err(AttestationError::Anchor));
+}
+
+#[test]
+fn five_certificate_chains_reach_a_pinned_root_key() {
+    let result = verify_pem_chain(
+        &[
+            LONG_LEAF,
+            LONG_INTERMEDIATE_FOUR,
+            LONG_INTERMEDIATE_THREE,
+            LONG_INTERMEDIATE_TWO,
+            LONG_INTERMEDIATE_ONE,
+        ],
+        &long_roots(),
+        unix_now(),
+    );
+    assert!(result.is_ok(), "{result:?}");
+}
+
+#[test]
+fn six_certificate_chains_include_a_pinned_root() {
+    let result = verify_pem_chain(
+        &[
+            LONG_LEAF,
+            LONG_INTERMEDIATE_FOUR,
+            LONG_INTERMEDIATE_THREE,
+            LONG_INTERMEDIATE_TWO,
+            LONG_INTERMEDIATE_ONE,
+            LONG_ROOT,
+        ],
+        &long_roots(),
+        unix_now(),
+    );
+    assert!(result.is_ok(), "{result:?}");
+}
+
+#[test]
+fn an_expired_pinned_root_still_anchors_a_chain() {
+    let roots = Roots::parse_pems(&[STALE_ROOT]).expect("fixture roots");
+    let result = verify_pem_chain(
+        &[STALE_LEAF, STALE_INTERMEDIATE, STALE_ROOT],
+        &roots,
+        unix_now(),
+    );
+    assert!(result.is_ok(), "{result:?}");
+}
+
+#[test]
+fn an_expired_intermediate_is_rejected() {
+    let result = verify_pem_chain(
+        &[
+            LONG_LEAF,
+            LONG_INTERMEDIATE_FOUR,
+            LONG_INTERMEDIATE_THREE,
+            LONG_INTERMEDIATE_TWO_EXPIRED,
+            LONG_INTERMEDIATE_ONE,
+            LONG_ROOT,
+        ],
+        &long_roots(),
+        unix_now(),
+    );
     assert!(
-        secrets_gateway::attestation::verify(
+        matches!(result, Err(AttestationError::Expired { index: 3, .. })),
+        "{result:?}"
+    );
+}
+
+#[test]
+fn padded_standard_and_url_safe_base64_are_accepted() {
+    let pems = [
+        ATTESTATION_LEAF_ONE,
+        ATTESTATION_INTERMEDIATE,
+        ATTESTATION_ROOT,
+    ];
+    let leaf = leaf_public_key(ATTESTATION_LEAF_ONE);
+    let encoders: [fn(&[u8]) -> String; 2] = [
+        |bytes| STANDARD.encode(bytes),
+        |bytes| URL_SAFE.encode(bytes),
+    ];
+    for encoder in encoders {
+        let chain = pems
+            .iter()
+            .map(|pem| encoder(&certificate_bytes(pem)))
+            .collect::<Vec<_>>();
+        assert!(chain.iter().any(|item| item.ends_with('=')));
+        let result = secrets_gateway::attestation::verify(
             &chain,
             ATTESTATION_CHALLENGE,
-            &der,
-            &roots,
+            &leaf,
+            &test_roots(),
             unix_now(),
-        )
-        .is_err()
-    );
+        );
+        assert!(result.is_ok(), "{result:?}");
+    }
 }
 
 #[test]

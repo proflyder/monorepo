@@ -63,11 +63,17 @@ Keystore (StrongBox при наличии), с обязательной ауте
   — в файл 0600 (stdout печатает путь). Код одноразовый, сравнение
   constant-time, ошибки дают backoff; nonce расходуется только после успешной
   проверки кода. `--revoke` удаляет ключ и код.
-- **Attestation** — цепочка проверяется до закреплённых в коде корней Google
-  Hardware Attestation (RSA и ECDSA), `attestationChallenge` должен совпадать с
+- **Attestation** — цепочка из `KeyStore.getCertificateChain` (leaf → … →
+  корень, 2–8 сертификатов, base64url или стандартный base64, с паддингом или
+  без) проверяется до закреплённых в коде корней Google Hardware Attestation
+  (RSA и ECDSA). Пиннинг — по DER верхнего сертификата или по подписи его ключом
+  закреплённого корня; срок действия к верхнему (anchor) не применяется, у листа
+  и промежуточных проверяется. `attestationChallenge` должен совпадать с
   выданным nonce, `securityLevel` — TEE или StrongBox, публичный ключ листа —
   с привязываемым ключом. `verified boot` обязателен: `VERIFIED` и
-  `deviceLocked=true`; иначе привязка отклоняется с логом причины.
+  `deviceLocked=true`; иначе привязка отклоняется, а в лог уходят причина
+  (`length`, `parse`, `expired`, `link`, `authority`, `anchor`, `clock`), длина
+  цепочки и для каждого сертификата subject, issuer и notAfter.
 - **Challenge** — 32 случайных байта; payload
   `home-secrets-step-up/1` содержит id, `principal`, действие, путь, ключ,
   версию, `cas`, хеш нового значения (`valueSha256`, только update) и
