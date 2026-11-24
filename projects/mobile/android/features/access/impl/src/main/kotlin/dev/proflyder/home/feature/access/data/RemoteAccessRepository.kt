@@ -5,7 +5,6 @@ import dev.proflyder.home.core.model.AccessToken
 import dev.proflyder.home.core.model.AppModule
 import dev.proflyder.home.core.model.CreatedAccessToken
 import dev.proflyder.home.core.model.Outcome
-import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.network.AccessApi
 import dev.proflyder.home.feature.access.AccessRepository
 import dev.proflyder.home.feature.access.AccessTokensState
@@ -65,11 +64,9 @@ class RemoteAccessRepository(
     }
 
     private suspend fun load() {
-        val result = runCatching { api.tokens() }.getOrNull()
-        when (result) {
+        when (val result = api.tokens()) {
             is Outcome.Success -> mutableState.value = AccessTokensState(loading = false, tokens = result.value)
             is Outcome.Failure -> mutableState.update { it.copy(loading = false, failure = result.failure) }
-            null -> mutableState.update { it.copy(loading = false, failure = RemoteFailure.ProtocolFailure("access list")) }
         }
     }
 
