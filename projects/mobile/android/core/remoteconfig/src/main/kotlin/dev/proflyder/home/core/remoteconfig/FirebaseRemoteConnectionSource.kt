@@ -12,6 +12,7 @@ import dev.proflyder.home.core.config.RemoteConnectionSource
 import dev.proflyder.home.core.config.RemoteConnectionState
 import dev.proflyder.home.core.config.parseRemoteConnection
 import dev.proflyder.home.core.operation.suspendRunCatching
+import dev.proflyder.home.core.runtime.AppActivation
 import dev.proflyder.home.core.runtime.AppStartable
 import dev.proflyder.home.core.runtime.IoDispatcher
 import dev.zacsweers.metro.AppScope
@@ -39,6 +40,7 @@ import kotlinx.coroutines.tasks.await
 class FirebaseRemoteConnectionSource(
     context: Context,
     appScope: CoroutineScope,
+    private val activation: AppActivation,
     @IoDispatcher io: CoroutineDispatcher,
 ) : RemoteConnectionSource, AppStartable {
     private val appContext = context.applicationContext
@@ -54,8 +56,9 @@ class FirebaseRemoteConnectionSource(
 
     override fun start() {
         if (!available) return
+        publishCached()
         scope.launch {
-            publishCached()
+            activation.awaitActive()
             remoteConfig.addOnConfigUpdateListener(UpdateListener())
             fetch(force = false)
         }

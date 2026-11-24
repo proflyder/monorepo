@@ -2,7 +2,7 @@ package dev.proflyder.home.feature.vpn.tunnel
 
 internal enum class ConnectOrigin(val reportsFailure: Boolean) {
     USER(reportsFailure = true),
-    AUTO_POLICY(reportsFailure = true),
+    AUTO_POLICY(reportsFailure = false),
     NETWORK_RESTART(reportsFailure = false),
 }
 

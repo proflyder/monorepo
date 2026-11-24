@@ -7,11 +7,16 @@ internal data class NetworkFacts(val handles: Set<Long>, val blocked: Set<Long> 
 }
 
 internal object EnvironmentClassifier {
-    fun classify(facts: NetworkFacts, endpointKnown: Boolean, reachesHome: () -> Boolean): HomeNetworkState = when {
+    fun classify(facts: NetworkFacts, endpointKnown: Boolean, probe: () -> HomeProbe): HomeNetworkState = when {
         facts.handles.isEmpty() -> HomeNetworkState.Offline
         facts.usable.isEmpty() || !endpointKnown -> HomeNetworkState.Unknown
-        reachesHome() -> HomeNetworkState.Home(facts.handles)
-        else -> HomeNetworkState.Away(facts.handles)
+        else -> probed(probe(), facts.handles)
+    }
+
+    private fun probed(probe: HomeProbe, handles: Set<Long>): HomeNetworkState = when (probe) {
+        HomeProbe.REACHED -> HomeNetworkState.Home(handles)
+        HomeProbe.RESOLVED -> HomeNetworkState.Away(handles)
+        HomeProbe.UNRESOLVED -> HomeNetworkState.Unknown
     }
 
     fun keepKnownHome(

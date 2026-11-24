@@ -6,6 +6,7 @@ import dev.proflyder.home.core.model.DeviceIdentity
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.operation.suspendRunCatching
+import dev.proflyder.home.core.runtime.AppActivation
 import dev.proflyder.home.core.runtime.AppStartable
 import dev.proflyder.home.core.runtime.AppVersion
 import dev.zacsweers.metro.AppScope
@@ -41,6 +42,7 @@ class HomePushRegistrar(
     private val settings: ConnectionSettingsStore,
     private val version: AppVersion,
     private val clock: Clock,
+    private val activation: AppActivation,
     private val scope: CoroutineScope,
 ) : PushRegistrar, AppStartable {
     private val inFlight = InFlight()
@@ -53,6 +55,7 @@ class HomePushRegistrar(
     override fun start() {
         scope.launch {
             store.load()
+            activation.awaitActive()
             wanted().collectLatest { register(it, force = false) }
         }
     }

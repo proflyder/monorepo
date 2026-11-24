@@ -4,6 +4,7 @@ import android.content.Context
 import com.google.firebase.FirebaseApp
 import com.google.firebase.messaging.FirebaseMessaging
 import dev.proflyder.home.core.operation.suspendRunCatching
+import dev.proflyder.home.core.runtime.AppActivation
 import dev.proflyder.home.core.runtime.AppStartable
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
@@ -24,6 +25,7 @@ import kotlinx.coroutines.tasks.await
 @Inject
 class FirebasePushTokenSource(
     private val context: Context,
+    private val activation: AppActivation,
     private val scope: CoroutineScope,
 ) : PushTokenSource, AppStartable {
     private val current = MutableStateFlow<String?>(null)
@@ -31,7 +33,10 @@ class FirebasePushTokenSource(
     override val token: StateFlow<String?> = current.asStateFlow()
 
     override fun start() {
-        scope.launch { fetch() }
+        scope.launch {
+            activation.awaitActive()
+            fetch()
+        }
     }
 
     override suspend fun fetch(): String? {

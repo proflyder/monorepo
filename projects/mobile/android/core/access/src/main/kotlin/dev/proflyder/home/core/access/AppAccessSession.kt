@@ -8,6 +8,7 @@ import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.network.AccessApi
 import dev.proflyder.home.core.network.ModuleForbiddenSink
 import dev.proflyder.home.core.operation.suspendRunCatching
+import dev.proflyder.home.core.runtime.AppActivation
 import dev.proflyder.home.core.runtime.AppStartable
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
@@ -45,6 +46,7 @@ class AppAccessSession(
     private val api: AccessApi,
     private val settings: ConnectionSettingsStore,
     private val signals: SyncSignals,
+    private val activation: AppActivation,
     private val clock: Clock,
     private val scope: CoroutineScope,
 ) : AppAccessSource, AccessRefresher, AppStartable, ModuleForbiddenSink {
@@ -58,6 +60,13 @@ class AppAccessSession(
     override val state: StateFlow<AppAccessState> = mutableState.asStateFlow()
 
     override fun start() {
+        scope.launch {
+            activation.awaitActive()
+            observe()
+        }
+    }
+
+    private fun observe() {
         observeTokenChanges()
         refresh()
         signals.signals
