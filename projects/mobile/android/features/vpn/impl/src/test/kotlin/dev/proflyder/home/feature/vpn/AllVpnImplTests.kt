@@ -4,6 +4,7 @@ import dev.proflyder.home.feature.vpn.connect.AutoConnectCoordinatorTest
 import dev.proflyder.home.feature.vpn.connect.AutoConnectPolicyTest
 import dev.proflyder.home.feature.vpn.connect.VpnRouteConditionTest
 import dev.proflyder.home.feature.vpn.data.StoredVpnProfileTest
+import dev.proflyder.home.feature.vpn.data.VpnProblemsTest
 import dev.proflyder.home.feature.vpn.environment.EnvironmentClassifierTest
 import dev.proflyder.home.feature.vpn.environment.EnvironmentRulesTest
 import dev.proflyder.home.feature.vpn.presentation.VpnScreenshotTest
@@ -25,5 +26,6 @@ import org.junit.runners.Suite
     AutoConnectCoordinatorTest::class,
     VpnRouteConditionTest::class,
     ChainVpnControllerTest::class,
+    VpnProblemsTest::class,
 )
 class AllVpnImplTests

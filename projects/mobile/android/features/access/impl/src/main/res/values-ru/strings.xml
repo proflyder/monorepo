@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="DuplicateStrings">
+    <string name="access_title">Доступы</string>
+    <string name="access_intro">Именованные токены приложений. Каждый токен видит только выданные ему модули.</string>
+    <string name="access_create">Новый токен</string>
+    <string name="access_empty">Именованных токенов пока нет</string>
+    <string name="access_empty_hint">Создайте токен для телефона, моста или другого приложения вместо передачи owner-токена.</string>
+    <string name="access_owner_badge">Владелец</string>
+    <string name="access_modules_base_only">Только базовый доступ</string>
+    <string name="access_edit_title">Настройки токена</string>
+    <string name="access_new_title">Новый токен</string>
+    <string name="access_name_label">Название</string>
+    <string name="access_name_error">Введите название до 64 символов</string>
+    <string name="access_owner_note">У owner-токена всегда все модули. Его можно переименовать, но нельзя отозвать.</string>
+    <string name="access_modules_label">Модули</string>
+    <string name="access_editor_save">Сохранить</string>
+    <string name="access_action_edit">Переименовать и модули</string>
+    <string name="access_action_revoke">Отозвать</string>
+    <string name="access_created_title">Токен создан</string>
+    <string name="access_created_warning">Скопируйте токен сейчас. Сервер хранит только его хэш и больше не покажет значение.</string>
+    <string name="access_created_copy">Скопировать</string>
+    <string name="access_created_copied">Токен скопирован</string>
+    <string name="access_created_done">Готово</string>
+    <string name="access_revoke_message">Токен перестанет работать сразу, а его push-устройства и VPN-пиры будут удалены.</string>
+    <string name="access_revoke_yes">Отозвать</string>
+    <string name="access_revoke_keep">Оставить</string>
+    <string name="access_error_invalid">Сервер отклонил название или модули. Проверьте и повторите.</string>
+    <string name="access_error_name_taken">Это название уже занято другим токеном.</string>
+    <string name="access_error_limit">Достигнут предел сервера: 64 активных токена.</string>
+    <string name="access_token_description">Токен %1$s</string>
+    <string name="access_module_base">Базовый доступ</string>
+    <string name="access_module_home">Дом</string>
+    <string name="access_module_scenarios">Сценарии</string>
+    <string name="access_module_alarms_timers">Будильники и таймеры</string>
+    <string name="access_module_intercom_call">Звонки</string>
+    <string name="access_module_notifications">Уведомления</string>
+    <string name="access_module_chat">Чат</string>
+    <string name="access_module_vpn">VPN</string>
+    <string name="access_module_system">Система</string>
+    <string name="access_module_infra_reports">Отчёты об инфраструктуре</string>
+    <string name="access_module_alerts">Алерты</string>
+    <string name="access_module_admin">Администрирование</string>
+</resources>

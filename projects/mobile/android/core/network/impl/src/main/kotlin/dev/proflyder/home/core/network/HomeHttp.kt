@@ -31,18 +31,19 @@ class HomeHttp(
     private val scope: CoroutineScope,
     @IoDispatcher private val io: CoroutineDispatcher,
     private val identity: DeviceIdentity,
+    private val forbidden: () -> Set<ModuleForbiddenSink>,
 ) {
     private val origin by lazy { DeviceOriginInterceptor(identity) }
     private val userAgent by lazy { "home-android/${version.name}" }
-    private val clients = ConcurrentHashMap<Pair<Target, Boolean>, OkHttpClient>()
-    private val callAdapters by lazy { OutcomeCallAdapterFactory(gate, scope) }
+    private val clients = ConcurrentHashMap<Triple<Target, Boolean, Boolean>, OkHttpClient>()
+    private val callAdapters by lazy { OutcomeCallAdapterFactory(gate, scope, forbidden) }
     private val converters by lazy {
         BoundedResponseConverterFactory(NetworkJson.asConverterFactory(JSON_MEDIA_TYPE), JSON_MEDIA_TYPE)
     }
 
-    internal fun <T : Any> rest(api: KClass<T>, target: Target): T = Retrofit.Builder()
+    internal fun <T : Any> rest(api: KClass<T>, target: Target, inspected: Boolean = true): T = Retrofit.Builder()
         .baseUrl(PLACEHOLDER_BASE_URL)
-        .client(client(target, streaming = false))
+        .client(client(target, streaming = false, inspected = inspected))
         .addConverterFactory(converters)
         .addCallAdapterFactory(callAdapters)
         .build()
@@ -50,14 +51,14 @@ class HomeHttp(
 
     internal fun <T> stream(target: Target, request: StreamRequest, decoder: StreamDecoder<T>): Flow<T> = flow {
         gate.await()
-        val call = client(target, streaming = true).newCall(request.toOkHttp(PLACEHOLDER_BASE_URL))
+        val call = client(target, streaming = true, inspected = true).newCall(request.toOkHttp(PLACEHOLDER_BASE_URL))
         call.readStream(decoder) { emit(it) }
     }.flowOn(io)
 
-    private fun client(target: Target, streaming: Boolean): OkHttpClient =
-        clients.getOrPut(target to streaming) { buildClient(target, streaming) }
+    private fun client(target: Target, streaming: Boolean, inspected: Boolean): OkHttpClient =
+        clients.getOrPut(Triple(target, streaming, inspected)) { buildClient(target, streaming, inspected) }
 
-    private fun buildClient(target: Target, streaming: Boolean): OkHttpClient = baseClient.newBuilder()
+    private fun buildClient(target: Target, streaming: Boolean, inspected: Boolean): OkHttpClient = baseClient.newBuilder()
         .followRedirects(false)
         .followSslRedirects(false)
         .retryOnConnectionFailure(!streaming)
@@ -65,7 +66,7 @@ class HomeHttp(
         .addInterceptor(TimeZoneInterceptor())
         .apply { if (target.connectProtocol) addInterceptor(origin) }
         .authenticator(TokenRefreshAuthenticator(settings))
-        .apply { if (!streaming) inspection.forEach(::addInterceptor) }
+        .apply { if (!streaming && inspected) inspection.forEach(::addInterceptor) }
         .build()
 
     private companion object {

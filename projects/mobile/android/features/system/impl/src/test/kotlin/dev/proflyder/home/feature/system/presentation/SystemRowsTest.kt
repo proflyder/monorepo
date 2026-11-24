@@ -16,6 +16,18 @@ class SystemRowsTest {
     private val rows = SystemRows(RuntimeEnvironment.getApplication())
 
     @Test
+    fun onlyTheOwnerSeesTheAccessEntryAfterTheCards() {
+        val withoutAccess = rows.overview(SystemFixtures.snapshot)
+        assertTrue(withoutAccess.none { it.key == "access" })
+
+        val withAccess = rows.overview(SystemFixtures.snapshot, administrator = true)
+        val link = withAccess.last() as SystemRow.Link
+        assertEquals("access", link.key)
+        assertEquals("Access", link.title)
+        assertEquals("Application tokens and their modules", link.subtitle)
+    }
+
+    @Test
     fun overviewPutsTheTrafficLightAndAlertsBeforeTheCards() {
         val overview = rows.overview(SystemFixtures.snapshot)
         assertEquals(

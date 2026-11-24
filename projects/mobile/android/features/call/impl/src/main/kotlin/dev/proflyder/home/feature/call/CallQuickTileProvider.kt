@@ -1,5 +1,6 @@
 package dev.proflyder.home.feature.call
 
+import dev.proflyder.home.core.model.AppModule
 import dev.proflyder.home.feature.call.impl.R
 import dev.proflyder.home.feature.control.ProvidedTile
 import dev.proflyder.home.feature.control.QuickTileAction
@@ -18,6 +19,7 @@ class CallQuickTileProvider(
         order = 0,
         labelRes = R.string.call_quick_tile_title,
         iconRes = R.drawable.call_ic_quick_tile,
+        module = AppModule.INTERCOM_CALL,
     )
 
     override fun activate(): QuickTileAction {

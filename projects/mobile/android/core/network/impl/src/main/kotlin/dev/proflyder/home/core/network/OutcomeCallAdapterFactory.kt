@@ -22,6 +22,7 @@ import retrofit2.awaitResponse
 internal class OutcomeCallAdapterFactory(
     private val gate: RouteGate,
     private val scope: CoroutineScope,
+    private val forbiddenSinks: () -> Set<ModuleForbiddenSink> = { emptySet() },
 ) : CallAdapter.Factory() {
     override fun get(
         returnType: Type,
@@ -33,7 +34,7 @@ internal class OutcomeCallAdapterFactory(
         if (getRawType(outcomeType) != Outcome::class.java) return null
         val bodyType = getParameterUpperBound(0, outcomeType as ParameterizedType)
         val retry = if (annotations.any { it is Idempotent }) CallRetry.Idempotent else CallRetry.Once
-        return OutcomeCallAdapter<Any>(bodyType, OutcomeExecutor(gate, retry, scope))
+        return OutcomeCallAdapter<Any>(bodyType, OutcomeExecutor(gate, retry, scope, forbiddenSinks))
     }
 }
 
@@ -50,6 +51,7 @@ internal class OutcomeExecutor(
     private val gate: RouteGate,
     private val retry: CallRetry,
     val scope: CoroutineScope,
+    private val forbiddenSinks: () -> Set<ModuleForbiddenSink> = { emptySet() },
 ) {
     suspend fun <T> execute(call: Call<T>): Outcome<T> {
         gate.await()
@@ -58,11 +60,16 @@ internal class OutcomeExecutor(
 
     private suspend fun <T> attempt(call: Call<T>, number: Int): Outcome<T> {
         val result = runCatching { call.awaitResponse() }
-        val failure = result.exceptionOrNull() ?: return result.getOrThrow().toOutcome()
+        val failure = result.exceptionOrNull() ?: return result.getOrThrow().toOutcome().also(::report)
         if (!retry.allows(number, failure)) return Outcome.Failure(failure.toCallFailure())
         delay(retry.delayAfter(number))
         gate.await()
         return attempt(call.clone(), number + 1)
+    }
+
+    private fun report(outcome: Outcome<*>) {
+        val forbidden = (outcome as? Outcome.Failure)?.failure as? RemoteFailure.ModuleForbidden ?: return
+        forbiddenSinks().forEach { it.moduleForbidden(forbidden.module) }
     }
 }
 
@@ -108,8 +115,14 @@ internal fun <T> Response<T>.toOutcome(): Outcome<T> = when {
     isSuccessful -> body()?.let { Outcome.Success(it) }
         ?: Outcome.Failure(RemoteFailure.ProtocolFailure("empty response body"))
     code() in 300..399 -> Outcome.Failure(RemoteFailure.ProtocolFailure("HTTP ${code()} redirect refused"))
-    code() == 401 || code() == 403 -> Outcome.Failure(RemoteFailure.Unauthorized)
+    code() == 401 -> Outcome.Failure(RemoteFailure.Unauthorized)
+    code() == 403 -> Outcome.Failure(forbiddenOrUnauthorized(errorText()))
     else -> Outcome.Failure(parseConnectFailure(code(), errorText()))
+}
+
+private fun forbiddenOrUnauthorized(text: String): RemoteFailure {
+    val failure = parseConnectFailure(403, text)
+    return failure as? RemoteFailure.ModuleForbidden ?: RemoteFailure.Unauthorized
 }
 
 private fun <T> Response<T>.errorText(): String =

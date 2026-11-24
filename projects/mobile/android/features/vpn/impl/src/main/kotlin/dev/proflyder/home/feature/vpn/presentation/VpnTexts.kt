@@ -84,6 +84,7 @@ internal object VpnTexts {
         VpnProfileProblem.NOT_CONFIGURED -> R.string.vpn_problem_not_configured
         VpnProfileProblem.OFFLINE -> R.string.vpn_problem_offline
         VpnProfileProblem.UNAUTHORIZED -> R.string.vpn_problem_unauthorized
+        VpnProfileProblem.NO_ACCESS -> R.string.vpn_problem_no_access
         VpnProfileProblem.INVALID -> R.string.vpn_problem_invalid
         VpnProfileProblem.CONFLICT -> R.string.vpn_problem_conflict
         VpnProfileProblem.LIMIT -> R.string.vpn_problem_limit

@@ -8,6 +8,7 @@ import dev.proflyder.home.core.model.StorageReason
 fun RemoteFailure.userMessage(context: Context): String = when (this) {
     RemoteFailure.NotConfigured -> context.getString(R.string.ui_error_not_configured)
     RemoteFailure.Unauthorized -> context.getString(R.string.ui_error_unauthorized)
+    is RemoteFailure.ModuleForbidden -> context.getString(R.string.ui_error_no_access)
     RemoteFailure.Timeout -> context.getString(R.string.ui_error_timeout)
     is RemoteFailure.Offline -> context.getString(R.string.ui_error_offline)
     is RemoteFailure.Tls -> context.getString(R.string.ui_error_tls)

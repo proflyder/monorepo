@@ -5,6 +5,8 @@
     <string name="system_card_guests">Гости (VM/CT)</string>
     <string name="system_card_cluster">Кластер</string>
     <string name="system_card_devices">Устройства</string>
+    <string name="system_card_access">Доступы</string>
+    <string name="system_card_access_subtitle">Токены приложений и их модули</string>
     <string name="system_status_ok">Всё в порядке</string>
     <string name="system_status_warning">Требует внимания</string>
     <string name="system_status_critical">Есть проблемы</string>

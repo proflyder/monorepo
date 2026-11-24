@@ -1,6 +1,7 @@
 package dev.proflyder.home.feature.push
 
 import androidx.fragment.app.Fragment
+import dev.proflyder.home.core.model.AppModule
 import dev.proflyder.home.core.navigation.Destination
 import dev.proflyder.home.core.navigation.FeatureEntry
 import dev.proflyder.home.feature.push.impl.R
@@ -19,6 +20,7 @@ internal object PushSettingsDestination : Destination {
 class PushFeatureEntry : FeatureEntry {
     override val id: String = "push"
     override val order: Int = 6
+    override val module: AppModule = AppModule.NOTIFICATIONS
     override val isTab: Boolean = false
     override val titleRes: Int = R.string.push_title
     override val iconRes: Int = R.drawable.push_ic_notification

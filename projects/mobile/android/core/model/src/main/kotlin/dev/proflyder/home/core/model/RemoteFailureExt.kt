@@ -7,6 +7,7 @@ fun RemoteFailure.isTransientNetwork(): Boolean = when (this) {
     -> true
     RemoteFailure.NotConfigured,
     RemoteFailure.Unauthorized,
+    is RemoteFailure.ModuleForbidden,
     is RemoteFailure.Server,
     is RemoteFailure.ProtocolFailure,
     is RemoteFailure.Validation,

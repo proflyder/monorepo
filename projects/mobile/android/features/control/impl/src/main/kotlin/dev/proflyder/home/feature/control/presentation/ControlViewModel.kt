@@ -1,6 +1,7 @@
 package dev.proflyder.home.feature.control.presentation
 
 import android.content.Context
+import dev.proflyder.home.core.access.AppAccessSource
 import dev.proflyder.home.core.navigation.Route
 import androidx.lifecycle.ViewModel
 import dev.proflyder.home.core.model.FavoritePreferences
@@ -39,6 +40,7 @@ internal class ControlScreenDependencies(
     val providers: Set<QuickTileProvider>,
     val hub: HubSources,
     val clock: ServerClock,
+    val access: AppAccessSource,
 )
 
 internal class ControlViewModel(
@@ -46,7 +48,7 @@ internal class ControlViewModel(
 ) : StateViewModel<ControlUiState, ControlIntent, ControlEvent>(ControlUiState()) {
     override fun derive(previous: ControlUiState, next: ControlUiState): ControlUiState = next.derivedFrom(previous)
 
-    private val tiles = QuickTileLauncher(dependencies.providers)
+    private val tiles = QuickTileLauncher(dependencies.providers, dependencies.access)
     private val favorites = ControlFavorites(dependencies.favorites, dependencies.defaultFavoriteScenarios)
     private val devices = DeviceCommands(dependencies.repository, dependencies.hub.scenarios)
     private val hub = HubCommands(dependencies.hub.timers)
@@ -56,6 +58,7 @@ internal class ControlViewModel(
 
     init {
         publish(currentState.copy(provided = tiles.tiles))
+        launch { dependencies.access.state.collect { updateState { copy(provided = tiles.tiles) } } }
         launch { sources.state(devices.pendingEntries, devices.pendingScenarios, layout.state).collect(::publish) }
         launch { sources.loadFailures().collect { emit(ControlEvent.Failure(it)) } }
     }
@@ -116,6 +119,7 @@ class ControlViewModelSource internal constructor(
     private val reminders: FeatureScope<ReminderRepository>,
     private val scenarios: FeatureScope<ScenarioRepository>,
     private val clock: ServerClock,
+    private val access: AppAccessSource,
 ) : ViewModelSource {
     override fun create(): ViewModel {
         val leases = ControlLeases(control.acquire(), timers.acquire(), reminders.acquire(), scenarios.acquire())
@@ -130,6 +134,7 @@ class ControlViewModelSource internal constructor(
         providers = providers,
         hub = HubSources(leases.timers.graph, leases.reminders.graph, leases.scenarios.graph),
         clock = clock,
+        access = access,
     )
 }
 

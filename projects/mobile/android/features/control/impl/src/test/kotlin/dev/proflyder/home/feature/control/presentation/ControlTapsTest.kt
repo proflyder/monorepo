@@ -22,6 +22,12 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class ControlTapsTest {
+    private object OpenAccess : dev.proflyder.home.core.access.AppAccessSource {
+        override val state = kotlinx.coroutines.flow.MutableStateFlow<dev.proflyder.home.core.access.AppAccessState>(
+            dev.proflyder.home.core.access.AppAccessState.Unknown,
+        )
+    }
+
     private val switch = ControlEntry(
         id = "switch.fan",
         kind = ControlKind.SWITCH,
@@ -112,7 +118,7 @@ class ControlTapsTest {
 
             override fun activate(): QuickTileAction = QuickTileAction.Handled.also { calls++ }
         }
-        val launcher = QuickTileLauncher(setOf(vpn, call))
+        val launcher = QuickTileLauncher(setOf(vpn, call), OpenAccess)
         assertEquals(ControlEvent.OpenRoute(Route.Tab("vpn")), launcher.activate("vpn"))
         assertNull(launcher.activate("call"))
         assertEquals(1, calls)

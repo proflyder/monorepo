@@ -62,7 +62,7 @@ internal fun ResponseBody.readBounded(): String {
 }
 
 @Serializable
-internal data class PlainErrorDto(val error: String = "")
+internal data class PlainErrorDto(val error: String = "", val module: String = "", val detail: String = "")
 
 internal fun parseConnectFailure(httpCode: Int, text: String): RemoteFailure {
     val parsed = runCatching {
@@ -70,9 +70,14 @@ internal fun parseConnectFailure(httpCode: Int, text: String): RemoteFailure {
     }.getOrNull()
     val plain = runCatching {
         if (text.isBlank()) null else NetworkJson.decodeFromString(PlainErrorDto.serializer(), text)
-    }.getOrNull()?.error
-    val reason = sanitizeMessage(parsed?.code?.takeIf { it.isNotBlank() } ?: plain).orEmpty()
-    val message = sanitizeMessage(parsed?.message?.takeIf { it.isNotBlank() } ?: plain).orEmpty()
+    }.getOrNull()
+    val forbiddenModule = forbiddenModule(parsed, plain)
+    if (forbiddenModule != null) return RemoteFailure.ModuleForbidden(forbiddenModule)
+    val reason = sanitizeMessage(parsed?.code?.takeIf { it.isNotBlank() } ?: plain?.error).orEmpty()
+    val detail = sanitizeMessage(plain?.detail?.takeIf { it.isNotBlank() && it != plain.error })
+    val message = sanitizeMessage(parsed?.message?.takeIf { it.isNotBlank() })
+        ?: detail
+        ?: sanitizeMessage(plain?.error).orEmpty()
     val localized = parsed?.details?.firstNotNullOfOrNull { detail ->
         detail.debug?.takeIf { it.key.isNotBlank() }?.let { it.key to it.args }
     }
@@ -90,3 +95,15 @@ internal fun parseConnectFailure(httpCode: Int, text: String): RemoteFailure {
         )
     }
 }
+
+private fun forbiddenModule(parsed: ConnectErrorDto?, plain: PlainErrorDto?): String? {
+    val detail = parsed?.details?.firstOrNull { it.type == MODULE_FORBIDDEN_DETAIL } ?: return when {
+        plain?.error == MODULE_FORBIDDEN -> plain.module
+        else -> null
+    }
+    return detail.debug?.module.orEmpty()
+}
+
+private const val MODULE_FORBIDDEN = "module_forbidden"
+
+private const val MODULE_FORBIDDEN_DETAIL = "home.v1.ModuleForbidden"

@@ -6,34 +6,38 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.isVisible
 import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.google.android.material.navigation.NavigationBarView
+import dev.proflyder.home.core.access.AppAccessState
+import dev.proflyder.home.core.access.allows
 import dev.proflyder.home.core.designsystem.HomePopupMenu
 import dev.proflyder.home.core.navigation.AppChromeState
+import dev.proflyder.home.core.navigation.FeatureEntry
 import dev.proflyder.home.core.navigation.FeatureRegistry
 import dev.proflyder.home.core.navigation.Navigator
 
 internal class BottomTabs(
     private val view: BottomNavigationView,
-    features: FeatureRegistry,
+    private val features: FeatureRegistry,
     private val navigator: Navigator,
 ) {
-    private val tabIds = features.tabs().map { it.id }
+    private var tabs: List<FeatureEntry> = features.tabs()
+    private var tabIds: List<String> = tabs.map(FeatureEntry::id)
+
+    internal val visibleTabIds: List<String> get() = tabIds
     private val onSelected = NavigationBarView.OnItemSelectedListener(::onItemSelected)
     private var keyboardShown = false
     private var hidden = navigator.chrome.value.hidesBottomBar
 
     val coversContent: Boolean
-        get() = !keyboardShown && !navigator.chrome.value.hidesBottomBar
+        get() = !keyboardShown && !navigator.chrome.value.hidesBottomBar && tabs.isNotEmpty()
 
     init {
         HomePopupMenu.markObstacle(view)
-        view.menu.clear()
-        features.tabs().forEachIndexed { index, entry ->
-            view.menu.add(Menu.NONE, itemIdOf(index), entry.order, entry.titleRes).setIcon(entry.iconRes)
-        }
-        render(navigator.chrome.value)
+        renderMenu()
+        render(navigator.chrome.value, AppAccessState.Unknown)
     }
 
-    fun render(chrome: AppChromeState) {
+    fun render(chrome: AppChromeState, access: AppAccessState) {
+        applyAccess(access)
         val index = tabIds.indexOf(chrome.tabId)
         view.setOnItemSelectedListener(null)
         if (index >= 0 && view.selectedItemId != itemIdOf(index)) view.selectedItemId = itemIdOf(index)
@@ -47,6 +51,22 @@ internal class BottomTabs(
     fun keyboard(shown: Boolean) {
         keyboardShown = shown
         renderVisibility()
+    }
+
+    private fun applyAccess(access: AppAccessState) {
+        val next = features.tabs().filter { access.allows(it.module) }
+        if (next.map(FeatureEntry::id) == tabIds) return
+        tabs = next
+        tabIds = next.map(FeatureEntry::id)
+        renderMenu()
+        renderVisibility()
+    }
+
+    private fun renderMenu() {
+        view.menu.clear()
+        tabs.forEachIndexed { index, entry ->
+            view.menu.add(Menu.NONE, itemIdOf(index), entry.order, entry.titleRes).setIcon(entry.iconRes)
+        }
     }
 
     private fun renderVisibility() {

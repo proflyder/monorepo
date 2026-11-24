@@ -3,6 +3,7 @@ load("//platform/android:defs.bzl", "home_android_lint", "home_detekt")
 package(default_visibility = ["//visibility:public"])
 
 DETEKT_TEST_TARGETS = [
+    "//projects/mobile/android/core/access:access_test",
     "//projects/mobile/android/core/data:data_test",
     "//projects/mobile/android/app:robolectric_test",
     "//projects/mobile/android/core/config:config_test",
@@ -14,6 +15,7 @@ DETEKT_TEST_TARGETS = [
     "//projects/mobile/android/core/network/impl:impl_test",
     "//projects/mobile/android/core/theme:robolectric_test",
     "//projects/mobile/android/core/ui:robolectric_test",
+    "//projects/mobile/android/features/access/impl:robolectric_test",
     "//projects/mobile/android/features/alarms/api:api_test",
     "//projects/mobile/android/features/alarms/impl:robolectric_test",
     "//projects/mobile/android/features/call/impl:robolectric_test",
@@ -64,6 +66,7 @@ test_suite(
         "//projects/mobile/android/app:robolectric_test",
         "//projects/mobile/android/core/config:config_test",
         "//projects/mobile/android/core/config:remote_connection_source_test",
+        "//projects/mobile/android/core/access:access_test",
         "//projects/mobile/android/core/data:data_test",
         "//projects/mobile/android/core/designsystem:robolectric_test",
         "//projects/mobile/android/core/launchericon/impl:robolectric_test",
@@ -74,6 +77,7 @@ test_suite(
         "//projects/mobile/android/core/runtime:robolectric_test",
         "//projects/mobile/android/core/theme:robolectric_test",
         "//projects/mobile/android/core/ui:robolectric_test",
+        "//projects/mobile/android/features/access/impl:robolectric_test",
         "//projects/mobile/android/features/alarms/api:api_test",
         "//projects/mobile/android/features/alarms/impl:robolectric_test",
         "//projects/mobile/android/features/call/impl:robolectric_test",

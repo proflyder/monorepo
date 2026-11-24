@@ -4,6 +4,8 @@ import android.view.Gravity
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
+import dev.proflyder.home.core.access.AppAccessState
+import dev.proflyder.home.core.access.allows
 import dev.proflyder.home.core.designsystem.HomePopupMenu
 import dev.proflyder.home.core.navigation.AppChromeState
 import dev.proflyder.home.core.navigation.Navigator
@@ -16,7 +18,8 @@ internal class ToolbarChrome(
     actions: Set<ToolbarAction>,
     onBack: () -> Unit,
 ) {
-    private val actions = actions.sortedBy { it.order }
+    private val allActions = actions.sortedBy { it.order }
+    private var actions: List<ToolbarAction> = allActions
     private var popup: HomePopupMenu? = null
     private var overlay: Boolean? = null
 
@@ -33,17 +36,27 @@ internal class ToolbarChrome(
         }
     }
 
-    fun render(chrome: AppChromeState) {
+    fun render(chrome: AppChromeState, access: AppAccessState) {
         binding.toolbarTitle.setText(chrome.titleRes)
+        applyAccess(access, chrome.overlay)
         renderBack(chrome.canGoBack)
         if (overlay == chrome.overlay) return
         overlay = chrome.overlay
-        binding.toolbar.menu.findItem(R.id.action_menu)?.isVisible = !chrome.overlay
         dismiss()
     }
 
     fun dismiss() {
         popup?.dismiss()
+    }
+
+    internal val visibleActions: List<ToolbarAction> get() = actions
+
+    private fun applyAccess(access: AppAccessState, overlayShown: Boolean) {
+        val next = allActions.filter { access.allows(it.module) }
+        val changed = next.map(ToolbarAction::itemId) != actions.map(ToolbarAction::itemId)
+        actions = next
+        binding.toolbar.menu.findItem(R.id.action_menu)?.isVisible = !overlayShown && actions.isNotEmpty()
+        if (changed) dismiss()
     }
 
     private fun renderBack(canGoBack: Boolean) {

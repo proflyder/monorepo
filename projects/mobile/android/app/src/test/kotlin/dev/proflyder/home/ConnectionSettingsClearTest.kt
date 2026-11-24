@@ -121,6 +121,7 @@ class ConnectionSettingsClearTest {
             scope = scope,
             io = Dispatchers.IO,
             identity = NoIdentity,
+            forbidden = { emptySet() },
         )
         val client = ConnectSchedulerClient(http, ServerClock(AndroidClock))
         assertEquals(

@@ -67,6 +67,7 @@
     <string name="vpn_problem_not_configured">Сначала укажите сервер и токен в разделе «Подключение».</string>
     <string name="vpn_problem_offline">Сервер недоступен. Профиль выдаётся дома или через OpenConnect.</string>
     <string name="vpn_problem_unauthorized">Токен отклонён.</string>
+    <string name="vpn_problem_no_access">У этого токена нет доступа к VPN.</string>
     <string name="vpn_problem_invalid">Сервер отклонил запрос.</string>
     <string name="vpn_problem_conflict">Этот ключ принадлежит другому устройству. Перевыпустите профиль.</string>
     <string name="vpn_problem_limit">Достигнут лимит устройств VPN.</string>

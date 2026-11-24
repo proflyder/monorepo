@@ -10,6 +10,7 @@ metro_android_library(
     resource_files = glob(["src/main/res/**"]),
     view_binding = True,
     deps = [
+        "//projects/mobile/android/core/access",
         "//projects/mobile/android/core/data",
         "@maven//:androidx_coordinatorlayout_coordinatorlayout",
         "//packages/kotlin/core",

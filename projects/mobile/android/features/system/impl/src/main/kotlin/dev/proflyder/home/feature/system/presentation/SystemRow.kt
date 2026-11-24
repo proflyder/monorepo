@@ -28,4 +28,10 @@ internal sealed interface SystemRow {
     ) : SystemRow
 
     data class Note(override val key: String, val text: String) : SystemRow
+
+    data class Link(
+        override val key: String,
+        val title: String,
+        val subtitle: String,
+    ) : SystemRow
 }

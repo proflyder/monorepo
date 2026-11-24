@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingStart="@dimen/access_dialog_padding"
+    android:paddingTop="@dimen/access_dialog_gap"
+    android:paddingEnd="@dimen/access_dialog_padding"
+    android:paddingBottom="@dimen/access_dialog_gap"
+    tools:ignore="SelectableText">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/access_created_warning"
+        android:textAppearance="?attr/textAppearanceBodyMedium"
+        android:textColor="?attr/colorOnSurface" />
+
+    <com.google.android.material.card.MaterialCardView
+        style="@style/Widget.Home.Card"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/access_dialog_gap">
+
+        <TextView
+            android:id="@+id/access_created_token"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fontFamily="monospace"
+            android:padding="@dimen/access_row_padding"
+            android:textIsSelectable="true"
+            android:textSize="@dimen/access_token_text"
+            android:textColor="?attr/colorOnSurface"
+            tools:text="home_0123456789abcdef0123456789abcdef" />
+    </com.google.android.material.card.MaterialCardView>
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/access_created_copy"
+        style="@style/Widget.Home.Button.Tonal.M"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/access_dialog_gap"
+        android:text="@string/access_created_copy" />
+</LinearLayout>

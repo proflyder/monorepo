@@ -14,6 +14,7 @@ import dev.proflyder.home.core.ui.ViewBinding
 import dev.proflyder.home.feature.system.impl.R
 import dev.proflyder.home.feature.system.impl.databinding.ItemSystemCardBinding
 import dev.proflyder.home.feature.system.impl.databinding.ItemSystemGroupBinding
+import dev.proflyder.home.feature.system.impl.databinding.ItemSystemLinkBinding
 import dev.proflyder.home.feature.system.impl.databinding.ItemSystemNoteBinding
 import dev.proflyder.home.feature.system.impl.databinding.ItemSystemRowBinding
 import dev.proflyder.home.feature.system.impl.databinding.ItemSystemStatusBinding
@@ -53,6 +54,7 @@ internal class SystemAdapter(
         is SystemRow.Group -> TYPE_GROUP
         is SystemRow.Item -> TYPE_ITEM
         is SystemRow.Note -> TYPE_NOTE
+        is SystemRow.Link -> TYPE_LINK
     }
 
     override fun onCreateHolder(inflater: LayoutInflater, parent: ViewGroup, viewType: Int): SystemHolder =
@@ -61,6 +63,7 @@ internal class SystemAdapter(
             TYPE_CARD -> CardHolder(ItemSystemCardBinding.inflate(inflater, parent, false), callback)
             TYPE_GROUP -> GroupHolder(ItemSystemGroupBinding.inflate(inflater, parent, false), callback)
             TYPE_NOTE -> NoteHolder(ItemSystemNoteBinding.inflate(inflater, parent, false), callback)
+            TYPE_LINK -> LinkHolder(ItemSystemLinkBinding.inflate(inflater, parent, false), callback)
             else -> ItemHolder(ItemSystemRowBinding.inflate(inflater, parent, false), callback)
         }
 
@@ -121,11 +124,24 @@ internal class SystemAdapter(
         }
     }
 
+    private class LinkHolder(
+        private val views: ItemSystemLinkBinding,
+        callback: SystemAdapterCallback,
+    ) : SystemHolder(views, callback) {
+        override fun bind(item: SystemRow) {
+            val link = item as SystemRow.Link
+            views.systemLinkTitle.text = link.title
+            views.systemLinkSubtitle.text = link.subtitle
+            views.root.setOnClickListener { callback.onItemClick(link) }
+        }
+    }
+
     private companion object {
         const val TYPE_STATUS = 0
         const val TYPE_CARD = 1
         const val TYPE_GROUP = 2
         const val TYPE_ITEM = 3
         const val TYPE_NOTE = 4
+        const val TYPE_LINK = 5
     }
 }

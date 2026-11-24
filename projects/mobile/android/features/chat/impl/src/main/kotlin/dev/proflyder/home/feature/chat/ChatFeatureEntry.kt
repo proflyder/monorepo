@@ -1,6 +1,7 @@
 package dev.proflyder.home.feature.chat
 
 import androidx.fragment.app.Fragment
+import dev.proflyder.home.core.model.AppModule
 import dev.proflyder.home.core.navigation.Destination
 import dev.proflyder.home.core.navigation.FeatureEntry
 import dev.proflyder.home.core.navigation.RoutePath
@@ -20,6 +21,7 @@ internal object ChatDestination : Destination {
 class ChatFeatureEntry : FeatureEntry {
     override val id: String = ChatRoute.FEATURE_ID
     override val order: Int = 3
+    override val module: AppModule = AppModule.CHAT
     override val titleRes: Int = R.string.chat_title
     override val iconRes: Int = R.drawable.chat_ic_tab
     override val rootDestination: Destination = ChatDestination

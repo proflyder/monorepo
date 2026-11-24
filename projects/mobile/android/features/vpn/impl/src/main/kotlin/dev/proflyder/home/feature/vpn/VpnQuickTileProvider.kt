@@ -1,5 +1,6 @@
 package dev.proflyder.home.feature.vpn
 
+import dev.proflyder.home.core.model.AppModule
 import dev.proflyder.home.feature.control.ProvidedTile
 import dev.proflyder.home.feature.control.QuickTileAction
 import dev.proflyder.home.feature.control.QuickTileProvider
@@ -16,6 +17,7 @@ class VpnQuickTileProvider : QuickTileProvider {
         order = 1,
         labelRes = R.string.vpn_quick_tile_title,
         iconRes = R.drawable.vpn_ic_quick_tile,
+        module = AppModule.VPN,
     )
 
     override fun activate(): QuickTileAction = QuickTileAction.OpenFeature(VPN_FEATURE_ID)

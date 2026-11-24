@@ -1,6 +1,7 @@
 package dev.proflyder.home.feature.alarms
 
 import androidx.fragment.app.Fragment
+import dev.proflyder.home.core.model.AppModule
 import dev.proflyder.home.core.navigation.Destination
 import dev.proflyder.home.core.navigation.FeatureEntry
 import dev.proflyder.home.core.navigation.RouteCodec
@@ -36,6 +37,7 @@ internal data class AlarmEditorDestination(
 class AlarmsFeatureEntry : FeatureEntry {
     override val id: String = "alarms"
     override val order: Int = 2
+    override val module: AppModule = AppModule.ALARMS_TIMERS
     override val isTab: Boolean = false
     override val titleRes: Int = R.string.alarms_title
     override val iconRes: Int = R.drawable.alarms_ic_tab

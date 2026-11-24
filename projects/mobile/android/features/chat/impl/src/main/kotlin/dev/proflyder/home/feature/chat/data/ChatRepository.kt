@@ -66,6 +66,7 @@ internal fun RemoteFailure.sendFailureKey(): String? = when (this) {
     is RemoteFailure.Offline, RemoteFailure.Timeout, is RemoteFailure.Tls, is RemoteFailure.ProtocolFailure -> null
     is RemoteFailure.Server -> reason.takeIf { it in PERMANENT_SEND_CODES }
     RemoteFailure.Unauthorized -> FAILURE_UNAUTHORIZED
+    is RemoteFailure.ModuleForbidden -> FAILURE_UNAUTHORIZED
     is RemoteFailure.Storage -> reason.sendFailureKey()
     RemoteFailure.NotConfigured, RemoteFailure.RemoteConfig, is RemoteFailure.Validation -> FAILURE_NOT_SENT
 }

@@ -22,5 +22,6 @@ import org.junit.runners.Suite
     NotificationHistoryClientTest::class,
     ConnectionHealthTest::class,
     RouteGateTest::class,
+    AccessClientTest::class,
 )
 class AllNetworkTests

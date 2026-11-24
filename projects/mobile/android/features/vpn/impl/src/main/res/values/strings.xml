@@ -67,6 +67,7 @@
     <string name="vpn_problem_not_configured">Set the server and token in Connection first.</string>
     <string name="vpn_problem_offline">Server is unreachable. The profile is issued at home or through OpenConnect.</string>
     <string name="vpn_problem_unauthorized">The token was rejected.</string>
+    <string name="vpn_problem_no_access">This token has no VPN access.</string>
     <string name="vpn_problem_invalid">The server rejected the request.</string>
     <string name="vpn_problem_conflict">This key belongs to another device. Reissue the profile.</string>
     <string name="vpn_problem_limit">The VPN device limit is reached.</string>

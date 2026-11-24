@@ -177,7 +177,12 @@
   `projects/home/kubernetes/scheduler/scenarios/`.
 - Android `dev.proflyder.home` (`projects/mobile/android`): вкладки Home,
   Scenarios, Time, Чат, Система; звонок на колонку, push «найди телефон»,
-  встроенный VPN. Адреса и таймауты — Firebase Remote Config
+  встроенный VPN. Набор вкладок, строк настроек, быстрых плиток и действий
+  следует модулям токена из `GET /v1/me`; при `403 module_forbidden` клиент
+  обновляет `/v1/me` и показывает локализованное «нет доступа». Экран
+  «Система → Доступы» (`admin`) выпускает именованные токены, меняет их
+  модули и отзывает; plaintext показывается один раз и не попадает в
+  сетевые инспекторы. Адреса и таймауты — Firebase Remote Config
   `home_connection`; выкладка — Firebase App Distribution из CI. Живая
   приёмка большинства экранов не пройдена (`PENDING.md`).
 

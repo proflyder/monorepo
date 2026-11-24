@@ -5,6 +5,8 @@
     <string name="system_card_guests">Guests (VM/CT)</string>
     <string name="system_card_cluster">Cluster</string>
     <string name="system_card_devices">Devices</string>
+    <string name="system_card_access">Access</string>
+    <string name="system_card_access_subtitle">Application tokens and their modules</string>
     <string name="system_status_ok">All systems normal</string>
     <string name="system_status_warning">Needs attention</string>
     <string name="system_status_critical">Problems detected</string>

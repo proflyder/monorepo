@@ -15,6 +15,7 @@ metro_android_library(
         "//packages/kotlin/core",
         "//projects/mobile/android/core/config",
         "//projects/mobile/android/core/designsystem",
+        "//projects/mobile/android/core/access",
         "//projects/mobile/android/core/model",
         "//projects/mobile/android/core/navigation",
         "//projects/mobile/android/core/presentation",

@@ -20,6 +20,7 @@ LIB_DEPS = [
     "@crates//:http",
     "@crates//:reqwest",
     "@crates//:rustls",
+    "@crates//:serde_json",
     "@crates//:thiserror",
     "@crates//:tokio",
     "@crates//:tokio-util",
@@ -58,7 +59,6 @@ rust_test(
     edition = "2024",
     lint_config = ":workspace_lints",
     deps = LIB_DEPS + [
-        "@crates//:serde_json",
         "@crates//:tempfile",
     ],
 )
@@ -71,7 +71,6 @@ rust_test(
     lint_config = ":workspace_lints",
     deps = LIB_DEPS + [
         ":intercom_lib",
-        "@crates//:serde_json",
     ],
 )
 

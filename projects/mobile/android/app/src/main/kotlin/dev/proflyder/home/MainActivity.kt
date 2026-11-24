@@ -4,10 +4,14 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.addCallback
 import androidx.activity.enableEdgeToEdge
+import androidx.core.view.isVisible
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import dev.proflyder.home.core.access.AppAccessSession
+import dev.proflyder.home.core.access.AppAccessState
+import dev.proflyder.home.core.access.allows
 import dev.proflyder.home.core.model.AppLogger
 import dev.proflyder.home.core.navigation.AppChromeState
 import dev.proflyder.home.core.navigation.DeepLinkResolver
@@ -22,6 +26,7 @@ import dev.proflyder.home.core.ui.FailureNoticePolicy
 import dev.proflyder.home.core.ui.FailureNoticePolicyProvider
 import dev.proflyder.home.databinding.ActivityMainBinding
 import dev.zacsweers.metro.Inject
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity(), NavigatorHost, FailureNoticePolicyProvider {
@@ -48,6 +53,9 @@ class MainActivity : AppCompatActivity(), NavigatorHost, FailureNoticePolicyProv
     @Inject
     internal lateinit var logger: AppLogger
 
+    @Inject
+    internal lateinit var access: AppAccessSession
+
     override val navigator: Navigator get() = router
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -71,7 +79,9 @@ class MainActivity : AppCompatActivity(), NavigatorHost, FailureNoticePolicyProv
         onBackPressedDispatcher.addCallback(this) { if (!router.back()) finish() }
         deepLinks.open(intent, router)
         lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) { router.chrome.collect(::render) }
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                combine(router.chrome, access.state, ::render).collect { }
+            }
         }
     }
 
@@ -80,9 +90,15 @@ class MainActivity : AppCompatActivity(), NavigatorHost, FailureNoticePolicyProv
         toolbarContributions.sortedBy { it.order }.forEach { it.attach(this, slots, router) }
     }
 
-    private fun render(chrome: AppChromeState) {
-        actionsMenu.render(chrome)
-        tabs.render(chrome)
+    private fun render(chrome: AppChromeState, accessState: AppAccessState) {
+        val visibleTabs = features.tabs().filter { accessState.allows(it.module) }
+        val withoutSections = accessState is AppAccessState.Ready && visibleTabs.isEmpty()
+        binding.fragmentContainer.isVisible = !withoutSections
+        binding.homeNoAccess.isVisible = withoutSections
+        actionsMenu.render(chrome, accessState)
+        tabs.render(chrome, accessState)
+        if (withoutSections) return
+        if (visibleTabs.none { it.id == chrome.tabId }) router.selectTab(visibleTabs.first().id)
     }
 
     override fun onNewIntent(intent: Intent) {
