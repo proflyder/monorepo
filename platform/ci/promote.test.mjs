@@ -739,7 +739,11 @@ test("verifyNativeReleases checks only publishing units and reports every failur
         exec,
         log: (line) => lines.push(line),
       }),
-    /refused 1 native unit\(s\):\n- pulsar: ghcr\.io\/proflyder\/pulsar-firmware:v0\.6\.54/,
+    (error) => {
+      assert.match(error.message, /refused 1 native unit\(s\)/);
+      assert.ok(error.message.includes(`pulsar: ${ref}:v0.6.54`));
+      return true;
+    },
   );
   assert.equal(lines.length, 0);
   assert.equal(

@@ -338,11 +338,16 @@ PR-head fallback и карта воркфлоу — `DECISIONS.md` и `TESTING.m
 
 PR CI проверяет версию до merge: `native / version guard` сравнивает содержимое
 опубликованного `tree-<hash>` с уже существующим тегом вычисленной версии
-(`platform/ci/promote.mjs`, `verifyReleaseVersion`). Если общий путь
-(`Cargo.lock`, `MODULE.bazel`, `_native.yml`) меняет байты артефакта, а patch
-версии остался прежним, PR красный: нужен коммит по путям юнита или подъём
-`VERSION` floor. Уже опубликованный сломанный тег чинится только явной
-пересборкой (`replace_artifacts`), не повторным promotion.
+(`platform/ci/promote.mjs`, `verifyReleaseVersion`). Если тег занят другим
+содержимым, PR красный: нужен коммит по путям юнита или подъём `VERSION`
+floor. Уже опубликованный сломанный тег чинится только явной пересборкой
+(`replace_artifacts`), не повторным promotion.
+
+Релиз native-юнита запускает только изменение его собственных путей
+(`publish_when`, иначе `paths`). Общие входы (`MODULE.bazel`, `Cargo.lock`,
+`platform/mise-tasks/**`, `_native.yml`) пересобирают и тестируют юнит, но не
+публикуют и не деплоят его: иначе версия не растёт, а байты меняются. Поэтому
+вычисленная версия всегда новая на каждый релиз.
 
 Честная пересборка: Actions → «Пересобрать и задеплоить сервисы»
 (`deploy-services.yml`) на `develop`. Галочки групп — `platform/ci/rebuild.mjs`,

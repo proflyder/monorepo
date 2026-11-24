@@ -346,8 +346,8 @@ jobs:
               // `all` includes every unit, including the station release.
               station = allNative.some(isPulsar);
             } else {
-              // Push: `publish` is true only when the unit's `publish_when`
-              // release path (Pulsar VERSION) changed.
+              // Push: `publish` is true only when the unit's release paths
+              // (`publish_when`, else its own paths) changed.
               station = allNative.some((entry) => isPulsar(entry) && entry.publish !== false);
             }
             const json = affected.jsonDumps(selected);

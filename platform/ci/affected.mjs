@@ -2063,10 +2063,8 @@ export function nativePublishSelected(unit, changed) {
   if (!unit.nativePublish) {
     return false;
   }
-  if (!unit.nativePublishWhen.length) {
-    return true;
-  }
-  return changed.some((item) => pathMatches(item, unit.nativePublishWhen));
+  const releasePaths = unit.nativePublishWhen.length ? unit.nativePublishWhen : unit.paths;
+  return changed.some((item) => pathMatches(item, releasePaths));
 }
 
 export function androidUniverse(config) {
