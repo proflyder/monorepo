@@ -5,12 +5,12 @@ metadata:
   namespace: flux-system
   annotations:
     proflyder.dev/source: "initial pin from live cluster 2026-11-10"
-    proflyder.dev/source-commit: "49c44c28797cb9f1313c0dd5162cd41ee852719b"
-    proflyder.dev/source-tree: "0d8252c16b66c2d5d865f97e3e0c143ce1c1b65c"
-    proflyder.dev/verified-at: "2026-11-24T20:55:37Z"
-    proflyder.dev/run: "https://github.com/proflyder/monorepo/actions/runs/45484608590"
+    proflyder.dev/source-commit: "5d06848e2adf9c0999352315442df8da42bb323d"
+    proflyder.dev/source-tree: "22b625aa5e546d19e53e9812df1b747ac7a9b69e"
+    proflyder.dev/verified-at: "2026-11-24T23:15:35Z"
+    proflyder.dev/run: "https://github.com/proflyder/monorepo/actions/runs/45508268626"
 data:
-  BUILD_ID: "49c44c28797c"
+  BUILD_ID: "5d06848e2adf"
   CURRENCY_BOT_IMAGE: "ghcr.io/proflyder/currency-bot@sha256:17ef9272818cb64e1047b63f111c2debac4162f8eec16627f57d2803c7a19ace"
   HA_BRIDGE_IMAGE: "ghcr.io/proflyder/ha-bridge@sha256:8b39dd6bf19b0bd394bcaa8604c01d8a918d491a3ece6f24d31f0d6cafaf7582"
   HA_CONFIG_SYNC_IMAGE: "ghcr.io/proflyder/ha-config-sync@sha256:ed946277931faa385f957730d991587dc8fea397824a794b92a99dda3ddf09f9"
@@ -24,6 +24,6 @@ data:
   MCP_GATEWAY_IMAGE: "ghcr.io/proflyder/mcp-gateway@sha256:93769c55e0412824944ee82c679d65b923018261f8d3d2df24066779534d762d"
   PHONE_PUSH_IMAGE: "ghcr.io/proflyder/phone-push@sha256:9b9e529efb18f387c1d7a61964a2344bb155814156b96153334867a00d41e976"
   SCHEDULER_IMAGE: "ghcr.io/proflyder/scheduler@sha256:0e5b6ff95218e5ed105d716f3995425720aa1f50020c1b5ce9f2f2fb5fd50654"
-  SECRETS_GATEWAY_IMAGE: "ghcr.io/proflyder/secrets-gateway@sha256:ec2cdb96411e865d6e23e9adf1890a46aca37a73b28c52add6636e221a982df2"
+  SECRETS_GATEWAY_IMAGE: "ghcr.io/proflyder/secrets-gateway@sha256:801cb90ded3e5c1469e9e4a612ae4434d66630c8daee62552f8f7b861d05f80f"
   VOICE_PROXY_IMAGE: "ghcr.io/proflyder/voice-proxy@sha256:539ea1acddc1e269a69f268c56f79c648ec61736e461f2c7a11702ed82584688"
   WAKEGRANT_IMAGE: "ghcr.io/proflyder/wakegrant@sha256:f3116bc1ee516e500dc26b211ebd9482e29963f63dea23ad1f0a87ddb5c93635"
