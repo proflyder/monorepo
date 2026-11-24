@@ -187,7 +187,7 @@ async fn metadata(
         Ok(principal) => principal,
         Err(response) => return response,
     };
-    let path = match resolve(&raw) {
+    let path = match resolve(&state, &principal, Action::Metadata, &raw, None, None) {
         Ok(path) => path,
         Err(response) => return response,
     };
@@ -260,7 +260,14 @@ async fn reveal(
         Ok(principal) => principal,
         Err(response) => return response,
     };
-    let path = match resolve(&raw) {
+    let path = match resolve(
+        &state,
+        &principal,
+        Action::Reveal,
+        &raw,
+        Some(&body.key),
+        body.version,
+    ) {
         Ok(path) => path,
         Err(response) => return response,
     };
@@ -403,7 +410,14 @@ async fn update(
         Ok(principal) => principal,
         Err(response) => return response,
     };
-    let path = match resolve(&raw) {
+    let path = match resolve(
+        &state,
+        &principal,
+        Action::Update,
+        &raw,
+        Some(&body.key),
+        Some(body.cas),
+    ) {
         Ok(path) => path,
         Err(response) => return response,
     };
@@ -533,7 +547,14 @@ async fn rollback(
         Ok(principal) => principal,
         Err(response) => return response,
     };
-    let path = match resolve(&raw) {
+    let path = match resolve(
+        &state,
+        &principal,
+        Action::Rollback,
+        &raw,
+        None,
+        Some(body.version),
+    ) {
         Ok(path) => path,
         Err(response) => return response,
     };
@@ -671,7 +692,7 @@ async fn delete_latest(
         Ok(principal) => principal,
         Err(response) => return response,
     };
-    let path = match resolve(&raw) {
+    let path = match resolve(&state, &principal, Action::Delete, &raw, None, None) {
         Ok(path) => path,
         Err(response) => return response,
     };
@@ -861,9 +882,36 @@ fn audit_outcome(
 }
 
 #[allow(clippy::result_large_err)]
-fn resolve(raw: &str) -> Result<String, Response> {
-    let path = path::normalize(raw).map_err(|_| error(StatusCode::BAD_REQUEST, "invalid_path"))?;
+fn resolve(
+    state: &GatewayState,
+    principal: &Principal,
+    action: Action,
+    raw: &str,
+    key: Option<&str>,
+    version: Option<u64>,
+) -> Result<String, Response> {
+    let Ok(path) = path::normalize(raw) else {
+        audit_outcome(
+            state,
+            principal,
+            action,
+            "<invalid>",
+            key,
+            version,
+            "invalid_path",
+        );
+        return Err(error(StatusCode::BAD_REQUEST, "invalid_path"));
+    };
     if deny::is_denied(&path) {
+        audit_outcome(
+            state,
+            principal,
+            action,
+            &path,
+            key,
+            version,
+            "path_forbidden",
+        );
         return Err(error(StatusCode::FORBIDDEN, "path_forbidden"));
     }
     Ok(path)

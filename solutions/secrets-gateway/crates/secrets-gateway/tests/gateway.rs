@@ -732,7 +732,7 @@ async fn an_openbao_cas_race_is_reported_as_conflict() {
 
 #[tokio::test]
 async fn denied_paths_are_rejected_before_openbao_is_called() {
-    let harness = harness().await;
+    let mut harness = harness().await;
     let before = harness.openbao.requests().len();
     let (status, body) = call(
         &harness.app,
@@ -756,6 +756,12 @@ async fn denied_paths_are_rejected_before_openbao_is_called() {
     .await;
     assert_eq!(status, StatusCode::FORBIDDEN);
     assert_eq!(harness.openbao.requests().len(), before);
+    let received = pushes(&mut harness.pushes).await;
+    assert!(
+        received
+            .iter()
+            .any(|push| push.to_string().contains("путь запрещён"))
+    );
 }
 
 #[tokio::test]
