@@ -12,6 +12,8 @@ import dev.proflyder.home.core.testing.FakeClock
 import dev.proflyder.home.core.model.isTransientNetwork
 import dev.proflyder.home.core.testing.TestFixtures
 import java.io.IOException
+import java.net.InetAddress
+import java.net.UnknownHostException
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -19,7 +21,9 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
+import okhttp3.Dns
 import okhttp3.Interceptor
+import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import okhttp3.mockwebserver.SocketPolicy
@@ -63,8 +67,11 @@ class CallRetryTest {
         ),
     )
 
-    private fun client(interceptors: Set<Interceptor> = emptySet()): HttpControlCatalogClient =
-        HttpControlCatalogClient(testHttp(store, interceptors = interceptors))
+    private fun client(
+        interceptors: Set<Interceptor> = emptySet(),
+        baseClient: OkHttpClient = OkHttpClient(),
+    ): HttpControlCatalogClient =
+        HttpControlCatalogClient(testHttp(store, baseClient = baseClient, interceptors = interceptors))
 
     private fun scheduler(): ConnectSchedulerClient =
         ConnectSchedulerClient(testHttp(store), ServerClock(FakeClock()))
@@ -78,6 +85,43 @@ class CallRetryTest {
 
         assertTrue(result is Outcome.Success)
         assertEquals(2, server.requestCount)
+    }
+
+    @Test
+    fun aDnsFailureAfterResumeIsRetriedBeforeTheUserSeesOffline() = runBlocking {
+        var lookups = 0
+        val flakyDns = object : Dns {
+            override fun lookup(hostname: String): List<InetAddress> {
+                lookups += 1
+                if (lookups < 3) throw UnknownHostException("No address associated with hostname")
+                return Dns.SYSTEM.lookup(hostname)
+            }
+        }
+        server.enqueue(MockResponse().setResponseCode(200).setBody(body))
+
+        val result = client(baseClient = OkHttpClient.Builder().dns(flakyDns).build()).fetch()
+
+        assertTrue(result is Outcome.Success)
+        assertEquals(3, lookups)
+        assertEquals(1, server.requestCount)
+    }
+
+    @Test
+    fun aDnsOutageIsReportedOnlyAfterAllRetries() = runBlocking {
+        var lookups = 0
+        val deadDns = object : Dns {
+            override fun lookup(hostname: String): List<InetAddress> {
+                lookups += 1
+                throw UnknownHostException("No address associated with hostname")
+            }
+        }
+
+        val failure = (client(baseClient = OkHttpClient.Builder().dns(deadDns).build()).fetch() as Outcome.Failure).failure
+
+        assertTrue(failure is RemoteFailure.Offline)
+        assertTrue(failure.isTransientNetwork())
+        assertEquals(3, lookups)
+        assertEquals(0, server.requestCount)
     }
 
     private class CountingRouteGate : RouteGate {

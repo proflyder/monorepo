@@ -10,4 +10,5 @@
     <dimen name="chat_swipe_reply_distance">72dp</dimen>
     <dimen name="chat_image_radius">12dp</dimen>
     <dimen name="chat_alert_button_gap">20dp</dimen>
+    <dimen name="chat_fab_gap">8dp</dimen>
 </resources>

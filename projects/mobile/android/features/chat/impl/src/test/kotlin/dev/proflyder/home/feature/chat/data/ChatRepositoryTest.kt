@@ -5,7 +5,10 @@ import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.model.ConnectCode
 import dev.proflyder.home.core.network.RouteGate
+import dev.proflyder.home.core.runtime.Backoff
 import java.io.File
+import java.io.IOException
+import kotlin.time.Duration.Companion.milliseconds
 import dev.proflyder.home.core.model.ChatEvent
 import dev.proflyder.home.core.model.ChatRole
 import dev.proflyder.home.feature.chat.ChatFixtures
@@ -108,6 +111,33 @@ class ChatRepositoryTest {
         val repository = repository()
         repository.refresh()
         assertEquals(RemoteFailure.Unauthorized, repository.snapshot.failure)
+    }
+
+    @Test
+    fun aDroppedStreamReconnectsWithoutReportingOffline() = runTest {
+        val message = ChatFixtures.message("a9", 9, ChatRole.ASSISTANT, "Готово")
+        client.events = flow {
+            emit(ChatEvent.Upsert(message))
+            throw IOException("unexpected end of stream")
+        }
+        val repository = LiveChatRepository(client, store, backgroundScope, OpenRouteGate).apply {
+            clock = ChatClock(
+                now = { 1L },
+                newClientId = { "c${++ids}" },
+                backoff = Backoff(initial = 1.milliseconds, max = 10.milliseconds),
+                io = StandardTestDispatcher(testScheduler),
+            )
+        }
+        val watcher = backgroundScope.launch { repository.timeline.collect { } }
+
+        runCurrent()
+        advanceTimeBy(50)
+        runCurrent()
+
+        assertNull(repository.snapshot.failure)
+        assertEquals(listOf("Готово"), repository.snapshot.messages.map { it.text })
+        assertTrue(client.streams >= 2)
+        watcher.cancel()
     }
 
     @Test

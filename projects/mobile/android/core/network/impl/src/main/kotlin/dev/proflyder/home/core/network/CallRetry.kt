@@ -15,16 +15,29 @@ import kotlin.time.Duration.Companion.milliseconds
 internal data class CallRetry(
     val maxAttempts: Int,
     val step: Duration,
+    val networkStep: Duration = step,
 ) {
     fun allows(attempt: Int, failure: Throwable): Boolean =
         attempt < maxAttempts && failure.isRetryableTransportFailure()
 
-    fun delayAfter(attempt: Int): Duration = step * attempt
+    fun delayAfter(attempt: Int, failure: Throwable): Duration = when {
+        failure.isNetworkStartupFailure() -> networkStep * attempt
+        else -> step * attempt
+    }
 
     companion object {
-        val Idempotent = CallRetry(maxAttempts = 3, step = 150.milliseconds)
+        val Idempotent = CallRetry(
+            maxAttempts = 3,
+            step = 150.milliseconds,
+            networkStep = 700.milliseconds,
+        )
         val Once = CallRetry(maxAttempts = 1, step = Duration.ZERO)
     }
+}
+
+internal fun Throwable.isNetworkStartupFailure(): Boolean = when (this) {
+    is UnknownHostException, is ConnectException, is NoRouteToHostException -> true
+    else -> false
 }
 
 internal fun Throwable.isRetryableTransportFailure(): Boolean = when {

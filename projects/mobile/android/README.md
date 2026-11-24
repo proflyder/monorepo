@@ -328,6 +328,9 @@ badges are selectors in `render`.
   Retrofit/OkHttp factory: redirects off (a bearer never follows a
   `Location`), only `@Idempotent` calls are retried, streams (chat SSE,
   intercom `Watch`) have no read timeout and no inspection interceptors.
+  A DNS or connection-establishment failure is retried for about 2 s
+  (three attempts) before it becomes `RemoteFailure.Offline`, so a lookup that
+  fails right after resume or a network switch does not flash "offline".
 - `RouteGate.await()` holds every request until all `RouteCondition`s pass
   (network present, settings loaded, VPN tunnel not switching), at most 20 s.
   A retry of an `@Idempotent` call waits for the gate again, and reopening
@@ -351,7 +354,10 @@ badges are selectors in `render`.
 - `Unknown` never connects. In the foreground the route shows "checking"
   for at most 15 s, then the decision is logged as `ENVIRONMENT_TIMEOUT`.
   A network blocked for the app (Doze, data saver) is `Unknown`, not `Away`,
-  so a failed home probe during sleep does not look like leaving home.
+  so a failed home probe during sleep does not look like leaving home. When the
+  same network was already classified `Home`, a blocked-status flap keeps
+  `Home` instead of toggling `Home`/`Unknown`; a different handle still starts
+  as `Unknown`.
 - Decisions are logged: tag `VpnAutoConnect` (source, action, reason,
   environment, foreground, settings, manual wish; actions at WARN),
   `VpnController` (origin, `atHome`, skipped starts, exhausted outcome) and

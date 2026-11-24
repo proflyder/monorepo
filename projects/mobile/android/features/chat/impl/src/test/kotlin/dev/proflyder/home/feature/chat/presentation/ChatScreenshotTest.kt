@@ -22,10 +22,12 @@ import dev.proflyder.home.core.ui.pinAboveKeyboard
 import dev.proflyder.home.feature.chat.ChatFixtures
 import dev.proflyder.home.feature.chat.data.ChatTimeline
 import dev.proflyder.home.feature.chat.data.Outgoing
+import dev.proflyder.home.feature.chat.impl.R
 import dev.proflyder.home.feature.chat.impl.databinding.FragmentChatBinding
 import java.io.File
 import java.time.ZoneOffset
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
@@ -205,6 +207,22 @@ class ChatScreenshotTest {
     @Config(qualifiers = "ru-w411dp-h891dp-night-xxhdpi")
     fun conversationInNeonDark() {
         render("chat-neon-dark", AppTheme.NEON, conversation())
+    }
+
+    @Test
+    @Config(qualifiers = "ru-w411dp-h891dp-night-xxhdpi")
+    fun scrollFabFloatsAboveTheComposerWithoutABackgroundPlate() {
+        val binding = render(
+            "chat-fab-neon-dark",
+            AppTheme.NEON,
+            conversation(),
+            prepare = { it.chatScrollDown.visibility = View.VISIBLE },
+        )
+        val gap = binding.root.resources.getDimensionPixelSize(R.dimen.chat_fab_gap)
+
+        assertEquals(View.VISIBLE, binding.chatScrollDown.visibility)
+        assertEquals(binding.chatBody.top, binding.chatScrollDown.bottom + gap)
+        assertTrue(binding.chatList.paddingBottom >= binding.chatPanel.height)
     }
 
     @Test

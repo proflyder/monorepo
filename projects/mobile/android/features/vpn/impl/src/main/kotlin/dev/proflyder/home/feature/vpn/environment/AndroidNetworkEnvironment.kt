@@ -62,6 +62,8 @@ internal class AndroidNetworkEnvironment(
         .onEach { logger.info(TAG, "environment ${it.javaClass.simpleName}") }
         .stateIn(scope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS, 0), HomeNetworkState.Unknown)
 
+    private var lastState: HomeNetworkState = HomeNetworkState.Unknown
+
     private class Probe(val networks: NetworkSnapshot, val endpoint: ServerEndpoint?)
 
     private class NetworkSnapshot(val networks: List<Network>, val blocked: Set<Network> = emptySet()) {
@@ -72,9 +74,10 @@ internal class AndroidNetworkEnvironment(
     private fun classify(probe: Probe): HomeNetworkState {
         val endpoint = probe.endpoint
         val snapshot = probe.networks
-        return EnvironmentClassifier.classify(snapshot.facts, endpoint != null) {
+        val state = EnvironmentClassifier.classify(snapshot.facts, endpoint != null) {
             endpoint != null && snapshot.usable.any { reachesHome(it, endpoint) }
         }
+        return EnvironmentClassifier.keepKnownHome(state, lastState, snapshot.facts.handles).also { lastState = it }
     }
 
     @SuppressLint("MissingPermission")
