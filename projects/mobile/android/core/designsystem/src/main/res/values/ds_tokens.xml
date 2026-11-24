@@ -31,6 +31,7 @@
     <dimen name="ds_pill_padding_horizontal">14dp</dimen>
     <dimen name="ds_fab_label_padding_vertical">6dp</dimen>
     <dimen name="ds_popup_elevation">8dp</dimen>
+    <dimen name="ds_popup_stroke_width">1dp</dimen>
     <dimen name="ds_popup_min_width">200dp</dimen>
     <dimen name="ds_status_chip_height">24dp</dimen>
     <dimen name="ds_empty_icon">48dp</dimen>

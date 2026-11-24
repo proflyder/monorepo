@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="@dimen/ds_control_l"
@@ -17,7 +16,7 @@
         android:layout_width="@dimen/ds_icon_m"
         android:layout_height="@dimen/ds_icon_m"
         android:importantForAccessibility="no"
-        app:tint="?attr/colorOnSurface" />
+        android:tint="?attr/homePopupItemIconTint" />
 
     <TextView
         android:id="@+id/ds_popup_menu_label"

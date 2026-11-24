@@ -6,7 +6,10 @@
     android:insetBottom="@dimen/ds_space_s">
 
     <shape android:shape="rectangle">
-        <solid android:color="?attr/colorSurfaceContainer" />
+        <solid android:color="?attr/homePopupSurface" />
+        <stroke
+            android:color="?attr/homePopupStroke"
+            android:width="@dimen/ds_popup_stroke_width" />
         <corners android:radius="@dimen/ds_radius_xl" />
     </shape>
 </inset>
