@@ -23,6 +23,17 @@
     <string name="history_type_find">Find phone request</string>
     <string name="settings_appearance_title">Appearance</string>
     <string name="settings_appearance_subtitle">Theme and light or dark mode</string>
+    <string name="settings_section_system">System</string>
+    <string name="settings_updates_title">Check for updates</string>
+    <string name="settings_updates_version">Version %1$s</string>
+    <string name="settings_updates_checking">Version %1$s · checking…</string>
+    <string name="settings_updates_up_to_date">Version %1$s · up to date</string>
+    <string name="settings_updates_available">Version %1$s is available</string>
+    <string name="settings_updates_sign_in">Sign in as a tester to check</string>
+    <string name="settings_updates_downloading">Downloading the update…</string>
+    <string name="settings_updates_installing">Installing the update…</string>
+    <string name="settings_updates_offline">No connection, try again later</string>
+    <string name="settings_updates_failed">Could not check for updates</string>
     <string name="settings_appearance_mode">Mode</string>
     <string name="settings_appearance_themes">Theme</string>
     <string name="settings_appearance_mode_system">System</string>

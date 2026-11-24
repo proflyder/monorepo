@@ -13,6 +13,7 @@ import dev.proflyder.home.core.access.AppAccessSession
 import dev.proflyder.home.core.access.AppAccessState
 import dev.proflyder.home.core.access.allows
 import dev.proflyder.home.core.model.AppLogger
+import dev.proflyder.home.core.navigation.AppActivityContribution
 import dev.proflyder.home.core.navigation.AppChromeState
 import dev.proflyder.home.core.navigation.DeepLinkResolver
 import dev.proflyder.home.core.navigation.FeatureRegistry
@@ -46,6 +47,9 @@ class MainActivity : AppCompatActivity(), NavigatorHost, FailureNoticePolicyProv
 
     @Inject
     internal lateinit var toolbarActions: Set<ToolbarAction>
+
+    @Inject
+    internal lateinit var activityContributions: Set<AppActivityContribution>
 
     @Inject
     internal lateinit var deepLinks: DeepLinkResolver
@@ -88,6 +92,7 @@ class MainActivity : AppCompatActivity(), NavigatorHost, FailureNoticePolicyProv
     private fun attachContributions() {
         val slots = ToolbarSlots(binding.toolbarTitleRow, binding.toolbarEndSlot, binding.appbarBelowSlot)
         toolbarContributions.sortedBy { it.order }.forEach { it.attach(this, slots, router) }
+        activityContributions.sortedBy { it.order }.forEach { it.attach(this) }
     }
 
     private fun render(chrome: AppChromeState, accessState: AppAccessState) {
