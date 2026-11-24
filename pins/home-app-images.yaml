@@ -5,12 +5,12 @@ metadata:
   namespace: flux-system
   annotations:
     proflyder.dev/source: "initial pin from live cluster 2026-11-10"
-    proflyder.dev/source-commit: "f7846d34bf60b2edef02f03976c2a0098abc85a1"
-    proflyder.dev/source-tree: "651ed7756e6e7ddc90e7b3f20a73e23482aaf30f"
-    proflyder.dev/verified-at: "2026-11-24T18:48:23Z"
-    proflyder.dev/run: "https://github.com/proflyder/monorepo/actions/runs/45463322739"
+    proflyder.dev/source-commit: "49c44c28797cb9f1313c0dd5162cd41ee852719b"
+    proflyder.dev/source-tree: "0d8252c16b66c2d5d865f97e3e0c143ce1c1b65c"
+    proflyder.dev/verified-at: "2026-11-24T20:49:43Z"
+    proflyder.dev/run: "https://github.com/proflyder/monorepo/actions/runs/45484608590"
 data:
-  BUILD_ID: "f7846d34bf60"
+  BUILD_ID: "49c44c28797c"
   CURRENCY_BOT_IMAGE: "ghcr.io/proflyder/currency-bot@sha256:17ef9272818cb64e1047b63f111c2debac4162f8eec16627f57d2803c7a19ace"
   HA_BRIDGE_IMAGE: "ghcr.io/proflyder/ha-bridge@sha256:8b39dd6bf19b0bd394bcaa8604c01d8a918d491a3ece6f24d31f0d6cafaf7582"
   HA_CONFIG_SYNC_IMAGE: "ghcr.io/proflyder/ha-config-sync@sha256:ed946277931faa385f957730d991587dc8fea397824a794b92a99dda3ddf09f9"
