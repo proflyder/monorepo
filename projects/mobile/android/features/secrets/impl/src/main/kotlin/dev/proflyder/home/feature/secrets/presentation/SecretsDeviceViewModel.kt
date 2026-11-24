@@ -16,6 +16,7 @@ internal data class SecretsDeviceUiState(
     val loading: Boolean = true,
     val enrolled: Boolean = false,
     val deviceId: String? = null,
+    val enrolledAt: Long = 0,
     val code: String = "",
     val keyReady: Boolean = false,
     val rebinding: Boolean = false,
@@ -74,6 +75,7 @@ internal class SecretsDeviceViewModel(
                             loading = false,
                             enrolled = device.value.enrolled,
                             deviceId = device.value.deviceId,
+                            enrolledAt = device.value.enrolledAt,
                         )
                     }
                     when {
@@ -141,6 +143,7 @@ internal class SecretsDeviceViewModel(
                             busy = false,
                             enrolled = result.value.enrolled,
                             deviceId = result.value.deviceId,
+                            enrolledAt = result.value.enrolledAt,
                             code = "",
                             rebinding = false,
                         )

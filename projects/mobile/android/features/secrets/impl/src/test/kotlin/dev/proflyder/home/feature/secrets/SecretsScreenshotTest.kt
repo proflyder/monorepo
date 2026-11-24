@@ -17,10 +17,13 @@ import dev.proflyder.home.feature.secrets.presentation.SecretPathAdapter
 import dev.proflyder.home.feature.secrets.presentation.SecretPathRow
 import dev.proflyder.home.feature.secrets.presentation.SecretsCatalogAdapter
 import dev.proflyder.home.feature.secrets.presentation.SecretsCatalogGroup
+import dev.proflyder.home.feature.secrets.presentation.SecretsCatalogRow
 import dev.proflyder.home.feature.secrets.presentation.catalogRows
 import dev.proflyder.home.feature.secrets.presentation.keyRows
 import dev.proflyder.home.feature.secrets.presentation.versionRows
 import java.io.File
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -43,7 +46,7 @@ class SecretsScreenshotTest {
     fun theCatalogShowsGroupedPathsWithDescriptionsAndSearch() {
         val context = themed()
         val binding = FragmentSecretsCatalogBinding.inflate(LayoutInflater.from(context))
-        val adapter = SecretsCatalogAdapter {}
+        val adapter = SecretsCatalogAdapter({})
         binding.secretsCatalogList.adapter = adapter
         adapter.submitList(
             catalogRows(
@@ -59,12 +62,62 @@ class SecretsScreenshotTest {
             ),
         )
         binding.secretsCatalogSearch.setText("k8s")
-        binding.secretsCatalogDevice.visibility = View.VISIBLE
         binding.secretsCatalogProgress.visibility = View.GONE
         shadowOf(android.os.Looper.getMainLooper()).idle()
 
         val bitmap = render(surface(context, binding.root), 411, 891)
         save(bitmap, "secrets-catalog.png")
+        assertTrue(bitmap.width > 0)
+    }
+
+    @Test
+    fun theUnboundPhoneSeesTheBindCardAboveTheList() = catalogWithDeviceCard(deviceCard = true, name = "secrets-catalog-device-card-light.png")
+
+    @Test
+    @Config(qualifiers = "ru-w411dp-h891dp-night-xxhdpi")
+    fun theUnboundPhoneSeesTheBindCardAboveTheListInDark() =
+        catalogWithDeviceCard(deviceCard = true, name = "secrets-catalog-device-card-dark.png")
+
+    @Test
+    fun theBoundPhoneSeesNoBindCard() = catalogWithDeviceCard(deviceCard = false, name = "secrets-catalog-enrolled-light.png")
+
+    @Test
+    @Config(qualifiers = "ru-w411dp-h891dp-night-xxhdpi")
+    fun theBoundPhoneSeesNoBindCardInDark() = catalogWithDeviceCard(deviceCard = false, name = "secrets-catalog-enrolled-dark.png")
+
+    private fun catalogWithDeviceCard(deviceCard: Boolean, name: String) {
+        val context = themed()
+        val groups = listOf(
+            SecretsCatalogGroup(
+                "k8s",
+                listOf(
+                    FakeSecretsRepository.entry("k8s/home-assistant/phone-push", "Push service token"),
+                    FakeSecretsRepository.entry("k8s/secrets-gateway-device", "Device enrollment"),
+                    FakeSecretsRepository.entry("k8s/test", "smoke probe, not secret"),
+                ),
+            ),
+            SecretsCatalogGroup(
+                "infra",
+                listOf(FakeSecretsRepository.entry("infra/backup/offsite", "restic credentials")),
+            ),
+        )
+        val rows = catalogRows(groups, deviceCard)
+        val binding = FragmentSecretsCatalogBinding.inflate(LayoutInflater.from(context))
+        val adapter = SecretsCatalogAdapter({}, {})
+        binding.secretsCatalogList.adapter = adapter
+        adapter.submitList(rows)
+        binding.secretsCatalogProgress.visibility = View.GONE
+        shadowOf(android.os.Looper.getMainLooper()).idle()
+
+        if (deviceCard) {
+            assertEquals(SecretsCatalogRow.DeviceCard, rows.first())
+        } else {
+            assertFalse(rows.any { it is SecretsCatalogRow.DeviceCard })
+        }
+        assertTrue(rows.size > 1)
+
+        val bitmap = render(surface(context, binding.root), 411, 891)
+        save(bitmap, name)
         assertTrue(bitmap.width > 0)
     }
 

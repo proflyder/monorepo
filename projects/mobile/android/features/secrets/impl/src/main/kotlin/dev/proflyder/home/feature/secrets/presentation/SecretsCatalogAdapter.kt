@@ -8,6 +8,7 @@ import dev.proflyder.home.core.ui.BaseAdapterCallback
 import dev.proflyder.home.core.ui.BaseListAdapter
 import dev.proflyder.home.core.ui.BaseViewHolder
 import dev.proflyder.home.core.ui.ViewBinding
+import dev.proflyder.home.feature.secrets.impl.databinding.ItemSecretDeviceCardBinding
 import dev.proflyder.home.feature.secrets.impl.databinding.ItemSecretGroupBinding
 import dev.proflyder.home.feature.secrets.impl.databinding.ItemSecretPathBinding
 
@@ -19,18 +20,28 @@ private val CatalogDiff = KeyedDiff<SecretsCatalogRow>(key = { it.key })
 
 internal class SecretsCatalogAdapter(
     private val onClick: (SecretsCatalogRow.EntryRow) -> Unit,
+    private val onBindDevice: () -> Unit = {},
 ) : BaseListAdapter<SecretsCatalogRow, ViewBinding, CatalogCallback>(BaseAdapterCallback<SecretsCatalogRow>(), CatalogDiff) {
 
     override fun viewTypeOf(item: SecretsCatalogRow): Int = when (item) {
+        SecretsCatalogRow.DeviceCard -> TYPE_DEVICE
         is SecretsCatalogRow.Group -> TYPE_GROUP
         is SecretsCatalogRow.EntryRow -> TYPE_ENTRY
     }
 
     override fun onCreateHolder(inflater: LayoutInflater, parent: ViewGroup, viewType: Int): CatalogHolder =
         when (viewType) {
+            TYPE_DEVICE -> DeviceHolder(ItemSecretDeviceCardBinding.inflate(inflater, parent, false))
             TYPE_GROUP -> GroupHolder(ItemSecretGroupBinding.inflate(inflater, parent, false))
             else -> EntryHolder(ItemSecretPathBinding.inflate(inflater, parent, false))
         }
+
+    private inner class DeviceHolder(private val views: ItemSecretDeviceCardBinding) :
+        CatalogHolder(views, BaseAdapterCallback<SecretsCatalogRow>()) {
+        override fun bind(item: SecretsCatalogRow) {
+            views.secretDeviceCardBind.setOnClickListener { onBindDevice() }
+        }
+    }
 
     private class GroupHolder(private val views: ItemSecretGroupBinding) : CatalogHolder(views, BaseAdapterCallback<SecretsCatalogRow>()) {
         override fun bind(item: SecretsCatalogRow) {
@@ -49,7 +60,8 @@ internal class SecretsCatalogAdapter(
     }
 
     private companion object {
-        const val TYPE_GROUP = 0
-        const val TYPE_ENTRY = 1
+        const val TYPE_DEVICE = 0
+        const val TYPE_GROUP = 1
+        const val TYPE_ENTRY = 2
     }
 }

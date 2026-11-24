@@ -37,3 +37,9 @@ interface ToolbarAction {
 
     fun perform(navigator: Navigator)
 }
+
+interface ScreenActionSink {
+    fun publishScreenActions(owner: Any, actions: List<ToolbarAction>)
+
+    fun clearScreenActions(owner: Any)
+}

@@ -54,6 +54,7 @@ class SecretsDeviceViewModelTest {
 
         assertTrue(viewModel.state.value.enrolled)
         assertEquals("device-7", viewModel.state.value.deviceId)
+        assertEquals(10, viewModel.state.value.enrolledAt)
     }
 
     @Test

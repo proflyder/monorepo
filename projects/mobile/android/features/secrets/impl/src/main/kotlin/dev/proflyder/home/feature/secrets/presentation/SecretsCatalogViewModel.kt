@@ -2,6 +2,8 @@ package dev.proflyder.home.feature.secrets.presentation
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import dev.proflyder.home.core.model.DeviceEnrollment
+import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.model.SecretEntry
 import dev.proflyder.home.core.presentation.StateViewModel
@@ -14,6 +16,7 @@ import dev.zacsweers.metro.ClassKey
 import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.binding
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
@@ -29,10 +32,16 @@ internal data class SecretsCatalogUiState(
     val failure: RemoteFailure? = null,
     val locked: Boolean = true,
     val unlocking: Boolean = false,
-)
+    val device: DeviceEnrollment? = null,
+) {
+    val deviceNotEnrolled: Boolean get() = !locked && device?.enrolled == false
+
+    val deviceEnrolled: Boolean get() = !locked && device?.enrolled == true
+}
 
 internal sealed interface SecretsCatalogIntent {
     data object Refresh : SecretsCatalogIntent
+    data object RefreshDevice : SecretsCatalogIntent
     data object RequestAccess : SecretsCatalogIntent
     data class AuthenticationFinished(val granted: Boolean) : SecretsCatalogIntent
     data class Query(val value: String) : SecretsCatalogIntent
@@ -52,6 +61,7 @@ internal class SecretsCatalogViewModel(
     private val unlock: SecretsUnlockSession,
 ) : StateViewModel<SecretsCatalogUiState, SecretsCatalogIntent, SecretsCatalogEvent>(SecretsCatalogUiState()) {
     private var requested = false
+    private var deviceJob: Job? = null
 
     init {
         combine(repository.catalog, unlock.unlocked) { catalog, unlocked ->
@@ -63,7 +73,8 @@ internal class SecretsCatalogViewModel(
 
     override fun handle(intent: SecretsCatalogIntent) {
         when (intent) {
-            SecretsCatalogIntent.Refresh -> if (!currentState.locked) repository.refresh()
+            SecretsCatalogIntent.Refresh -> refreshAll()
+            SecretsCatalogIntent.RefreshDevice -> refreshDevice()
             SecretsCatalogIntent.RequestAccess -> requestAccess()
             is SecretsCatalogIntent.AuthenticationFinished -> finishAuthentication(intent.granted)
             is SecretsCatalogIntent.Query -> updateQuery(intent.value)
@@ -86,6 +97,24 @@ internal class SecretsCatalogViewModel(
         updateState { copy(unlocking = false) }
         unlock.unlock()
         refreshOnce()
+        refreshDevice()
+    }
+
+    private fun refreshAll() {
+        if (currentState.locked) return
+        repository.refresh()
+        refreshDevice()
+    }
+
+    private fun refreshDevice() {
+        if (currentState.locked) return
+        deviceJob?.cancel()
+        deviceJob = launch {
+            when (val result = repository.device()) {
+                is Outcome.Success -> updateState { copy(device = result.value) }
+                is Outcome.Failure -> Unit
+            }
+        }
     }
 
     private fun updateQuery(value: String) {

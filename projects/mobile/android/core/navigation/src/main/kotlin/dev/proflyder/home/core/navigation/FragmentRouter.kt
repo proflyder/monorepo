@@ -32,12 +32,13 @@ class FragmentRouter(
     private val registry: FeatureRegistry,
     private val logger: AppLogger,
     savedState: RouterSavedState? = null,
-) : Navigator, DefaultLifecycleObserver {
+) : Navigator, ScreenActionSink, DefaultLifecycleObserver {
     private val initialEntry = registry.tabs().firstOrNull()
         ?: error("at least one bottom-bar feature is required")
     private val routeState = TabRouteStack(initialEntry.id, initialEntry.rootDestination.route)
     private val pending = PendingTransitions<Command>(capacity = 32)
     private val titlesByRoute = mutableMapOf<String, Int>()
+    private val screenActionsByOwner = LinkedHashMap<Any, List<ToolbarAction>>()
 
     private var resumed = false
     private var initialized = false
@@ -127,6 +128,20 @@ class FragmentRouter(
             return true
         }
         return performBack()
+    }
+
+    override fun publishScreenActions(owner: Any, actions: List<ToolbarAction>) {
+        if (actions.isEmpty()) {
+            clearScreenActions(owner)
+            return
+        }
+        screenActionsByOwner[owner] = actions
+        republishChrome()
+    }
+
+    override fun clearScreenActions(owner: Any) {
+        if (screenActionsByOwner.remove(owner) == null) return
+        republishChrome()
     }
 
     fun onHostSaveState(outState: Bundle) {
@@ -380,7 +395,13 @@ class FragmentRouter(
             canGoBack = canGoBack,
             overlay = currentRouteOverlay(),
             hidesBottomBar = routeEntry?.hidesBottomBar == true,
+            screenActions = screenActionsByOwner.values.flatten(),
         )
+    }
+
+    private fun republishChrome() {
+        val entry = registry.entry(routeState.currentTabId) ?: initialEntry
+        publishChrome(entry, canGoBack = fragmentManager.backStackEntryCount > 0)
     }
 
     private fun currentRouteOverlay(): Boolean {

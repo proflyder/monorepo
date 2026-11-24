@@ -25,4 +25,5 @@ data class AppChromeState(
     val canGoBack: Boolean = false,
     val overlay: Boolean = false,
     val hidesBottomBar: Boolean = false,
+    val screenActions: List<ToolbarAction> = emptyList(),
 )

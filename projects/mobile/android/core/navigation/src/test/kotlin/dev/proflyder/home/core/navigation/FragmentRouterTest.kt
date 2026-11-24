@@ -73,6 +73,28 @@ class FragmentRouterTest {
     }
 
     @Test
+    fun screenActionsArePublishedIntoTheChromeUntilTheScreenClearsThem() {
+        val activity = launch()
+        val action = object : ToolbarAction {
+            override val itemId: Int = 2001
+            override val order: Int = 0
+            override val titleRes: Int = android.R.string.ok
+            override val iconRes: Int = android.R.drawable.ic_menu_help
+
+            override fun perform(navigator: Navigator) = Unit
+        }
+
+        activity.router.publishScreenActions(activity, listOf(action))
+
+        assertEquals(listOf(action), activity.router.chrome.value.screenActions)
+        assertEquals(ALARMS_TITLE, activity.router.chrome.value.titleRes)
+
+        activity.router.clearScreenActions(activity)
+
+        assertTrue(activity.router.chrome.value.screenActions.isEmpty())
+    }
+
+    @Test
     fun recreationRestoresSelectedEditorBackStackAndTitle() {
         val first = launch()
         first.router.navigate(AlarmEditorDestination("7"))
