@@ -1,5 +1,5 @@
 {
-  "checksum": "8a230fb9d06c427bf9427c0af3db8bc8028492c735fa4627703c5017ce4f7cd2",
+  "checksum": "8b4c3775905f9c2ae685342808878dbc485792ffaecdd0e649bda6050e405486",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -751,6 +751,12 @@
     },
     "asn1-rs 0.7.2": {
       "common_attrs": {
+        "crate_features": [
+          "datetime",
+          "default",
+          "std",
+          "time"
+        ],
         "deps": [
           {
             "id": "nom 7.1.3",
@@ -767,6 +773,10 @@
           {
             "id": "thiserror 2.0.21",
             "target": "thiserror"
+          },
+          {
+            "id": "time 0.3.55",
+            "target": "time"
           }
         ],
         "edition": "2018",
@@ -4280,6 +4290,12 @@
     },
     "der-parser 10.0.0": {
       "common_attrs": {
+        "crate_features": [
+          "bigint",
+          "default",
+          "num-bigint",
+          "std"
+        ],
         "deps": [
           {
             "id": "asn1-rs 0.7.2",
@@ -4288,6 +4304,10 @@
           {
             "id": "nom 7.1.3",
             "target": "nom"
+          },
+          {
+            "id": "num-bigint 0.4.8",
+            "target": "num_bigint"
           },
           {
             "id": "num-traits 0.2.19",
@@ -4688,6 +4708,10 @@
     },
     "displaydoc 0.2.7": {
       "common_attrs": {
+        "crate_features": [
+          "default",
+          "std"
+        ],
         "deps": [
           {
             "id": "proc-macro2 1.0.107",
@@ -10963,6 +10987,9 @@
     },
     "minimal-lexical 0.2.1": {
       "common_attrs": {
+        "crate_features": [
+          "std"
+        ],
         "edition": "2018"
       },
       "library_target_name": "minimal_lexical",
@@ -11258,6 +11285,11 @@
     },
     "nom 7.1.3": {
       "common_attrs": {
+        "crate_features": [
+          "alloc",
+          "default",
+          "std"
+        ],
         "deps": [
           {
             "id": "memchr 2.8.3",
@@ -11334,6 +11366,10 @@
     },
     "num-bigint 0.4.8": {
       "common_attrs": {
+        "crate_features": [
+          "default",
+          "std"
+        ],
         "deps": [
           {
             "id": "num-integer 0.1.47",
@@ -11588,6 +11624,19 @@
     "oid-registry 0.8.1": {
       "build_script_attrs": {},
       "common_attrs": {
+        "crate_features": [
+          "crypto",
+          "default",
+          "kdf",
+          "nist_algs",
+          "pkcs1",
+          "pkcs12",
+          "pkcs7",
+          "pkcs9",
+          "registry",
+          "x509",
+          "x962"
+        ],
         "deps": [
           {
             "id": "asn1-rs 0.7.2",
@@ -17439,12 +17488,20 @@
             "target": "axum"
           },
           {
-            "id": "hmac 0.13.0",
-            "target": "hmac"
+            "id": "base64 0.23.1",
+            "target": "base64"
+          },
+          {
+            "id": "hex 0.4.3",
+            "target": "hex"
           },
           {
             "id": "http 1.5.0",
             "target": "http"
+          },
+          {
+            "id": "p256 0.14.0",
+            "target": "p256"
           },
           {
             "id": "reqwest 0.13.5",
@@ -17459,8 +17516,8 @@
             "target": "serde_json"
           },
           {
-            "id": "sha1 0.11.0",
-            "target": "sha1"
+            "id": "sha2 0.11.1",
+            "target": "sha2"
           },
           {
             "id": "subtle 2.6.1",
@@ -17481,6 +17538,10 @@
           {
             "id": "tracing 0.1.44",
             "target": "tracing"
+          },
+          {
+            "id": "x509-parser 0.18.1",
+            "target": "x509_parser"
           }
         ],
         "deps_dev": [
@@ -24339,6 +24400,10 @@
     },
     "x509-parser 0.18.1": {
       "common_attrs": {
+        "crate_features": [
+          "ring",
+          "verify"
+        ],
         "deps": [
           {
             "id": "asn1-rs 0.7.2",
@@ -24363,6 +24428,10 @@
           {
             "id": "oid-registry 0.8.1",
             "target": "oid_registry"
+          },
+          {
+            "id": "ring 0.17.14",
+            "target": "ring"
           },
           {
             "id": "rusticata-macros 4.1.0",
@@ -25495,6 +25564,7 @@
     "libc 0.2.191",
     "libloading 0.9.0",
     "log 0.4.35",
+    "p256 0.14.0",
     "prometheus-client 0.25.2",
     "prost 0.14.4",
     "rand 0.10.3",
@@ -25534,6 +25604,7 @@
     "uuid 1.29.1",
     "windows-core 0.62.2",
     "windows-link 0.2.1",
+    "x509-parser 0.18.1",
     "zbus 6.2.1",
     "zeroize 1.9.1",
     "zip 9.4.2"

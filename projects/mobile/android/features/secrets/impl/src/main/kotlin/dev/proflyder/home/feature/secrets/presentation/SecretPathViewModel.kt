@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.model.SecretMetadata
+import dev.proflyder.home.core.model.SecretOperation
+import dev.proflyder.home.core.model.StepUpChallenge
 import dev.proflyder.home.core.presentation.StateViewModel
 import dev.proflyder.home.core.ui.ViewModelSource
 import dev.proflyder.home.feature.secrets.SecretsRepository
@@ -32,12 +34,9 @@ internal data class SecretAction(
 internal sealed interface SecretDialog {
     data class StepUp(
         val action: SecretAction,
-        val digits: String = "",
         val busy: Boolean = false,
         val problem: SecretProblem? = null,
-    ) : SecretDialog {
-        val complete: Boolean get() = digits.length == TOTP_LENGTH && digits.all(Char::isDigit)
-    }
+    ) : SecretDialog
 
     data class Edit(
         val key: String,
@@ -76,13 +75,20 @@ internal sealed interface SecretPathIntent {
     data object DeleteRequest : SecretPathIntent
     data object ConfirmAccept : SecretPathIntent
     data object DialogDismiss : SecretPathIntent
-    data class StepUpDigits(val value: String) : SecretPathIntent
     data object StepUpSubmit : SecretPathIntent
+    data class StepUpSigned(val signature: String) : SecretPathIntent
+    data object StepUpCancelled : SecretPathIntent
+    data class StepUpFailed(val reason: DeviceSignatureFailure) : SecretPathIntent
 }
 
 internal sealed interface SecretPathEvent {
     data class CopyValue(val value: String) : SecretPathEvent
     data class Message(val problem: SecretProblem) : SecretPathEvent
+    data class Sign(
+        val challenge: StepUpChallenge,
+        val operation: SecretOperation,
+        val action: SecretAction,
+    ) : SecretPathEvent
     data object Deleted : SecretPathEvent
 }
 
@@ -91,6 +97,7 @@ internal class SecretPathViewModel(
     private val repository: SecretsRepository,
 ) : StateViewModel<SecretPathUiState, SecretPathIntent, SecretPathEvent>(SecretPathUiState()) {
     private var mask: Job? = null
+    private var signing: PendingSignature? = null
 
     init {
         repository.stepUpActive
@@ -115,9 +122,11 @@ internal class SecretPathViewModel(
                 confirm(SecretAction(SecretActionKind.DELETE, version = version))
             }
             SecretPathIntent.ConfirmAccept -> confirmAccept()
-            SecretPathIntent.DialogDismiss -> updateState { copy(dialog = null) }
-            is SecretPathIntent.StepUpDigits -> stepUpDigits(intent.value)
+            SecretPathIntent.DialogDismiss -> dismiss()
             SecretPathIntent.StepUpSubmit -> stepUpSubmit()
+            is SecretPathIntent.StepUpSigned -> signed(intent.signature)
+            SecretPathIntent.StepUpCancelled -> cancelled()
+            is SecretPathIntent.StepUpFailed -> signingFailed(intent.reason)
         }
     }
 
@@ -253,72 +262,122 @@ internal class SecretPathViewModel(
         updateState { copy(dialog = SecretDialog.StepUp(confirm.action)) }
     }
 
-    private fun stepUpDigits(value: String) {
-        val stepUp = currentState.dialog as? SecretDialog.StepUp ?: return
-        val digits = value.filter(Char::isDigit).take(TOTP_LENGTH)
-        updateState { copy(dialog = stepUp.copy(digits = digits, problem = null)) }
+    private fun dismiss() {
+        signing = null
+        updateState { copy(dialog = null) }
     }
 
     private fun stepUpSubmit() {
         val stepUp = currentState.dialog as? SecretDialog.StepUp ?: return
-        if (!stepUp.complete || stepUp.busy) return
-        if (stepUp.action.kind == SecretActionKind.REVEAL) {
-            openSession(stepUp)
-            return
-        }
-        mutate(stepUp)
-    }
-
-    private fun openSession(stepUp: SecretDialog.StepUp) {
+        if (stepUp.busy) return
+        val version = currentVersion() ?: return
+        val operation = operationFor(stepUp.action)
         updateState { copy(dialog = stepUp.copy(busy = true, problem = null)) }
         launch {
-            when (val result = repository.stepUp(stepUp.digits)) {
+            val cas = if (operation == SecretOperation.SESSION) null else version
+            when (
+                val result = repository.challenge(
+                    operation,
+                    pathFor(operation),
+                    keyFor(stepUp.action),
+                    versionFor(stepUp.action),
+                    cas,
+                    valueHashFor(stepUp.action),
+                )
+            ) {
                 is Outcome.Success -> {
-                    updateState { copy(dialog = stepUp.copy(busy = false, digits = "")) }
-                    performReveal(stepUp.action)
+                    signing = PendingSignature(stepUp.action, operation, result.value)
+                    updateState { copy(dialog = stepUp.copy(busy = false)) }
+                    emit(SecretPathEvent.Sign(result.value, operation, stepUp.action))
                 }
                 is Outcome.Failure -> stepUpFailed(stepUp, result.failure)
             }
         }
     }
 
-    private fun mutate(stepUp: SecretDialog.StepUp) {
-        val cas = currentVersion() ?: return
+    private fun signed(signature: String) {
+        val pending = signing ?: return
+        signing = null
+        val stepUp = currentState.dialog as? SecretDialog.StepUp ?: return
         updateState { copy(dialog = stepUp.copy(busy = true, problem = null)) }
         launch {
-            val action = stepUp.action
-            when (action.kind) {
-                SecretActionKind.UPDATE -> mutationResult(
-                    stepUp,
-                    repository.update(
-                        currentState.path,
-                        action.key.orEmpty(),
-                        action.value,
-                        cas,
-                        stepUp.digits,
-                    ),
-                )
-                SecretActionKind.ROLLBACK -> mutationResult(
-                    stepUp,
-                    repository.rollback(
-                        currentState.path,
-                        action.version ?: return@launch,
-                        cas,
-                        stepUp.digits,
-                    ),
-                )
-                SecretActionKind.DELETE -> mutationResult(
-                    stepUp,
-                    repository.delete(
-                        currentState.path,
-                        cas,
-                        action.version ?: return@launch,
-                        stepUp.digits,
-                    ),
-                )
-                SecretActionKind.REVEAL -> Unit
+            if (pending.operation == SecretOperation.SESSION) {
+                openSession(stepUp, pending, signature)
+                return@launch
             }
+            mutate(stepUp, pending, signature)
         }
+    }
+
+    private suspend fun openSession(
+        stepUp: SecretDialog.StepUp,
+        pending: PendingSignature,
+        signature: String,
+    ) {
+        when (val result = repository.stepUp(pending.challenge.challenge, signature)) {
+            is Outcome.Success -> {
+                updateState { copy(dialog = null, sessionActive = true) }
+                performReveal(pending.action)
+            }
+            is Outcome.Failure -> stepUpFailed(stepUp, result.failure)
+        }
+    }
+
+    private suspend fun mutate(
+        stepUp: SecretDialog.StepUp,
+        pending: PendingSignature,
+        signature: String,
+    ) {
+        val cas = currentVersion() ?: return
+        val challenge = pending.challenge.challenge
+        val action = pending.action
+        when (pending.operation) {
+            SecretOperation.UPDATE -> mutationResult(
+                stepUp,
+                repository.update(
+                    currentState.path,
+                    action.key.orEmpty(),
+                    action.value,
+                    cas,
+                    challenge,
+                    signature,
+                ),
+            )
+            SecretOperation.ROLLBACK -> mutationResult(
+                stepUp,
+                repository.rollback(
+                    currentState.path,
+                    action.version ?: return,
+                    cas,
+                    challenge,
+                    signature,
+                ),
+            )
+            SecretOperation.DELETE -> mutationResult(
+                stepUp,
+                repository.delete(
+                    currentState.path,
+                    cas,
+                    action.version ?: return,
+                    challenge,
+                    signature,
+                ),
+            )
+            SecretOperation.SESSION -> Unit
+        }
+    }
+
+    private fun cancelled() {
+        signing = null
+        val stepUp = currentState.dialog as? SecretDialog.StepUp ?: return
+        updateState { copy(dialog = stepUp.copy(busy = false)) }
+    }
+
+    private fun signingFailed(reason: DeviceSignatureFailure) {
+        signing = null
+        val stepUp = currentState.dialog as? SecretDialog.StepUp
+        val problem = signatureProblem(reason)
+        updateState { copy(dialog = stepUp?.copy(busy = false, problem = problem)) }
     }
 
     private fun mutationResult(stepUp: SecretDialog.StepUp, result: Outcome<*>) {
@@ -346,31 +405,52 @@ internal class SecretPathViewModel(
 
     private fun stepUpFailed(stepUp: SecretDialog.StepUp, failure: RemoteFailure) {
         val problem = secretProblem(failure)
-        when (problem) {
-            SecretProblem.StepUpRequired -> updateState {
-                copy(
-                    dialog = stepUp.copy(busy = false, problem = SecretProblem.StepUpRequired),
-                    sessionActive = false,
-                )
-            }
-            SecretProblem.InvalidTotp -> updateState {
-                copy(dialog = stepUp.copy(busy = false, digits = "", problem = problem))
-            }
-            else -> {
-                updateState { copy(dialog = stepUp.copy(busy = false, problem = problem)) }
-                emit(SecretPathEvent.Message(problem))
-            }
+        updateState {
+            copy(
+                dialog = stepUp.copy(busy = false, problem = problem),
+                sessionActive = if (problem == SecretProblem.StepUpRequired) false else sessionActive,
+            )
         }
     }
 
+    private fun operationFor(action: SecretAction): SecretOperation = when (action.kind) {
+        SecretActionKind.REVEAL -> SecretOperation.SESSION
+        SecretActionKind.UPDATE -> SecretOperation.UPDATE
+        SecretActionKind.ROLLBACK -> SecretOperation.ROLLBACK
+        SecretActionKind.DELETE -> SecretOperation.DELETE
+    }
+
+    private fun pathFor(operation: SecretOperation): String? =
+        if (operation == SecretOperation.SESSION) null else currentState.path
+
+    private fun keyFor(action: SecretAction): String? =
+        if (action.kind == SecretActionKind.UPDATE) action.key else null
+
+    private fun versionFor(action: SecretAction): Long? = when (action.kind) {
+        SecretActionKind.ROLLBACK, SecretActionKind.DELETE -> action.version
+        else -> null
+    }
+
+    private fun valueHashFor(action: SecretAction): String? =
+        if (action.kind == SecretActionKind.UPDATE) sha256Hex(action.value) else null
+
     private fun currentVersion(): Long? = currentState.metadata?.currentVersion
+
+    private data class PendingSignature(
+        val action: SecretAction,
+        val operation: SecretOperation,
+        val challenge: StepUpChallenge,
+    )
 
     private companion object {
         const val RE_MASK_MILLIS = 30_000L
     }
 }
 
-private const val TOTP_LENGTH = 6
+internal fun sha256Hex(value: String): String =
+    java.security.MessageDigest.getInstance("SHA-256")
+        .digest(value.toByteArray(Charsets.UTF_8))
+        .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
 
 @ContributesIntoMap(AppScope::class, binding = binding<ViewModelSource>())
 @ClassKey(SecretPathViewModel::class)

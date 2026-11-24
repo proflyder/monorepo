@@ -2,9 +2,9 @@
 
 Owner-only API секретов приложения. Flux (`Kustomization/app-secrets-gateway`,
 образ `SECRETS_GATEWAY_IMAGE` из pins). Один Deployment в namespace
-`home-assistant`, ClusterIP `:8096`; PVC `secrets-gateway-state` хранит только
-последний TOTP-шаг. Владелец открывает его через Traefik по
-`secrets.<HOME_DOMAIN>` (IngressRoute `secrets-gateway` в
+`home-assistant`, ClusterIP `:8096`; PVC `secrets-gateway-state` хранит отметки
+об использованных step-up nonce (не дольше 60 секунд). Владелец открывает его
+через Traefik по `secrets.<HOME_DOMAIN>` (IngressRoute `secrets-gateway` в
 `../../ingress/routes/routes.yaml`, middleware `home-allowlist`); путь вне
 LAN/VPN закрыт. Вызывающие в кластере — Traefik, mcp-gateway (health-check).
 
@@ -27,28 +27,7 @@ LAN/VPN закрыт. Вызывающие в кластере — Traefik, mcp-
    Те же записи перечислены в `projects/home/kubernetes/README.md`,
    `docs/NETWORK.md` и `docs/STATE.md`; `verify.sh` проверяет DNS и HTTPS.
 
-1. **TOTP-секрет.** Идемпотентно создаёт `totp_secret` в
-   `secret/k8s/home-assistant/secrets-gateway` и пишет otpauth URI в файл
-   0600; URI и секрет не печатаются:
-
-   ```bash
-   mise run admin:secrets-totp-init
-   # повторная ротация (старые коды перестают работать):
-   mise run admin:secrets-totp-init -- --rotate
-   ```
-
-   Файл по умолчанию —
-   `secrets/local/secrets-gateway/totp-otpauth.txt` (0600). Импортировать URI
-   в приложение-аутентификатор; после проверки файл удалить. Ротация меняет
-   секрет в OpenBao, поэтому после неё нужны force-sync ExternalSecret и
-   рестарт пода (сервис читает TOTP при старте):
-
-   ```bash
-   mise run kubectl -- -n home-assistant rollout restart deploy/secrets-gateway
-   mise run kubectl -- -n home-assistant rollout status deploy/secrets-gateway --timeout=180s
-   ```
-
-2. **Политика и Kubernetes-auth роль.** Применяются тем же bootstrap, что и
+1. **Политика и Kubernetes-auth роль.** Применяются тем же bootstrap, что и
    остальные политики OpenBao (файл политики — `policy.hcl` в этом каталоге):
 
    ```bash
@@ -60,14 +39,14 @@ LAN/VPN закрыт. Вызывающие в кластере — Traefik, mcp-
    `home-assistant`, TTL 20m/1h, audience `secrets-gateway`, policy
    `secrets-gateway`). Root/operator token в под не попадают.
 
-3. **Merge PR.** `deploy-home` публикует digest и Flux применяет
-   `app-secrets-gateway`. Если merge случился раньше шагов 1–2, под остаётся
+2. **Merge PR.** `deploy-home` публикует digest и Flux применяет
+   `app-secrets-gateway`. Если merge случился раньше шага 1, под остаётся
    `Pending` (нет Secret-тома), а Kustomization `app-secrets-gateway` —
    NotReady и ретраится каждую минуту; другие приложения не зависят от неё и
    не ломаются. Scheduler-часть обратно совместима: owner получает `secrets`
    неявно, миграция не нужна.
 
-4. **Синхронизировать ESO и дождаться пода.** ESO обновляет
+3. **Синхронизировать ESO и дождаться пода.** ESO обновляет
    `ExternalSecret/secrets-gateway` раз в час; после merge форсировать:
 
    ```bash
@@ -79,9 +58,50 @@ LAN/VPN закрыт. Вызывающие в кластере — Traefik, mcp-
      -o go-template='{{range $k, $v := .data}}{{$k}}{{"\n"}}{{end}}'
    ```
 
-   В Secret должны быть `service_token` и `totp_secret`. Проверить, что под
+   В Secret должен быть только `service_token`. Проверить, что под
    `secrets-gateway` Ready: `readyz` требует свежий snapshot доступа и
    доступный OpenBao.
+
+4. **Установить новый APK.** `/v1/device/*` существует только после шага 2,
+   поэтому APK из CI (`android-distribute`) ставится после rollout. Старый APK
+   после merge не умеет step-up.
+
+5. **Привязать телефон.** Одноразовый код создаётся в OpenBao, в файл 0600
+   пишется только код; stdout печатает путь файла, не код:
+
+   ```bash
+   mise run admin:secrets-device-enroll
+   ```
+
+   Файл по умолчанию —
+   `secrets/local/secrets-gateway/device-enroll.txt` (0600), срок — 15 минут.
+   Открыть на телефоне «Система → Секреты → Привязать телефон», ввести код;
+   приложение создаёт EC P-256 ключ в Android Keystore (StrongBox при наличии)
+   и отправляет публичный ключ, цепочку key attestation и код. Сервер сверяет
+   хеш кода (constant-time, одноразово, с backoff), сохраняет публичный ключ и
+   device id и присылает push. После проверки файл удалить.
+
+   Повторная привязка: новый код и снова «Привязать телефон» — старый ключ
+   перестаёт приниматься сразу после успешной привязки. Отзыв без телефона:
+
+   ```bash
+   mise run admin:secrets-device-enroll -- --revoke
+   ```
+
+   Отзыв удаляет ключ из OpenBao; сервис читает его на каждый запрос, поэтому
+   новые step-up и reveal прекращаются без рестарта пода (уже открытые
+   5-минутные сессии тоже перестают проходить). Отзыв оставляет в OpenBao
+   маркер, который сервис замечает опросом (не чаще раза в 30 секунд) и
+   присылает один push «Отзыв телефона». Только после успешной привязки и
+   проверки reveal/update удалить legacy-путь
+   `secret/k8s/home-assistant/secrets-gateway`.
+
+6. **Удалить legacy-состояние.** Файл последнего TOTP-шага больше не нужен:
+
+   ```bash
+   mise run kubectl -- -n home-assistant exec deploy/secrets-gateway -- \
+     rm -f /state/last-totp-step
+   ```
 
 ## Проверка после merge
 
@@ -96,17 +116,25 @@ mise run kubectl -- -n home-assistant port-forward svc/secrets-gateway 8096:8096
 ```bash
 TOKEN="$(cat secrets/local/app-tokens/owner.token)"
 curl -fsS http://127.0.0.1:8096/v1/secrets -H "Authorization: Bearer $TOKEN"
+curl -fsS http://127.0.0.1:8096/v1/device -H "Authorization: Bearer $TOKEN"
 ```
 
 `403 module_forbidden` — токен не owner; `502 openbao_forbidden` — роль/политика
-не применены или pod не получил SA token.
+не применены или pod не получил SA token. `GET /v1/device` показывает,
+привязан ли телефон.
 
 ## Секреты и сеть
 
 - `secret/k8s/home-assistant/scheduler-auth#service_token` → `service_token`
   (snapshot доступа и bearer в phone-push).
-- `secret/k8s/home-assistant/secrets-gateway#totp_secret` → `totp_secret`
-  (step-up); путь закрыт для самого gateway политикой и кодом.
+- `secret/k8s/home-assistant/secrets-gateway-device` — публичный ключ,
+  device id, время привязки, хеш аттестации и хеш одноразового кода. Путь
+  закрыт для HTTP API только проверкой в коде: `deny.json` его не покрывает,
+  потому что из этого файла генерируется `policy.hcl`, а поду нужен доступ.
+  Читается подом через роль `secrets-gateway`; ESO его не синхронизирует.
+- `secret/k8s/home-assistant/secrets-gateway` — legacy TOTP-секрет. После
+  перехода на ключ устройств его можно удалить; путь остаётся в `deny.json`,
+  пока он существует.
 - ConfigMap `secrets-gateway-config` собирается kustomize из
   `manifests/catalog.json` и `manifests/deny.json`; тест сверяет каталог с
   `platform/workstation/catalog.json`, а `policy.hcl` генерируется из того же
@@ -117,5 +145,6 @@ curl -fsS http://127.0.0.1:8096/v1/secrets -H "Authorization: Bearer $TOKEN"
   (port-forward); egress — OpenBao `:8200`, scheduler `:8098`, phone-push
   `:8095`, DNS `:53`. Интернета нет.
 - Откат — revert pins-коммита `SECRETS_GATEWAY_IMAGE` или `flux suspend`
-  Kustomization `app-secrets-gateway`; TOTP-секрет остаётся в OpenBao, PVC
-  `secrets-gateway-state` (last TOTP step) сохраняется и не удаляется Flux.
+  Kustomization `app-secrets-gateway`; ключ устройства остаётся в OpenBao, PVC
+  `secrets-gateway-state` (использованные nonce) сохраняется и не удаляется
+  Flux.

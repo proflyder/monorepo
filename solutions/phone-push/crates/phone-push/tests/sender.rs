@@ -143,6 +143,8 @@ fn a_notification_is_sent_data_only_with_text_and_deep_link() {
         title: "Дом".to_owned(),
         body: "Дверь открыта".to_owned(),
         deep_link: Some("home://alarms".to_owned()),
+        module: None,
+        data: Default::default(),
     };
     block_on(sender.send("device-token", &message, "entry-1", 1_700_000_000)).expect("send");
     let messages = fake.messages.lock().expect("lock").clone();

@@ -24,6 +24,10 @@ class PushApiTest {
             PushDeepLink.parse("home://secrets/path/infra%2Fbackup%2Fha")?.route,
         )
         assertEquals("secrets/path/user+tag@host", PushDeepLink.parse("home://secrets/path/user+tag@host")?.route)
+        assertEquals(
+            "secrets/path/k8s%2Ftest",
+            PushDeepLink.parse("home://secrets/path/k8s%2Ftest")?.route,
+        )
     }
 
     @Test
@@ -33,7 +37,7 @@ class PushApiTest {
         assertNull(PushDeepLink.parse("https://example.test/alarms"))
         assertNull(PushDeepLink.parse("home://"))
         assertNull(PushDeepLink.parse("home://alarms?x=<script>"))
-        assertNull(PushDeepLink.parse("home://" + "a".repeat(300)))
+        assertNull(PushDeepLink.parse("home://" + "a".repeat(600)))
     }
 
     @Test

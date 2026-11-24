@@ -14,6 +14,7 @@ use crate::audit::{Auditor, PushClient};
 use crate::catalog::Catalog;
 use crate::config::Config;
 use crate::deny::Deny;
+use crate::device::DeviceStore;
 use crate::openbao::OpenBao;
 use crate::stepup::StepUp;
 
@@ -38,18 +39,19 @@ pub async fn run() -> anyhow::Result<()> {
         config.service_token.expose(),
     )
     .map_err(|error| anyhow::anyhow!("access client: {error}"))?;
-    let stepup = Arc::new(
-        StepUp::with_state(config.totp_secret.expose(), Path::new(&config.state_file))
-            .map_err(|error| anyhow::anyhow!("step-up: {error}"))?,
-    );
     let openbao = Arc::new(
         OpenBao::new(
             &config.openbao_url,
             &config.openbao_role,
-            config.sa_token.clone(),
+            &config.sa_token_file,
             config.timeout,
         )
         .map_err(anyhow::Error::msg)?,
+    );
+    let device = Arc::new(DeviceStore::new(Arc::clone(&openbao), &config.device_path));
+    let stepup = Arc::new(
+        StepUp::with_state(Arc::clone(&device), Path::new(&config.state_file))
+            .map_err(|error| anyhow::anyhow!("step-up: {error}"))?,
     );
     let push = PushClient::new(
         &config.phone_push_url,
@@ -64,6 +66,7 @@ pub async fn run() -> anyhow::Result<()> {
         openbao,
         catalog,
         deny,
+        device,
         stepup,
         audit,
         max_list_entries: config.max_list_entries,

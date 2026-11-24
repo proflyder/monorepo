@@ -53,6 +53,7 @@ home_android_local_test(
         "dev.proflyder.home.feature.push.LegacyNotificationHistoryCleanupTest",
         "dev.proflyder.home.feature.push.SchedulerNotificationHistoryRepositoryTest",
         "dev.proflyder.home.feature.push.PushChannelsTest",
+        "dev.proflyder.home.feature.push.PushDeepLinkSourceTest",
         "dev.proflyder.home.feature.push.PushPayloadsTest",
         "dev.proflyder.home.feature.push.PushRegistrationPolicyTest",
         "dev.proflyder.home.feature.push.presentation.PushSettingsScreenshotTest",

@@ -37,11 +37,13 @@ internal sealed interface SecretsCatalogIntent {
     data class AuthenticationFinished(val granted: Boolean) : SecretsCatalogIntent
     data class Query(val value: String) : SecretsCatalogIntent
     data class Open(val entry: SecretEntry) : SecretsCatalogIntent
+    data object OpenDevice : SecretsCatalogIntent
 }
 
 internal sealed interface SecretsCatalogEvent {
     data object RequestAuthentication : SecretsCatalogEvent
     data class OpenPath(val path: String) : SecretsCatalogEvent
+    data object OpenDevice : SecretsCatalogEvent
 }
 
 @Inject
@@ -66,6 +68,7 @@ internal class SecretsCatalogViewModel(
             is SecretsCatalogIntent.AuthenticationFinished -> finishAuthentication(intent.granted)
             is SecretsCatalogIntent.Query -> updateQuery(intent.value)
             is SecretsCatalogIntent.Open -> emit(SecretsCatalogEvent.OpenPath(intent.entry.path))
+            SecretsCatalogIntent.OpenDevice -> emit(SecretsCatalogEvent.OpenDevice)
         }
     }
 

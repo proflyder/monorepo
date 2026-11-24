@@ -1,3 +1,5 @@
+@file:Suppress("NoTry")
+
 package dev.proflyder.home.feature.secrets.presentation
 
 import android.content.Context
@@ -33,6 +35,8 @@ internal class SecretPathFragment :
     override val viewModel: SecretPathViewModel by screenViewModel()
 
     private val route: SecretsPathDestination? by destination(SecretsPathDestination)
+
+    private val signer by lazy { AndroidDeviceSigner(requireContext().applicationContext) }
 
     private val actions = object : SecretPathActions {
         override fun reveal(key: String) = dispatch(SecretPathIntent.Reveal(key))
@@ -138,28 +142,19 @@ internal class SecretPathFragment :
         } else {
             createStepUp()
         }
-        if (views.secretTotpInput.text?.toString().orEmpty() != dialog.digits) {
-            views.secretTotpInput.setText(dialog.digits)
-            views.secretTotpInput.setSelection(dialog.digits.length)
-        }
-        views.secretTotpMessage.text = dialog.problem?.let { secretProblemText(requireContext(), it) }.orEmpty()
-        views.secretTotpMessage.setVisible(dialog.problem != null)
-        views.secretTotpProgress.setVisible(dialog.busy)
-        views.secretTotpInput.isEnabled = !dialog.busy
-        activeDialog?.getButton(AlertDialog.BUTTON_POSITIVE)?.isEnabled = dialog.complete && !dialog.busy
+        views.secretStepupProblem.text = dialog.problem?.let { secretProblemText(requireContext(), it) }.orEmpty()
+        views.secretStepupProblem.setVisible(dialog.problem != null)
+        views.secretStepupProgress.setVisible(dialog.busy)
+        activeDialog?.getButton(AlertDialog.BUTTON_POSITIVE)?.isEnabled = !dialog.busy
     }
 
     private fun createStepUp(): DialogSecretStepupBinding {
         dismissDialog()
         val views = DialogSecretStepupBinding.inflate(LayoutInflater.from(requireContext()))
-        views.secretTotpInput.doAfterTextChanged { text ->
-            dispatch(SecretPathIntent.StepUpDigits(text?.toString().orEmpty()))
-        }
         val dialog = MaterialAlertDialogBuilder(requireContext())
-            .setTitle(R.string.secrets_totp_title)
-            .setMessage(R.string.secrets_totp_message)
+            .setTitle(R.string.secrets_stepup_title)
             .setView(views.root)
-            .setPositiveButton(R.string.secrets_totp_confirm, null)
+            .setPositiveButton(R.string.secrets_stepup_confirm, null)
             .setNegativeButton(R.string.secrets_cancel) { _, _ -> dispatch(SecretPathIntent.DialogDismiss) }
             .setOnCancelListener { dispatch(SecretPathIntent.DialogDismiss) }
             .create()
@@ -243,9 +238,20 @@ internal class SecretPathFragment :
         when (event) {
             is SecretPathEvent.CopyValue -> copy(event.value)
             is SecretPathEvent.Message -> showError(secretProblemText(requireContext(), event.problem))
+            is SecretPathEvent.Sign -> sign(event)
             SecretPathEvent.Deleted -> {
                 showMessage(R.string.secrets_deleted)
                 navigate(Route.Back)
+            }
+        }
+    }
+
+    private fun sign(event: SecretPathEvent.Sign) {
+        signer.requestSignature(requireActivity(), event.challenge.payload) { result ->
+            when (result) {
+                is DeviceSignatureResult.Signed -> dispatch(SecretPathIntent.StepUpSigned(result.signature))
+                DeviceSignatureResult.Cancelled -> dispatch(SecretPathIntent.StepUpCancelled)
+                is DeviceSignatureResult.Failed -> dispatch(SecretPathIntent.StepUpFailed(result.reason))
             }
         }
     }
@@ -276,6 +282,7 @@ internal class SecretPathFragment :
 
     override fun onDestroy() {
         notice?.cancel()
+        signer.cancel()
         dismissDialog()
         super.onDestroy()
     }
@@ -295,7 +302,13 @@ internal enum class DialogTag { STEP_UP, EDIT, CONFIRM }
 
 internal fun secretProblemText(context: Context, problem: SecretProblem): String = when (problem) {
     SecretProblem.StepUpRequired -> context.getString(R.string.secrets_problem_step_up)
-    SecretProblem.InvalidTotp -> context.getString(R.string.secrets_problem_invalid_totp)
+    SecretProblem.InvalidSignature -> context.getString(R.string.secrets_problem_invalid_signature)
+    SecretProblem.StepUpExpired -> context.getString(R.string.secrets_problem_step_up_expired)
+    SecretProblem.DeviceNotEnrolled -> context.getString(R.string.secrets_problem_device_not_enrolled)
+    SecretProblem.DeviceUnavailable -> context.getString(R.string.secrets_problem_device_unavailable)
+    SecretProblem.DeviceRebindRequired -> context.getString(R.string.secrets_problem_device_rebind)
+    SecretProblem.EnrollmentRejected -> context.getString(R.string.secrets_problem_enrollment_rejected)
+    SecretProblem.EnrollmentConflict -> context.getString(R.string.secrets_problem_enrollment_conflict)
     SecretProblem.VersionUnavailable -> context.getString(R.string.secrets_problem_version_unavailable)
     is SecretProblem.Conflict -> problem.currentVersion
         ?.let { context.getString(R.string.secrets_problem_conflict_version, it) }

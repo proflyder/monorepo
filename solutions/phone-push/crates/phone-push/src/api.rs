@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use axum::extract::State;
@@ -17,6 +18,17 @@ pub const MAX_REASON_CHARS: usize = 200;
 pub const MAX_TITLE_CHARS: usize = 120;
 pub const MAX_BODY_CHARS: usize = 500;
 pub const MAX_DEEP_LINK_CHARS: usize = 512;
+pub const MAX_DATA_ENTRIES: usize = 8;
+pub const MAX_DATA_KEY_CHARS: usize = 32;
+pub const MAX_DATA_VALUE_CHARS: usize = 256;
+const RESERVED_DATA_KEYS: [&str; 6] = [
+    "type",
+    "title",
+    "body",
+    "notificationId",
+    "deepLink",
+    "module",
+];
 
 #[derive(Clone)]
 pub struct PushState {
@@ -57,6 +69,8 @@ pub struct NotifyBody {
     pub body: String,
     #[serde(default)]
     pub deep_link: Option<String>,
+    #[serde(default)]
+    pub data: BTreeMap<String, String>,
     #[serde(default)]
     pub device_id: Option<String>,
 }
@@ -282,10 +296,15 @@ async fn notify(
     if deep_link.is_some_and(|value| value.chars().count() > MAX_DEEP_LINK_CHARS) {
         return error(StatusCode::BAD_REQUEST, "deep link is too long");
     }
+    let Some(data) = notification_data(&body.data) else {
+        return error(StatusCode::BAD_REQUEST, "invalid data");
+    };
     let message = Message::Notification {
         title: title.to_owned(),
         body: text.to_owned(),
         deep_link: deep_link.map(str::to_owned),
+        module: body.module.as_deref().map(str::to_owned),
+        data,
     };
     respond(
         deliver(
@@ -326,6 +345,29 @@ async fn sync(
     )
 }
 
+fn notification_data(values: &BTreeMap<String, String>) -> Option<BTreeMap<String, String>> {
+    if values.len() > MAX_DATA_ENTRIES {
+        return None;
+    }
+    let mut data = BTreeMap::new();
+    for (key, value) in values {
+        if key.is_empty()
+            || key.chars().count() > MAX_DATA_KEY_CHARS
+            || !key.chars().all(|character| {
+                character.is_ascii_alphanumeric() || matches!(character, '_' | '-' | '.')
+            })
+            || RESERVED_DATA_KEYS.contains(&key.as_str())
+            || value.is_empty()
+            || value.chars().count() > MAX_DATA_VALUE_CHARS
+            || value.chars().any(char::is_control)
+        {
+            return None;
+        }
+        data.insert(key.clone(), value.clone());
+    }
+    Some(data)
+}
+
 struct HistoryRow {
     kind: &'static str,
     title: String,
@@ -345,6 +387,7 @@ fn history_row(message: &Message) -> Option<HistoryRow> {
             title,
             body,
             deep_link,
+            ..
         } => Some(HistoryRow {
             kind: history::NOTIFY_KIND,
             title: title.clone(),
@@ -648,6 +691,41 @@ mod tests {
         assert!(sync_message(&sync_body("secrets", "upsert", "x")).is_none());
         assert!(sync_message(&sync_body("alarms", "wipe", "x")).is_none());
         assert!(sync_message(&sync_body("alarms", "upsert", &"x".repeat(200))).is_none());
+    }
+
+    #[test]
+    fn notification_data_is_bounded_and_cannot_override_reserved_keys() {
+        let data = BTreeMap::from([
+            ("entity".to_owned(), "secrets".to_owned()),
+            ("path".to_owned(), "k8s/test".to_owned()),
+        ]);
+        assert_eq!(notification_data(&data), Some(data.clone()));
+        for key in RESERVED_DATA_KEYS {
+            let reserved = BTreeMap::from([(key.to_owned(), "value".to_owned())]);
+            assert!(notification_data(&reserved).is_none(), "{key}");
+        }
+        assert!(
+            notification_data(&BTreeMap::from([(
+                "k".repeat(MAX_DATA_KEY_CHARS + 1),
+                "v".to_owned(),
+            )]))
+            .is_none()
+        );
+        assert!(
+            notification_data(&BTreeMap::from([(
+                "key".to_owned(),
+                "v".repeat(MAX_DATA_VALUE_CHARS + 1),
+            )]))
+            .is_none()
+        );
+        assert!(notification_data(&BTreeMap::from([("key".to_owned(), String::new())])).is_none());
+        assert!(
+            notification_data(&BTreeMap::from([("key".to_owned(), "a\nb".to_owned())])).is_none()
+        );
+        let too_many = (0..=MAX_DATA_ENTRIES)
+            .map(|index| (format!("k{index}"), "v".to_owned()))
+            .collect();
+        assert!(notification_data(&too_many).is_none());
     }
 
     #[test]

@@ -2,6 +2,7 @@ package dev.proflyder.home
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import dev.proflyder.home.core.runtime.IntentToken
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -47,8 +48,13 @@ class AppGraphBindingsTest {
 
     @Test
     fun aPushDeepLinkOpensTheTypedRoute() {
-        val intent = android.content.Intent(RuntimeEnvironment.getApplication(), MainActivity::class.java)
+        val context = RuntimeEnvironment.getApplication()
+        val intent = android.content.Intent(context, MainActivity::class.java)
             .putExtra(dev.proflyder.home.feature.push.PushIntents.EXTRA_DEEP_LINK, "settings/history")
+            .putExtra(
+                dev.proflyder.home.feature.push.PushIntents.EXTRA_DEEP_LINK_TOKEN,
+                IntentToken(context).current(),
+            )
         val activity = Robolectric.buildActivity(MainActivity::class.java, intent).setup().get()
         org.robolectric.Shadows.shadowOf(activity.mainLooper).idle()
         activity.supportFragmentManager.executePendingTransactions()

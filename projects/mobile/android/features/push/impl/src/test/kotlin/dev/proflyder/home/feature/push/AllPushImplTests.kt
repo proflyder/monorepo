@@ -58,7 +58,7 @@ class PushPayloadsTest {
             notificationBody = "Дверь открыта",
         )
         assertEquals(
-            PushMessage.Notify("Дом", "Дверь открыта", PushDeepLink("alarms")),
+            PushMessage.Notify("Дом", "Дверь открыта", PushDeepLink("alarms"), null),
             message,
         )
     }
@@ -70,7 +70,7 @@ class PushPayloadsTest {
             notificationTitle = "Из notification",
             notificationBody = "Другой текст",
         )
-        assertEquals(PushMessage.Notify("Из данных", "Текст", null), message)
+        assertEquals(PushMessage.Notify("Из данных", "Текст", null, null), message)
     }
 
     @Test
@@ -80,7 +80,7 @@ class PushPayloadsTest {
             notificationTitle = "Дом",
             notificationBody = "Текст",
         )
-        assertEquals(PushMessage.Notify("Дом", "Текст", null), foreign)
+        assertEquals(PushMessage.Notify("Дом", "Текст", null, null), foreign)
         assertNull(PushPayloads.decode(emptyMap(), null, null))
         assertNull(PushPayloads.decode(emptyMap(), "Дом", " "))
     }

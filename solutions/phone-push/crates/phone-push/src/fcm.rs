@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::sync::Mutex;
 use std::time::Duration;
 
@@ -117,6 +118,8 @@ pub enum Message {
         title: String,
         body: String,
         deep_link: Option<String>,
+        module: Option<String>,
+        data: BTreeMap<String, String>,
     },
     Sync {
         entity: String,
@@ -156,21 +159,32 @@ impl Message {
                 title,
                 body,
                 deep_link,
+                module,
+                data,
             } => {
-                let mut data = json!({
+                let mut fields = json!({
                     "type": NOTIFY_TYPE,
                     "title": title,
                     "body": body,
                     "notificationId": record_id,
                 });
+                let object = fields
+                    .as_object_mut()
+                    .expect("notification data is an object");
+                for (key, value) in data {
+                    object.insert(key.clone(), json!(value));
+                }
                 if let Some(link) = deep_link {
-                    data["deepLink"] = json!(link);
+                    object.insert("deepLink".to_owned(), json!(link));
+                }
+                if let Some(module) = module {
+                    object.insert("module".to_owned(), json!(module));
                 }
                 json!({
                     "message": {
                         "token": token,
                         "android": {"priority": "high"},
-                        "data": data,
+                        "data": fields,
                     }
                 })
             }
@@ -392,6 +406,8 @@ mod tests {
             title: "Дом".to_owned(),
             body: "Готово".to_owned(),
             deep_link: Some("home://alarms".to_owned()),
+            module: Some("secrets".to_owned()),
+            data: BTreeMap::from([("entity".to_owned(), "secrets".to_owned())]),
         }
         .payload("token", "entry-1");
         let message = &payload["message"];
@@ -402,6 +418,8 @@ mod tests {
         assert_eq!(message["data"]["title"], "Дом");
         assert_eq!(message["data"]["body"], "Готово");
         assert_eq!(message["data"]["deepLink"], "home://alarms");
+        assert_eq!(message["data"]["entity"], "secrets");
+        assert_eq!(message["data"]["module"], "secrets");
     }
 
     #[test]

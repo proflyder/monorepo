@@ -6,6 +6,8 @@ import kotlinx.coroutines.flow.StateFlow
 object PushIntents {
     const val EXTRA_DEEP_LINK: String = "dev.proflyder.home.extra.DEEP_LINK"
 
+    const val EXTRA_DEEP_LINK_TOKEN: String = "dev.proflyder.home.extra.DEEP_LINK_TOKEN"
+
     const val EXTRA_FIND: String = "dev.proflyder.home.extra.FIND"
 }
 
@@ -100,6 +102,6 @@ data class PushDeepLink(val route: String) {
             return PushDeepLink(route)
         }
 
-        internal const val MAX_ROUTE_CHARS = 256
+        internal const val MAX_ROUTE_CHARS = 512
     }
 }

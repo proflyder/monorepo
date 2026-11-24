@@ -10,6 +10,7 @@ import dev.proflyder.home.core.navigation.RoutePath
 import dev.proflyder.home.feature.secrets.impl.R
 import dev.proflyder.home.feature.secrets.presentation.SecretPathFragment
 import dev.proflyder.home.feature.secrets.presentation.SecretsCatalogFragment
+import dev.proflyder.home.feature.secrets.presentation.SecretsDeviceFragment
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesIntoSet
 import dev.zacsweers.metro.Inject
@@ -17,6 +18,11 @@ import dev.zacsweers.metro.Inject
 internal object SecretsCatalogDestination : Destination {
     override val featureId: String = SecretsRoutes.FEATURE_ID
     override val route: String = SecretsRoutes.CATALOG
+}
+
+internal object SecretsDeviceDestination : Destination {
+    override val featureId: String = SecretsRoutes.FEATURE_ID
+    override val route: String = SecretsRoutes.DEVICE
 }
 
 internal data class SecretsPathDestination(val path: String) : Destination {
@@ -43,11 +49,15 @@ class SecretsFeatureEntry : FeatureEntry {
     override val titleRes: Int = R.string.secrets_title
     override val iconRes: Int = R.drawable.secrets_ic_key
     override val rootDestination: Destination = SecretsCatalogDestination
-    override val routes: List<RouteCodec<*>> =
-        listOf(RouteCodec.fixed(SecretsCatalogDestination), SecretsPathDestination)
+    override val routes: List<RouteCodec<*>> = listOf(
+        RouteCodec.fixed(SecretsCatalogDestination),
+        RouteCodec.fixed(SecretsDeviceDestination),
+        SecretsPathDestination,
+    )
 
     override fun createFragment(destination: Destination): Fragment = when (destination) {
         is SecretsPathDestination -> SecretPathFragment()
+        is SecretsDeviceDestination -> SecretsDeviceFragment()
         else -> SecretsCatalogFragment()
     }
 }

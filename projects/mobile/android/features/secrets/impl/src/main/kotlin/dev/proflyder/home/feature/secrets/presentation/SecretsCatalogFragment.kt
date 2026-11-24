@@ -1,3 +1,5 @@
+@file:Suppress("NoTry")
+
 package dev.proflyder.home.feature.secrets.presentation
 
 import android.content.Intent
@@ -10,6 +12,7 @@ import dev.proflyder.home.core.presentation.screenViewModel
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.core.ui.setupPullToRefresh
 import dev.proflyder.home.core.ui.userMessage
+import dev.proflyder.home.feature.secrets.SecretsDeviceDestination
 import dev.proflyder.home.feature.secrets.SecretsPathDestination
 import dev.proflyder.home.feature.secrets.impl.databinding.FragmentSecretsCatalogBinding
 
@@ -37,6 +40,7 @@ internal class SecretsCatalogFragment :
         }
         binding.secretsCatalogRetry.setOnClickListener { dispatch(SecretsCatalogIntent.Refresh) }
         binding.secretsCatalogUnlock.setOnClickListener { dispatch(SecretsCatalogIntent.RequestAccess) }
+        binding.secretsCatalogDevice.setOnClickListener { dispatch(SecretsCatalogIntent.OpenDevice) }
         val search = bindText(binding.secretsCatalogSearch) { SecretsCatalogIntent.Query(it) }
         render({ it.query }) { search.render(it) }
         render(::rows) { adapter.submitList(it) }
@@ -58,6 +62,7 @@ internal class SecretsCatalogFragment :
     private fun renderStatus(status: CatalogStatus) = with(binding) {
         secretsCatalogLocked.setVisible(status.locked)
         secretsCatalogSearchLayout.setVisible(!status.locked)
+        secretsCatalogDevice.setVisible(!status.locked)
         secretsCatalogRefresh.setVisible(!status.locked)
         secretsCatalogProgress.setVisible(!status.locked && status.loading && !status.hasEntries)
         secretsCatalogError.setVisible(!status.locked && !status.loading && !status.hasEntries && status.failure != null)
@@ -72,6 +77,8 @@ internal class SecretsCatalogFragment :
             SecretsCatalogEvent.RequestAuthentication -> authenticate()
             is SecretsCatalogEvent.OpenPath ->
                 navigate(Route.Screen(SecretsPathDestination(event.path)))
+            SecretsCatalogEvent.OpenDevice ->
+                navigate(Route.Screen(SecretsDeviceDestination))
         }
     }
 
@@ -86,9 +93,7 @@ internal class SecretsCatalogFragment :
 
     private fun launchCredentials(intent: Intent) {
         runCatching { credentials.launch(intent) }
-            .onFailure {
-                dispatch(SecretsCatalogIntent.AuthenticationFinished(false))
-            }
+            .onFailure { dispatch(SecretsCatalogIntent.AuthenticationFinished(false)) }
     }
 
     override fun onDestroy() {

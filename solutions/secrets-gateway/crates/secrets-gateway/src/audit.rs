@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::time::Duration;
 
 use home_secret::Token;
@@ -9,6 +10,8 @@ const MAX_PUSH_TIMEOUT: Duration = Duration::from_secs(5);
 #[serde(rename_all = "snake_case")]
 pub enum Action {
     StepUp,
+    Enroll,
+    DeviceRevoke,
     List,
     Metadata,
     Reveal,
@@ -22,6 +25,8 @@ impl Action {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::StepUp => "step_up",
+            Self::Enroll => "device_enroll",
+            Self::DeviceRevoke => "device_revoke",
             Self::List => "list",
             Self::Metadata => "metadata",
             Self::Reveal => "reveal",
@@ -71,6 +76,9 @@ impl Auditor {
             detail = event.detail.unwrap_or(""),
             "secrets access"
         );
+        if !should_push(event) {
+            return;
+        }
         let Some(push) = self.push.clone() else {
             return;
         };
@@ -91,6 +99,8 @@ pub struct PushBody {
     pub body: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub deep_link: Option<String>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub data: BTreeMap<String, String>,
 }
 
 fn push_body(event: &Event<'_>) -> PushBody {
@@ -102,7 +112,9 @@ fn push_body(event: &Event<'_>) -> PushBody {
         Action::Delete => "Удаление последней версии",
         Action::List => "Просмотр каталога секретов",
         Action::Metadata => "Просмотр версий секрета",
-        Action::StepUp => "Step-up",
+        Action::StepUp => "Подтверждение телефона",
+        Action::Enroll => "Привязка телефона",
+        Action::DeviceRevoke => "Отзыв телефона",
     };
     let outcome = outcome_label(event.outcome);
     let body = if path.is_empty() {
@@ -110,27 +122,57 @@ fn push_body(event: &Event<'_>) -> PushBody {
     } else {
         format!("{action}{outcome}: {path}")
     };
+    let mut data = BTreeMap::from([("entity".to_owned(), "secrets".to_owned())]);
+    if !path.is_empty() {
+        data.insert("path".to_owned(), path.to_owned());
+    }
     PushBody {
         module: "secrets".to_owned(),
         title: "Секреты".to_owned(),
         body,
-        deep_link: Some(deep_link(path)),
+        deep_link: Some(deep_link(event)),
+        data,
     }
 }
 
-fn deep_link(path: &str) -> String {
-    if path.is_empty() {
-        "home://secrets".to_owned()
-    } else {
-        format!("home://secrets/path/{}", path.replace('/', "%2F"))
+fn should_push(event: &Event<'_>) -> bool {
+    match event.action {
+        Action::List | Action::Metadata => false,
+        Action::StepUp => event.outcome != "ok",
+        Action::Reveal
+        | Action::Update
+        | Action::Rollback
+        | Action::Delete
+        | Action::Enroll
+        | Action::DeviceRevoke => true,
+    }
+}
+
+fn deep_link(event: &Event<'_>) -> String {
+    match event.action {
+        Action::Enroll | Action::DeviceRevoke => "home://secrets/device".to_owned(),
+        _ => event.path.filter(|path| !path.is_empty()).map_or_else(
+            || "home://secrets".to_owned(),
+            |path| format!("home://secrets/path/{}", path.replace('/', "%2F")),
+        ),
     }
 }
 
 fn outcome_label(outcome: &str) -> &'static str {
     match outcome {
         "ok" => "",
-        "step_up_required" => " — нужен step-up",
-        "step_up_invalid" => " — неверный код",
+        "step_up_required" => " — нужно подтверждение телефона",
+        "step_up_invalid" => " — неверная подпись",
+        "step_up_expired" => " — подтверждение истекло",
+        "device_not_enrolled" => " — телефон не привязан",
+        "device_unavailable" => " — устройство недоступно",
+        "enrollment_invalid" => " — неверный код привязки",
+        "enrollment_closed" => " — код привязки не выдан",
+        "enrollment_expired" => " — код привязки истёк",
+        "enrollment_conflict" => " — привязка изменилась",
+        "attestation_challenge_invalid" => " — неверный challenge аттестации",
+        "attestation_invalid" => " — неверная цепочка аттестации",
+        "public_key_invalid" => " — неверный публичный ключ",
         "rate_limited" => " — слишком много попыток",
         "conflict" => " — конфликт версий",
         "path_forbidden" => " — путь запрещён",
@@ -208,12 +250,39 @@ mod tests {
             body.deep_link.as_deref(),
             Some("home://secrets/path/k8s%2Ftest")
         );
+        assert_eq!(body.data["entity"], "secrets");
+        assert_eq!(body.data["path"], "k8s/test");
         assert!(!body.body.contains("password"));
         assert!(
             !serde_json::to_string(&body)
                 .expect("json")
                 .contains("value")
         );
+    }
+
+    #[test]
+    fn list_and_metadata_never_push_but_secret_access_does() {
+        let event = |action, outcome| Event {
+            action,
+            principal: "owner",
+            path: Some("k8s/test"),
+            key: None,
+            version: None,
+            outcome,
+            detail: None,
+        };
+        assert!(!should_push(&event(Action::List, "ok")));
+        assert!(!should_push(&event(Action::Metadata, "ok")));
+        assert!(should_push(&event(Action::Reveal, "ok")));
+        assert!(should_push(&event(Action::Update, "ok")));
+        assert!(should_push(&event(Action::Rollback, "ok")));
+        assert!(should_push(&event(Action::Delete, "ok")));
+        assert!(should_push(&event(Action::Enroll, "ok")));
+        assert!(should_push(&event(Action::DeviceRevoke, "ok")));
+        assert!(!should_push(&event(Action::StepUp, "ok")));
+        assert!(should_push(&event(Action::StepUp, "step_up_invalid")));
+        assert!(should_push(&event(Action::StepUp, "rate_limited")));
+        assert!(should_push(&event(Action::Reveal, "step_up_required")));
     }
 
     #[test]
@@ -249,6 +318,22 @@ mod tests {
     }
 
     #[test]
+    fn a_device_event_opens_the_binding_screen() {
+        let body = push_body(&Event {
+            action: Action::DeviceRevoke,
+            principal: "owner",
+            path: None,
+            key: None,
+            version: None,
+            outcome: "ok",
+            detail: None,
+        });
+        assert_eq!(body.deep_link.as_deref(), Some("home://secrets/device"));
+        assert_eq!(body.data["entity"], "secrets");
+        assert!(!body.data.contains_key("path"));
+    }
+
+    #[test]
     fn a_failed_attempt_is_not_reported_as_success() {
         let body = push_body(&Event {
             action: Action::Update,
@@ -259,7 +344,7 @@ mod tests {
             outcome: "step_up_invalid",
             detail: None,
         });
-        assert!(body.body.contains("неверный код"));
+        assert!(body.body.contains("неверная подпись"));
         assert!(body.body.contains("k8s/test"));
         assert!(!body.body.contains("password"));
     }
@@ -268,6 +353,8 @@ mod tests {
     fn every_action_has_a_name() {
         for action in [
             Action::StepUp,
+            Action::Enroll,
+            Action::DeviceRevoke,
             Action::List,
             Action::Metadata,
             Action::Reveal,

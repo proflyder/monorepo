@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::time::{Duration, Instant};
 
-use home_secret::{Secret, Token};
+use home_secret::Secret;
 use serde::Deserialize;
 use serde_json::Value;
 use thiserror::Error;
@@ -70,7 +70,7 @@ pub struct OpenBao {
     http: reqwest::Client,
     base_url: String,
     role: String,
-    jwt: Token,
+    jwt_file: String,
     token: Mutex<Option<CachedToken>>,
 }
 
@@ -92,7 +92,12 @@ struct LoginAuth {
 }
 
 impl OpenBao {
-    pub fn new(base_url: &str, role: &str, jwt: Token, timeout: Duration) -> Result<Self, String> {
+    pub fn new(
+        base_url: &str,
+        role: &str,
+        jwt_file: &str,
+        timeout: Duration,
+    ) -> Result<Self, String> {
         let http = home_tls::public_https_client()
             .map_err(|error| format!("OpenBao TLS: {error}"))?
             .timeout(timeout)
@@ -102,7 +107,7 @@ impl OpenBao {
             http,
             base_url: base_url.trim_end_matches('/').to_owned(),
             role: role.to_owned(),
-            jwt,
+            jwt_file: jwt_file.to_owned(),
             token: Mutex::new(None),
         })
     }
@@ -354,9 +359,14 @@ impl OpenBao {
     }
 
     async fn login(&self) -> Result<(Secret, Instant), Error> {
+        let jwt = std::fs::read_to_string(&self.jwt_file).map_err(|_| Error::Unavailable)?;
+        let jwt = jwt.trim();
+        if jwt.is_empty() {
+            return Err(Error::Unavailable);
+        }
         let payload = serde_json::to_vec(&serde_json::json!({
             "role": self.role,
-            "jwt": self.jwt.expose(),
+            "jwt": jwt,
         }))
         .map_err(|_| Error::Parse)?;
         let response = self
@@ -481,6 +491,135 @@ mod tests {
     #[test]
     fn the_list_method_is_upper_case() {
         assert_eq!(list_method().as_str(), "LIST");
+    }
+
+    #[tokio::test]
+    async fn a_rotated_service_account_token_is_read_on_every_login() {
+        use axum::extract::State;
+        use axum::routing::{get, post};
+        use std::sync::{Arc, Mutex};
+
+        #[derive(Clone)]
+        struct Seen(Arc<Mutex<Vec<String>>>);
+
+        async fn login(
+            State(seen): State<Seen>,
+            axum::Json(body): axum::Json<Value>,
+        ) -> axum::Json<Value> {
+            let jwt = body["jwt"].as_str().unwrap_or_default().to_owned();
+            seen.0.lock().expect("seen").push(jwt);
+            axum::Json(serde_json::json!({
+                "auth": {"client_token": "bao-token", "lease_duration": 3600}
+            }))
+        }
+
+        async fn metadata() -> axum::Json<Value> {
+            axum::Json(serde_json::json!({
+                "data": {"current_version": 1, "oldest_version": 1, "versions": {}}
+            }))
+        }
+
+        home_tls::install_crypto_provider();
+        let seen = Seen(Arc::new(Mutex::new(Vec::new())));
+        let app = axum::Router::new()
+            .route("/v1/auth/kubernetes/login", post(login))
+            .route("/v1/secret/metadata/x", get(metadata))
+            .with_state(seen.clone());
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind");
+        let address = listener.local_addr().expect("addr");
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+        let directory = tempfile::tempdir().expect("tempdir");
+        let token_file = directory.path().join("token");
+        std::fs::write(&token_file, "jwt-one\n").expect("first token");
+        let openbao = OpenBao::new(
+            &format!("http://{address}"),
+            "role",
+            token_file.to_str().expect("path"),
+            Duration::from_secs(5),
+        )
+        .expect("openbao");
+        openbao.metadata("x").await.expect("first login");
+        openbao.forget_token().await;
+        std::fs::write(&token_file, "jwt-two\n").expect("second token");
+        openbao.metadata("x").await.expect("second login");
+        assert_eq!(
+            seen.0.lock().expect("seen").as_slice(),
+            ["jwt-one", "jwt-two"]
+        );
+    }
+
+    #[tokio::test]
+    async fn a_forbidden_response_relogs_once_and_reuses_the_new_token() {
+        use axum::extract::State;
+        use axum::http::StatusCode;
+        use axum::response::IntoResponse;
+        use axum::routing::{get, post};
+        use std::sync::{Arc, Mutex};
+
+        #[derive(Clone)]
+        struct Counters {
+            logins: Arc<Mutex<usize>>,
+            reads: Arc<Mutex<usize>>,
+        }
+
+        async fn login(
+            State(counters): State<Counters>,
+            axum::Json(body): axum::Json<Value>,
+        ) -> axum::Json<Value> {
+            let _ = body;
+            *counters.logins.lock().expect("logins") += 1;
+            axum::Json(serde_json::json!({
+                "auth": {"client_token": "bao-token", "lease_duration": 3600}
+            }))
+        }
+
+        async fn metadata(State(counters): State<Counters>) -> axum::response::Response {
+            let mut reads = counters.reads.lock().expect("reads");
+            *reads += 1;
+            let first = *reads == 1;
+            drop(reads);
+            if first {
+                return StatusCode::FORBIDDEN.into_response();
+            }
+            axum::Json(serde_json::json!({
+                "data": {"current_version": 1, "oldest_version": 1, "versions": {}}
+            }))
+            .into_response()
+        }
+
+        home_tls::install_crypto_provider();
+        let counters = Counters {
+            logins: Arc::new(Mutex::new(0)),
+            reads: Arc::new(Mutex::new(0)),
+        };
+        let app = axum::Router::new()
+            .route("/v1/auth/kubernetes/login", post(login))
+            .route("/v1/secret/metadata/x", get(metadata))
+            .with_state(counters.clone());
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind");
+        let address = listener.local_addr().expect("addr");
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+        let directory = tempfile::tempdir().expect("tempdir");
+        let token_file = directory.path().join("token");
+        std::fs::write(&token_file, "jwt-one\n").expect("token");
+        let openbao = OpenBao::new(
+            &format!("http://{address}"),
+            "role",
+            token_file.to_str().expect("path"),
+            Duration::from_secs(5),
+        )
+        .expect("openbao");
+        openbao.metadata("x").await.expect("metadata");
+        assert_eq!(*counters.logins.lock().expect("logins"), 2);
+        assert_eq!(*counters.reads.lock().expect("reads"), 2);
     }
 
     #[test]

@@ -12,6 +12,7 @@ import dev.proflyder.home.feature.vpn.presentation.VpnScreenshotTest
 import dev.proflyder.home.feature.vpn.presentation.VpnToolbarScreenshotTest
 import dev.proflyder.home.feature.vpn.transport.TransportProtocolsTest
 import dev.proflyder.home.feature.vpn.tunnel.ChainVpnControllerTest
+import dev.proflyder.home.feature.vpn.tunnel.VpnNotificationIntentTest
 import org.junit.runner.RunWith
 import org.junit.runners.Suite
 
@@ -28,6 +29,7 @@ import org.junit.runners.Suite
     AutoConnectCoordinatorTest::class,
     VpnRouteConditionTest::class,
     ChainVpnControllerTest::class,
+    VpnNotificationIntentTest::class,
     VpnProblemsTest::class,
 )
 class AllVpnImplTests

@@ -15,17 +15,20 @@ LIB_DEPS = [
     "//packages/rust/home-tls:home_tls",
     "@crates//:anyhow",
     "@crates//:axum",
-    "@crates//:hmac",
+    "@crates//:base64",
+    "@crates//:hex",
     "@crates//:http",
+    "@crates//:p256",
     "@crates//:reqwest",
     "@crates//:serde",
     "@crates//:serde_json",
-    "@crates//:sha1",
+    "@crates//:sha2",
     "@crates//:subtle",
     "@crates//:thiserror",
     "@crates//:tokio",
     "@crates//:tokio-util",
     "@crates//:tracing",
+    "@crates//:x509-parser",
 ]
 
 rust_library(
@@ -64,12 +67,15 @@ rust_test(
     name = "gateway_tests",
     size = "small",
     srcs = ["tests/gateway.rs"],
-    compile_data = ["//projects/home/kubernetes/secrets-gateway:deploy_templates"],
+    compile_data = [
+        "//projects/home/kubernetes/secrets-gateway:deploy_templates",
+    ] + glob(["tests/fixtures/attestation/**"]),
     edition = "2024",
     lint_config = ":workspace_lints",
     deps = LIB_DEPS + [
         ":secrets_gateway_lib",
         "@crates//:http-body-util",
+        "@crates//:tempfile",
         "@crates//:tower",
     ],
 )

@@ -1,27 +1,27 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, PoisonError};
-use std::time::Duration;
+use std::sync::{Arc, Mutex, PoisonError};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use base64::Engine as _;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD_INDIFFERENT;
+use p256::ecdsa::{Signature, signature::Verifier};
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tokio::time::Instant;
 
-use crate::totp::{self, Totp};
+use crate::device::{DeviceKey, DeviceStore};
+use crate::limiter::Limiter;
 
 pub const SESSION_TTL: Duration = Duration::from_secs(300);
-pub const FAILURE_LIMIT: u32 = 5;
-pub const BASE_BLOCK: Duration = Duration::from_secs(60);
-pub const MAX_BLOCK: Duration = Duration::from_secs(3600);
-pub const GLOBAL_FAILURE_LIMIT: u32 = 10;
-pub const GLOBAL_WINDOW: Duration = Duration::from_secs(60);
-pub const GLOBAL_BLOCK: Duration = Duration::from_secs(300);
+pub const CHALLENGE_TTL_SECONDS: u64 = 60;
+pub const MAX_CHALLENGES: usize = 64;
+pub const MAX_CHALLENGES_PER_PRINCIPAL: usize = 8;
 const MAX_SESSIONS: usize = 1024;
-const MAX_BACKOFF_EXPONENT: u32 = 6;
+const MAX_SIGNATURE_CHARS: usize = 512;
 
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error("TOTP: {0}")]
-    Totp(#[from] totp::Error),
     #[error("state: {0}")]
     State(#[from] std::io::Error),
 }
@@ -29,74 +29,218 @@ pub enum Error {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Failure {
     Invalid,
-    Replay,
+    Expired,
+    NotEnrolled,
     RateLimited { retry_after: u64 },
     State,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Purpose {
+    Session,
+    Update,
+    Rollback,
+    Delete,
+}
+
+impl Purpose {
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Session => "session",
+            Self::Update => "update",
+            Self::Rollback => "rollback",
+            Self::Delete => "delete",
+        }
+    }
+
+    #[must_use]
+    pub fn parse(raw: &str) -> Option<Self> {
+        match raw {
+            "session" => Some(Self::Session),
+            "update" => Some(Self::Update),
+            "rollback" => Some(Self::Rollback),
+            "delete" => Some(Self::Delete),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Operation {
+    pub purpose: Purpose,
+    pub path: Option<String>,
+    pub key: Option<String>,
+    pub version: Option<u64>,
+    pub cas: Option<u64>,
+    pub value_hash: Option<String>,
+}
+
+impl Operation {
+    #[must_use]
+    pub fn session() -> Self {
+        Self {
+            purpose: Purpose::Session,
+            path: None,
+            key: None,
+            version: None,
+            cas: None,
+            value_hash: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ChallengeView {
+    pub challenge: String,
+    pub payload: String,
+    pub expires_in: u64,
+}
+
 pub struct StepUp {
-    totp: Totp,
+    device: Arc<DeviceStore>,
     sessions: Mutex<HashMap<String, Session>>,
-    attempts: Mutex<HashMap<String, Attempts>>,
-    global: Mutex<GlobalAttempts>,
-    last_step: Mutex<HashMap<String, u64>>,
-    persisted_step: Mutex<u64>,
-    state_path: Option<PathBuf>,
+    challenges: Mutex<Challenges>,
+    limiter: Limiter,
+    state_path: PathBuf,
 }
 
 #[derive(Debug, Clone)]
 struct Session {
     token_id: String,
+    fingerprint: String,
     expires_at: Instant,
 }
 
-#[derive(Debug, Clone, Default)]
-struct Attempts {
-    failures: u32,
-    blocked_until: Option<Instant>,
+#[derive(Debug, Clone)]
+struct ChallengeRecord {
+    principal: String,
+    purpose: Purpose,
+    path: Option<String>,
+    key: Option<String>,
+    version: Option<u64>,
+    cas: Option<u64>,
+    value_hash: Option<String>,
+    payload: String,
+    expires_at: Instant,
+    fingerprint: String,
 }
 
-#[derive(Debug, Clone)]
-struct GlobalAttempts {
-    window_start: Instant,
-    failures: u32,
-    blocked_until: Option<Instant>,
+#[derive(Debug, Default, Serialize, Deserialize)]
+struct Challenges {
+    #[serde(default)]
+    consumed: BTreeMap<String, u64>,
+    #[serde(skip)]
+    entries: BTreeMap<String, ChallengeRecord>,
 }
 
 impl StepUp {
-    pub fn new(secret: &str) -> Result<Self, Error> {
-        Ok(Self {
-            totp: Totp::new(secret)?,
+    pub fn new(device: Arc<DeviceStore>) -> Self {
+        Self {
+            device,
             sessions: Mutex::new(HashMap::new()),
-            attempts: Mutex::new(HashMap::new()),
-            global: Mutex::new(GlobalAttempts {
-                window_start: Instant::now(),
-                failures: 0,
-                blocked_until: None,
-            }),
-            last_step: Mutex::new(HashMap::new()),
-            persisted_step: Mutex::new(0),
-            state_path: None,
+            challenges: Mutex::new(Challenges::default()),
+            limiter: Limiter::new(),
+            state_path: PathBuf::new(),
+        }
+    }
+
+    pub fn with_state(device: Arc<DeviceStore>, path: &Path) -> Result<Self, Error> {
+        let challenges = read_challenges(path)?;
+        Ok(Self {
+            device,
+            sessions: Mutex::new(HashMap::new()),
+            challenges: Mutex::new(challenges),
+            limiter: Limiter::new(),
+            state_path: path.to_owned(),
         })
     }
 
-    pub fn with_state(secret: &str, path: &Path) -> Result<Self, Error> {
-        let mut stepup = Self::new(secret)?;
-        stepup.persisted_step = Mutex::new(read_step(path)?);
-        stepup.state_path = Some(path.to_owned());
-        Ok(stepup)
+    pub async fn issue(
+        &self,
+        principal: &str,
+        operation: Operation,
+        now_unix: u64,
+        now: Instant,
+    ) -> Result<ChallengeView, Failure> {
+        self.limiter
+            .check(principal, now)
+            .map_err(|retry_after| Failure::RateLimited { retry_after })?;
+        let key = self.device.key().await.map_err(|_| Failure::State)?;
+        let Some(key) = key else {
+            return Err(Failure::NotEnrolled);
+        };
+        let challenge = home_secret::hex(32)
+            .map_err(|_| Failure::State)?
+            .expose()
+            .to_owned();
+        let expires_at = now_unix + CHALLENGE_TTL_SECONDS;
+        let payload = canonical(&challenge, principal, &operation, expires_at);
+        let mut challenges = self
+            .challenges
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        challenges.consumed.retain(|_, expires| *expires > now_unix);
+        let per_principal = challenges
+            .entries
+            .values()
+            .filter(|item| item.principal == principal)
+            .count();
+        if challenges.entries.len() >= MAX_CHALLENGES
+            || per_principal >= MAX_CHALLENGES_PER_PRINCIPAL
+        {
+            return Err(Failure::RateLimited {
+                retry_after: CHALLENGE_TTL_SECONDS,
+            });
+        }
+        challenges.entries.insert(
+            challenge.clone(),
+            ChallengeRecord {
+                principal: principal.to_owned(),
+                purpose: operation.purpose,
+                path: operation.path,
+                key: operation.key,
+                version: operation.version,
+                cas: operation.cas,
+                value_hash: operation.value_hash.clone(),
+                payload: payload.clone(),
+                expires_at: now + Duration::from_secs(CHALLENGE_TTL_SECONDS),
+                fingerprint: key.fingerprint,
+            },
+        );
+        write_challenges(&self.state_path, &challenges).map_err(|_| Failure::State)?;
+        drop(challenges);
+        Ok(ChallengeView {
+            challenge,
+            payload,
+            expires_in: CHALLENGE_TTL_SECONDS,
+        })
     }
 
-    pub fn start_session(
+    pub async fn open_session(
         &self,
-        token_id: &str,
-        code: &str,
+        principal: &str,
+        challenge: &str,
+        signature: &str,
         now_unix: u64,
         now: Instant,
     ) -> Result<(String, u64), Failure> {
-        self.check_code(token_id, code, now_unix, now, false)?;
-        let session = home_secret::hex(32).map_err(|_| Failure::Invalid)?;
-        let session = session.expose().to_owned();
+        let record = self.consume(principal, Purpose::Session, challenge, now_unix, now, None)?;
+        let key = self.device.key().await.map_err(|_| Failure::State)?;
+        let Some(key) = key else {
+            return Err(Failure::NotEnrolled);
+        };
+        if key.fingerprint != record.fingerprint
+            || !verify_signature(&record.payload, signature, &key)
+        {
+            return Err(self.record_failure(principal, now));
+        }
+        self.limiter.success(principal, now);
+        let session = home_secret::hex(32)
+            .map_err(|_| Failure::State)?
+            .expose()
+            .to_owned();
         let mut sessions = self.sessions.lock().unwrap_or_else(PoisonError::into_inner);
         sessions.retain(|_, item| item.expires_at > now);
         if sessions.len() >= MAX_SESSIONS {
@@ -111,7 +255,8 @@ impl StepUp {
         sessions.insert(
             session.clone(),
             Session {
-                token_id: token_id.to_owned(),
+                token_id: principal.to_owned(),
+                fingerprint: key.fingerprint,
                 expires_at: now + SESSION_TTL,
             },
         );
@@ -119,142 +264,189 @@ impl StepUp {
         Ok((session, SESSION_TTL.as_secs()))
     }
 
-    #[must_use]
-    pub fn verify_session(&self, token_id: &str, session: &str, now: Instant) -> bool {
-        let mut sessions = self.sessions.lock().unwrap_or_else(PoisonError::into_inner);
-        let Some(found) = sessions.get(session) else {
+    pub async fn verify_session(&self, token_id: &str, session: &str, now: Instant) -> bool {
+        let fingerprint = {
+            let mut sessions = self.sessions.lock().unwrap_or_else(PoisonError::into_inner);
+            let Some(found) = sessions.get(session) else {
+                return false;
+            };
+            let valid = found.token_id == token_id && found.expires_at > now;
+            let fingerprint = found.fingerprint.clone();
+            if !valid {
+                sessions.remove(session);
+                return false;
+            }
+            drop(sessions);
+            fingerprint
+        };
+        let current = self.device.key().await;
+        let Ok(Some(key)) = current else {
             return false;
         };
-        let valid = found.token_id == token_id && found.expires_at > now;
-        if !valid {
+        if key.fingerprint != fingerprint {
+            let mut sessions = self.sessions.lock().unwrap_or_else(PoisonError::into_inner);
             sessions.remove(session);
+            drop(sessions);
+            return false;
         }
-        valid
+        true
     }
 
-    pub fn verify_mutation(
+    pub async fn authorize_mutation(
         &self,
-        token_id: &str,
-        code: &str,
+        principal: &str,
+        expected: &Operation,
+        challenge: &str,
+        signature: &str,
         now_unix: u64,
         now: Instant,
-    ) -> Result<u64, Failure> {
-        self.check_code(token_id, code, now_unix, now, true)
+    ) -> Result<(), Failure> {
+        let record = self.consume(
+            principal,
+            expected.purpose,
+            challenge,
+            now_unix,
+            now,
+            Some(expected),
+        )?;
+        let key = self.device.key().await.map_err(|_| Failure::State)?;
+        let Some(key) = key else {
+            return Err(Failure::NotEnrolled);
+        };
+        if key.fingerprint != record.fingerprint
+            || !verify_signature(&record.payload, signature, &key)
+        {
+            return Err(self.record_failure(principal, now));
+        }
+        self.limiter.success(principal, now);
+        Ok(())
     }
 
-    #[allow(clippy::significant_drop_tightening)]
-    fn check_code(
+    fn consume(
         &self,
-        token_id: &str,
-        code: &str,
+        principal: &str,
+        purpose: Purpose,
+        challenge: &str,
         now_unix: u64,
         now: Instant,
-        replay_guard: bool,
-    ) -> Result<u64, Failure> {
-        let mut global = self.global.lock().unwrap_or_else(PoisonError::into_inner);
-        if let Some(until) = global.blocked_until {
-            if now < until {
-                return Err(Failure::RateLimited {
-                    retry_after: remaining_seconds(until, now),
-                });
-            }
-            global.blocked_until = None;
-            global.failures = 0;
-            global.window_start = now;
+        expected: Option<&Operation>,
+    ) -> Result<ChallengeRecord, Failure> {
+        let mut challenges = self
+            .challenges
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        challenges.consumed.retain(|_, expires| *expires > now_unix);
+        if challenges.consumed.contains_key(challenge) {
+            return Err(Failure::Invalid);
         }
-        if now.duration_since(global.window_start) > GLOBAL_WINDOW {
-            global.failures = 0;
-            global.window_start = now;
-        }
-        let mut attempts = self.attempts.lock().unwrap_or_else(PoisonError::into_inner);
-        let entry = attempts.entry(token_id.to_owned()).or_default();
-        if let Some(until) = entry.blocked_until {
-            if now < until {
-                return Err(Failure::RateLimited {
-                    retry_after: remaining_seconds(until, now),
-                });
-            }
-            entry.blocked_until = None;
-        }
-        let Some(step) = self.totp.verify(code, now_unix) else {
-            return Err(record_failure(entry, &mut global, now));
+        let Some(record) = challenges.entries.remove(challenge) else {
+            return Err(Failure::Invalid);
         };
-        if replay_guard {
-            let mut last = self
-                .last_step
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner);
-            let mut persisted = self
-                .persisted_step
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner);
-            let replayed =
-                *persisted >= step || last.get(token_id).is_some_and(|previous| *previous >= step);
-            if replayed {
-                return Err(record_failure(entry, &mut global, now));
-            }
-            if let Some(path) = self.state_path.as_deref() {
-                write_step(path, step).map_err(|_| Failure::State)?;
-            }
-            *persisted = step;
-            last.insert(token_id.to_owned(), step);
+        challenges
+            .consumed
+            .insert(challenge.to_owned(), now_unix + CHALLENGE_TTL_SECONDS);
+        write_challenges(&self.state_path, &challenges).map_err(|_| Failure::State)?;
+        drop(challenges);
+        if record.expires_at <= now {
+            return Err(Failure::Expired);
         }
-        entry.failures = 0;
-        entry.blocked_until = None;
-        global.failures = 0;
-        global.window_start = now;
-        Ok(step)
+        if record.principal != principal || record.purpose != purpose {
+            return Err(Failure::Invalid);
+        }
+        if let Some(expected) = expected
+            && !matches(&record, expected)
+        {
+            return Err(Failure::Invalid);
+        }
+        Ok(record)
+    }
+
+    fn record_failure(&self, principal: &str, now: Instant) -> Failure {
+        self.limiter
+            .failure(principal, now)
+            .map_or(Failure::Invalid, |retry_after| Failure::RateLimited {
+                retry_after,
+            })
     }
 }
 
-fn record_failure(entry: &mut Attempts, global: &mut GlobalAttempts, now: Instant) -> Failure {
-    entry.failures = entry.failures.saturating_add(1);
-    global.failures = global.failures.saturating_add(1);
-    if global.failures >= GLOBAL_FAILURE_LIMIT {
-        let until = now + GLOBAL_BLOCK;
-        global.blocked_until = Some(until);
-        return Failure::RateLimited {
-            retry_after: remaining_seconds(until, now),
-        };
-    }
-    if entry.failures < FAILURE_LIMIT {
-        return Failure::Invalid;
-    }
-    let exponent = entry
-        .failures
-        .saturating_sub(FAILURE_LIMIT)
-        .min(MAX_BACKOFF_EXPONENT);
-    let factor = 1u32 << exponent;
-    let duration = BASE_BLOCK.saturating_mul(factor).min(MAX_BLOCK);
-    let until = now + duration;
-    entry.blocked_until = Some(until);
-    Failure::RateLimited {
-        retry_after: remaining_seconds(until, now),
-    }
+fn matches(record: &ChallengeRecord, expected: &Operation) -> bool {
+    record.purpose == expected.purpose
+        && record.path == expected.path
+        && record.key == expected.key
+        && record.version == expected.version
+        && record.cas == expected.cas
+        && record.value_hash == expected.value_hash
 }
 
-fn remaining_seconds(until: Instant, now: Instant) -> u64 {
-    until
-        .checked_duration_since(now)
-        .map_or(1, |duration| duration.as_secs().max(1))
+fn verify_signature(payload: &str, signature: &str, key: &DeviceKey) -> bool {
+    if signature.is_empty() || signature.len() > MAX_SIGNATURE_CHARS {
+        return false;
+    }
+    let Ok(bytes) = URL_SAFE_NO_PAD_INDIFFERENT.decode(signature) else {
+        return false;
+    };
+    let Ok(signature) = Signature::from_der(&bytes) else {
+        return false;
+    };
+    key.verifying.verify(payload.as_bytes(), &signature).is_ok()
 }
 
-fn read_step(path: &Path) -> Result<u64, Error> {
+#[must_use]
+pub fn canonical(
+    challenge: &str,
+    principal: &str,
+    operation: &Operation,
+    expires_at: u64,
+) -> String {
+    format!(
+        "home-secrets-step-up/1\nchallenge={challenge}\nprincipal={principal}\naction={}\npath={}\nkey={}\nversion={}\ncas={}\nvalueSha256={}\nexpires={expires_at}\n",
+        operation.purpose.as_str(),
+        text(operation.path.as_deref()),
+        text(operation.key.as_deref()),
+        number(operation.version),
+        number(operation.cas),
+        text(operation.value_hash.as_deref()),
+    )
+}
+
+fn text(value: Option<&str>) -> &str {
+    value.unwrap_or_default()
+}
+
+fn number(value: Option<u64>) -> String {
+    value.map_or_else(String::new, |value| value.to_string())
+}
+
+#[must_use]
+pub fn now_unix() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |duration| duration.as_secs())
+}
+
+fn read_challenges(path: &Path) -> Result<Challenges, Error> {
     match std::fs::read_to_string(path) {
-        Ok(text) => text.trim().parse::<u64>().map_err(|_| {
+        Ok(text) if text.trim().is_empty() => Ok(Challenges::default()),
+        Ok(text) => serde_json::from_str(&text).map_err(|_| {
             Error::State(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
-                "last TOTP step is not a number",
+                "step-up state is not JSON",
             ))
         }),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(0),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Challenges::default()),
         Err(error) => Err(Error::State(error)),
     }
 }
 
-fn write_step(path: &Path, step: u64) -> std::io::Result<()> {
+fn write_challenges(path: &Path, challenges: &Challenges) -> std::io::Result<()> {
+    if path.as_os_str().is_empty() {
+        return Ok(());
+    }
+    let body = serde_json::to_vec(challenges)
+        .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))?;
     let temporary = path.with_extension("tmp");
-    std::fs::write(&temporary, format!("{step}\n"))?;
+    std::fs::write(&temporary, body)?;
     std::fs::rename(temporary, path)
 }
 
@@ -262,129 +454,128 @@ fn write_step(path: &Path, step: u64) -> std::io::Result<()> {
 mod tests {
     use super::*;
 
-    const SECRET: &str = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ";
-
-    fn stepup() -> StepUp {
-        StepUp::new(SECRET).expect("step-up")
-    }
-
-    fn code(unix: u64) -> String {
-        Totp::new(SECRET).expect("totp").code(unix)
-    }
-
     #[test]
-    fn a_session_expires_after_five_minutes() {
-        let stepup = stepup();
-        let now = Instant::now();
-        let (session, ttl) = stepup
-            .start_session("owner", &code(59), 59, now)
-            .expect("session");
-        assert_eq!(ttl, 300);
-        assert!(stepup.verify_session("owner", &session, now + Duration::from_secs(299)));
-        assert!(!stepup.verify_session("owner", &session, now + Duration::from_secs(301)));
-        assert!(!stepup.verify_session("owner", &session, now + Duration::from_secs(299)));
-    }
-
-    #[test]
-    fn a_session_belongs_to_the_token_that_started_it() {
-        let stepup = stepup();
-        let now = Instant::now();
-        let (session, _) = stepup
-            .start_session("owner", &code(59), 59, now)
-            .expect("session");
-        assert!(!stepup.verify_session("member", &session, now));
-        assert!(!stepup.verify_session("owner", "wrong", now));
-    }
-
-    #[test]
-    fn failures_back_off_exponentially() {
-        let stepup = stepup();
-        let now = Instant::now();
-        for _ in 0..FAILURE_LIMIT - 1 {
-            assert_eq!(
-                stepup.start_session("owner", "000000", 59, now),
-                Err(Failure::Invalid)
-            );
+    fn purposes_round_trip_and_reject_unknown_values() {
+        for purpose in [
+            Purpose::Session,
+            Purpose::Update,
+            Purpose::Rollback,
+            Purpose::Delete,
+        ] {
+            assert_eq!(Purpose::parse(purpose.as_str()), Some(purpose));
         }
-        assert_eq!(
-            stepup.start_session("owner", "000000", 59, now),
-            Err(Failure::RateLimited { retry_after: 60 })
-        );
-        let later = now + BASE_BLOCK + Duration::from_secs(1);
-        assert_eq!(
-            stepup.start_session("owner", "000000", 59, later),
-            Err(Failure::RateLimited { retry_after: 120 })
-        );
-        let even_later = later + Duration::from_secs(121);
-        assert_eq!(
-            stepup.start_session("owner", "000000", 59, even_later),
-            Err(Failure::RateLimited { retry_after: 240 })
-        );
-        let reset = even_later + Duration::from_secs(241);
-        assert!(stepup.start_session("owner", &code(59), 59, reset).is_ok());
-        assert_eq!(
-            stepup.start_session("owner", "000000", 59, reset),
-            Err(Failure::Invalid)
-        );
+        assert_eq!(Purpose::parse("destroy"), None);
     }
 
     #[test]
-    fn the_global_limiter_blocks_every_token() {
-        let stepup = stepup();
-        let now = Instant::now();
-        for index in 0..GLOBAL_FAILURE_LIMIT {
-            let token = if index % 2 == 0 { "owner" } else { "other" };
-            let _ = stepup.start_session(token, "000000", 59, now);
+    fn a_payload_binds_every_operation_field() {
+        let operation = Operation {
+            purpose: Purpose::Update,
+            path: Some("k8s/test".to_owned()),
+            key: Some("password".to_owned()),
+            version: None,
+            cas: Some(3),
+            value_hash: Some("abc".to_owned()),
+        };
+        let payload = canonical("challenge", "owner", &operation, 42);
+        assert!(payload.contains("action=update"));
+        assert!(payload.contains("path=k8s/test"));
+        assert!(payload.contains("key=password"));
+        assert!(payload.contains("version=\n"));
+        assert!(payload.contains("cas=3"));
+        assert!(payload.contains("valueSha256=abc"));
+        assert!(payload.contains("expires=42"));
+        let other = canonical("challenge", "owner", &Operation::session(), 42);
+        assert_ne!(payload, other);
+    }
+
+    fn device_store() -> Arc<DeviceStore> {
+        let openbao = Arc::new(
+            crate::openbao::OpenBao::new(
+                "http://127.0.0.1:1",
+                "role",
+                "/tmp/stepup-service-account-jwt",
+                Duration::from_secs(1),
+            )
+            .expect("openbao"),
+        );
+        Arc::new(DeviceStore::new(openbao, "device/test"))
+    }
+
+    fn challenge(expires_at: Instant) -> ChallengeRecord {
+        ChallengeRecord {
+            principal: "owner".to_owned(),
+            purpose: Purpose::Session,
+            path: None,
+            key: None,
+            version: None,
+            cas: None,
+            value_hash: None,
+            payload: "payload".to_owned(),
+            expires_at,
+            fingerprint: "fingerprint".to_owned(),
         }
-        assert_eq!(
-            stepup.start_session("owner", &code(59), 59, now),
-            Err(Failure::RateLimited { retry_after: 300 })
-        );
-        let later = now + GLOBAL_BLOCK + Duration::from_secs(1);
-        assert!(stepup.start_session("owner", &code(59), 59, later).is_ok());
     }
 
     #[test]
-    fn a_mutation_code_cannot_be_replayed_in_the_same_window() {
-        let stepup = stepup();
+    fn a_malformed_signature_is_rejected_without_a_panic() {
+        use p256::pkcs8::EncodePublicKey as _;
+        let key = p256::ecdsa::SigningKey::from_slice(&[7u8; 32]).expect("key");
+        let encoded = key.verifying_key().to_public_key_der().expect("der");
+        let device = DeviceKey {
+            device_id: "device".to_owned(),
+            fingerprint: "fingerprint".to_owned(),
+            verifying: *key.verifying_key(),
+        };
+        assert!(!verify_signature("payload", "not-base64!", &device));
+        assert!(!verify_signature("payload", "", &device));
+        assert!(!verify_signature(
+            "payload",
+            &crate::device::encode_base64(encoded.as_bytes()),
+            &device
+        ));
+    }
+
+    #[test]
+    fn an_expired_challenge_is_rejected() {
+        let stepup = StepUp::new(device_store());
         let now = Instant::now();
-        assert_eq!(stepup.verify_mutation("owner", &code(59), 59, now), Ok(1));
-        assert_eq!(
-            stepup.verify_mutation("owner", &code(59), 59, now),
-            Err(Failure::Invalid)
+        stepup.challenges.lock().expect("lock").entries.insert(
+            "expired".to_owned(),
+            challenge(now - Duration::from_secs(1)),
         );
-        assert_eq!(stepup.verify_mutation("owner", &code(89), 89, now), Ok(2));
+        assert_eq!(
+            stepup
+                .consume("owner", Purpose::Session, "expired", 0, now, None)
+                .err(),
+            Some(Failure::Expired)
+        );
     }
 
     #[test]
-    fn a_restart_cannot_replay_a_persisted_step() {
+    fn a_consumed_challenge_survives_a_restart() {
         let directory = tempfile::tempdir().expect("tempdir");
-        let path = directory.path().join("last-totp-step");
+        let path = directory.path().join("step-up.json");
         let now = Instant::now();
-        let first = StepUp::with_state(SECRET, &path).expect("step-up");
-        assert_eq!(first.verify_mutation("owner", &code(59), 59, now), Ok(1));
+        let first = StepUp::with_state(device_store(), &path).expect("step-up");
+        first
+            .challenges
+            .lock()
+            .expect("lock")
+            .entries
+            .insert("once".to_owned(), challenge(now + Duration::from_secs(60)));
+        assert!(
+            first
+                .consume("owner", Purpose::Session, "once", 1_000, now, None)
+                .is_ok()
+        );
         drop(first);
-        let restarted = StepUp::with_state(SECRET, &path).expect("step-up");
+        let restarted = StepUp::with_state(device_store(), &path).expect("step-up");
         assert_eq!(
-            restarted.verify_mutation("owner", &code(59), 59, now),
-            Err(Failure::Invalid)
+            restarted
+                .consume("owner", Purpose::Session, "once", 1_000, now, None)
+                .err(),
+            Some(Failure::Invalid)
         );
-        assert_eq!(
-            restarted.verify_mutation("owner", &code(89), 89, now),
-            Ok(2)
-        );
-    }
-
-    #[test]
-    fn a_session_start_and_a_mutation_can_share_one_code() {
-        let stepup = stepup();
-        let now = Instant::now();
-        assert!(stepup.start_session("owner", &code(59), 59, now).is_ok());
-        assert_eq!(stepup.verify_mutation("owner", &code(59), 59, now), Ok(1));
-    }
-
-    #[test]
-    fn a_bad_secret_is_rejected() {
-        assert!(StepUp::new("not-base32!").is_err());
     }
 }

@@ -14,13 +14,14 @@ use tokio::time::Instant;
 use crate::audit::{Action, Auditor, Event};
 use crate::catalog::Catalog;
 use crate::deny::Deny;
+use crate::device::{self, DeviceStore};
 use crate::openbao::{self, OpenBao};
 use crate::path;
-use crate::stepup::{Failure, StepUp};
-use crate::totp;
+use crate::stepup::{Failure, Operation, Purpose, StepUp, now_unix};
 
 pub const STEP_UP_SESSION_HEADER: &str = "x-step-up-session";
-pub const STEP_UP_TOTP_HEADER: &str = "x-step-up-totp";
+pub const STEP_UP_CHALLENGE_HEADER: &str = "x-step-up-challenge";
+pub const STEP_UP_SIGNATURE_HEADER: &str = "x-step-up-signature";
 pub const MAX_KEY_CHARS: usize = 128;
 pub const MAX_VALUE_BYTES: usize = 32 * 1024;
 
@@ -30,6 +31,7 @@ pub struct GatewayState {
     pub openbao: Arc<OpenBao>,
     pub catalog: Arc<Catalog>,
     pub deny: Arc<Deny>,
+    pub device: Arc<DeviceStore>,
     pub stepup: Arc<StepUp>,
     pub audit: Arc<Auditor>,
     pub max_list_entries: usize,
@@ -81,7 +83,34 @@ struct RollbackBody {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct StepUpBody {
-    totp: String,
+    challenge: String,
+    signature: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ChallengeBody {
+    action: String,
+    #[serde(default)]
+    path: Option<String>,
+    #[serde(default)]
+    key: Option<String>,
+    #[serde(default)]
+    version: Option<u64>,
+    #[serde(default)]
+    cas: Option<u64>,
+    #[serde(default)]
+    value_hash: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct EnrollBody {
+    code: String,
+    public_key: String,
+    attestation_challenge: String,
+    #[serde(default)]
+    attestation_chain: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -100,7 +129,11 @@ pub fn router(state: GatewayState) -> Router {
         .route("/v1/secrets/update/{*path}", post(update))
         .route("/v1/secrets/rollback/{*path}", post(rollback))
         .route("/v1/secrets/{*path}", axum::routing::delete(delete_latest))
+        .route("/v1/step-up/challenge", post(step_up_challenge))
         .route("/v1/step-up", post(step_up))
+        .route("/v1/device", get(device_status))
+        .route("/v1/device/challenge", post(device_challenge))
+        .route("/v1/device/enroll", post(device_enroll))
         .with_state(state)
 }
 
@@ -114,7 +147,20 @@ async fn authorized(state: &GatewayState, headers: &HeaderMap) -> Result<Princip
         return Err(error(StatusCode::UNAUTHORIZED, "unauthenticated"));
     };
     match principal.require(Module::Secrets) {
-        Ok(()) => Ok(principal),
+        Ok(()) => {
+            if let Ok(Some(device_id)) = state.device.poll_revocation(Instant::now()).await {
+                state.audit.record(&Event {
+                    action: Action::DeviceRevoke,
+                    principal: &principal.id,
+                    path: None,
+                    key: None,
+                    version: None,
+                    outcome: "ok",
+                    detail: Some(&device_id),
+                });
+            }
+            Ok(principal)
+        }
         Err(forbidden) => Err(forbidden_response(forbidden)),
     }
 }
@@ -145,7 +191,7 @@ async fn list(State(state): State<GatewayState>, headers: HeaderMap) -> Response
     };
     let mut entries: BTreeMap<String, EntryView> = BTreeMap::new();
     for (path, catalog) in state.catalog.iter() {
-        if state.deny.is_denied(path) {
+        if state.deny.is_denied(path) || path.as_str() == state.device.path() {
             continue;
         }
         if path::normalize(path).is_err() {
@@ -165,7 +211,7 @@ async fn list(State(state): State<GatewayState>, headers: HeaderMap) -> Response
     }
     let openbao::ListResult { paths, truncated } = listing;
     for path in paths {
-        if state.deny.is_denied(&path) {
+        if state.deny.is_denied(&path) || path.as_str() == state.device.path() {
             continue;
         }
         if path::normalize(&path).is_err() {
@@ -294,6 +340,7 @@ async fn reveal(
         || !state
             .stepup
             .verify_session(&principal.id, session, Instant::now())
+            .await
     {
         state.audit.record(&Event {
             action: Action::Reveal,
@@ -442,10 +489,19 @@ async fn update(
         &principal,
         &headers,
         Action::Update,
-        &path,
+        Operation {
+            purpose: Purpose::Update,
+            path: Some(path.clone()),
+            key: Some(body.key.clone()),
+            version: None,
+            cas: Some(body.cas),
+            value_hash: Some(sha256_hex(&body.value)),
+        },
         Some(audit_key(&body.key)),
         None,
-    ) {
+    )
+    .await
+    {
         return response;
     }
     if !valid_key(&body.key) {
@@ -577,7 +633,7 @@ async fn update(
         outcome: "ok",
         detail: None,
     });
-    Json(json!({"path": path, "version": version, "key": body.key})).into_response()
+    no_store(Json(json!({"path": path, "version": version, "key": body.key})).into_response())
 }
 
 async fn rollback(
@@ -606,10 +662,19 @@ async fn rollback(
         &principal,
         &headers,
         Action::Rollback,
-        &path,
+        Operation {
+            purpose: Purpose::Rollback,
+            path: Some(path.clone()),
+            key: None,
+            version: Some(body.version),
+            cas: Some(body.cas),
+            value_hash: None,
+        },
         None,
         Some(body.version),
-    ) {
+    )
+    .await
+    {
         return response;
     }
     let meta = match state.openbao.metadata(&path).await {
@@ -718,12 +783,14 @@ async fn rollback(
         outcome: "ok",
         detail: Some("rollback"),
     });
-    Json(json!({
-        "path": path,
-        "fromVersion": body.version,
-        "version": version,
-    }))
-    .into_response()
+    no_store(
+        Json(json!({
+            "path": path,
+            "fromVersion": body.version,
+            "version": version,
+        }))
+        .into_response(),
+    )
 }
 
 async fn delete_latest(
@@ -745,10 +812,19 @@ async fn delete_latest(
         &principal,
         &headers,
         Action::Delete,
-        &path,
+        Operation {
+            purpose: Purpose::Delete,
+            path: Some(path.clone()),
+            key: None,
+            version: query.version,
+            cas: Some(query.cas),
+            value_hash: None,
+        },
         None,
         Some(query.cas),
-    ) {
+    )
+    .await
+    {
         return response;
     }
     let meta = match state.openbao.metadata(&path).await {
@@ -793,6 +869,33 @@ async fn delete_latest(
         );
         return error(StatusCode::CONFLICT, "version_not_current");
     }
+    let fresh = match state.openbao.metadata(&path).await {
+        Ok(meta) => meta,
+        Err(failure) => {
+            audit_outcome(
+                &state,
+                &principal,
+                Action::Delete,
+                &path,
+                None,
+                Some(query.cas),
+                "error",
+            );
+            return openbao_error(failure);
+        }
+    };
+    if fresh.current_version != meta.current_version {
+        audit_outcome(
+            &state,
+            &principal,
+            Action::Delete,
+            &path,
+            None,
+            Some(fresh.current_version),
+            "conflict",
+        );
+        return conflict(fresh.current_version);
+    }
     match state.openbao.delete_latest(&path).await {
         Ok(()) => {
             state.audit.record(&Event {
@@ -804,12 +907,14 @@ async fn delete_latest(
                 outcome: "ok",
                 detail: None,
             });
-            Json(json!({
-                "path": path,
-                "deleted": true,
-                "version": meta.current_version,
-            }))
-            .into_response()
+            no_store(
+                Json(json!({
+                    "path": path,
+                    "deleted": true,
+                    "version": meta.current_version,
+                }))
+                .into_response(),
+            )
         }
         Err(failure) => {
             audit_outcome(
@@ -826,6 +931,51 @@ async fn delete_latest(
     }
 }
 
+async fn step_up_challenge(
+    State(state): State<GatewayState>,
+    headers: HeaderMap,
+    Json(body): Json<ChallengeBody>,
+) -> Response {
+    let principal = match authorized(&state, &headers).await {
+        Ok(principal) => principal,
+        Err(response) => return response,
+    };
+    let Some(purpose) = Purpose::parse(&body.action) else {
+        return error(StatusCode::BAD_REQUEST, "invalid_action");
+    };
+    let operation = match operation_from(&state, &principal, purpose, &body) {
+        Ok(operation) => operation,
+        Err(response) => return response,
+    };
+    match state
+        .stepup
+        .issue(&principal.id, operation, now_unix(), Instant::now())
+        .await
+    {
+        Ok(view) => no_store(
+            Json(json!({
+                "challenge": view.challenge,
+                "payload": view.payload,
+                "expiresIn": view.expires_in,
+            }))
+            .into_response(),
+        ),
+        Err(failure) => {
+            let (outcome, response) = failure_response(failure);
+            audit_event(
+                &state,
+                &principal,
+                Action::StepUp,
+                None,
+                None,
+                None,
+                outcome,
+            );
+            response
+        }
+    }
+}
+
 async fn step_up(
     State(state): State<GatewayState>,
     headers: HeaderMap,
@@ -837,112 +987,377 @@ async fn step_up(
     };
     match state
         .stepup
-        .start_session(&principal.id, &body.totp, totp::now_unix(), Instant::now())
+        .open_session(
+            &principal.id,
+            &body.challenge,
+            &body.signature,
+            now_unix(),
+            Instant::now(),
+        )
+        .await
     {
         Ok((session, expires_in)) => {
-            state.audit.record(&Event {
-                action: Action::StepUp,
-                principal: &principal.id,
-                path: None,
-                key: None,
-                version: None,
-                outcome: "ok",
-                detail: None,
-            });
+            audit_event(&state, &principal, Action::StepUp, None, None, None, "ok");
             no_store(Json(json!({"session": session, "expiresIn": expires_in})).into_response())
         }
-        Err(Failure::RateLimited { retry_after }) => {
-            state.audit.record(&Event {
-                action: Action::StepUp,
-                principal: &principal.id,
-                path: None,
-                key: None,
-                version: None,
-                outcome: "rate_limited",
-                detail: None,
-            });
-            rate_limited(retry_after)
+        Err(failure) => {
+            let (outcome, response) = failure_response(failure);
+            audit_event(
+                &state,
+                &principal,
+                Action::StepUp,
+                None,
+                None,
+                None,
+                outcome,
+            );
+            response
         }
-        Err(_) => {
-            state.audit.record(&Event {
-                action: Action::StepUp,
-                principal: &principal.id,
-                path: None,
-                key: None,
-                version: None,
-                outcome: "step_up_invalid",
-                detail: None,
-            });
-            error(StatusCode::FORBIDDEN, "step_up_invalid")
+    }
+}
+
+async fn device_status(State(state): State<GatewayState>, headers: HeaderMap) -> Response {
+    if let Err(response) = authorized(&state, &headers).await {
+        return response;
+    }
+    match state.device.status().await {
+        Ok(Some(device)) => no_store(
+            Json(json!({
+                "enrolled": true,
+                "deviceId": device.device_id,
+                "enrolledAt": device.enrolled_at,
+                "publicKey": device.public_key,
+            }))
+            .into_response(),
+        ),
+        Ok(None) => no_store(Json(json!({"enrolled": false})).into_response()),
+        Err(_) => error(StatusCode::SERVICE_UNAVAILABLE, "device_unavailable"),
+    }
+}
+
+async fn device_challenge(State(state): State<GatewayState>, headers: HeaderMap) -> Response {
+    let principal = match authorized(&state, &headers).await {
+        Ok(principal) => principal,
+        Err(response) => return response,
+    };
+    match state
+        .device
+        .attestation_challenge(&principal.id, now_unix())
+    {
+        Ok((challenge, expires_in)) => {
+            no_store(Json(json!({"challenge": challenge, "expiresIn": expires_in})).into_response())
+        }
+        Err(_) => error(StatusCode::SERVICE_UNAVAILABLE, "device_unavailable"),
+    }
+}
+
+async fn device_enroll(
+    State(state): State<GatewayState>,
+    headers: HeaderMap,
+    Json(body): Json<EnrollBody>,
+) -> Response {
+    let principal = match authorized(&state, &headers).await {
+        Ok(principal) => principal,
+        Err(response) => return response,
+    };
+    let enrollment = device::Enrollment {
+        code: &body.code,
+        public_key: &body.public_key,
+        challenge: &body.attestation_challenge,
+        attestation_chain: &body.attestation_chain,
+    };
+    match state
+        .device
+        .enroll(&principal.id, enrollment, now_unix(), Instant::now())
+        .await
+    {
+        Ok(device) => {
+            audit_event(&state, &principal, Action::Enroll, None, None, None, "ok");
+            no_store(
+                Json(json!({
+                    "enrolled": true,
+                    "deviceId": device.device_id,
+                    "enrolledAt": device.enrolled_at,
+                }))
+                .into_response(),
+            )
+        }
+        Err(failure) => {
+            let (outcome, detail, response) = device_failure(failure);
+            audit_event_with_detail(
+                &state,
+                &principal,
+                Action::Enroll,
+                None,
+                None,
+                None,
+                outcome,
+                detail,
+            );
+            response
         }
     }
 }
 
 #[allow(clippy::result_large_err)]
-fn require_mutation(
+fn operation_from(
+    state: &GatewayState,
+    principal: &Principal,
+    purpose: Purpose,
+    body: &ChallengeBody,
+) -> Result<Operation, Response> {
+    match purpose {
+        Purpose::Session => {
+            if body.path.is_some()
+                || body.key.is_some()
+                || body.version.is_some()
+                || body.cas.is_some()
+            {
+                return Err(error(StatusCode::BAD_REQUEST, "invalid_challenge"));
+            }
+            Ok(Operation::session())
+        }
+        Purpose::Update => {
+            let Some(raw) = body.path.as_deref() else {
+                return Err(error(StatusCode::BAD_REQUEST, "invalid_challenge"));
+            };
+            let Some(key) = body.key.as_deref() else {
+                return Err(error(StatusCode::BAD_REQUEST, "invalid_challenge"));
+            };
+            let Some(cas) = body.cas else {
+                return Err(error(StatusCode::BAD_REQUEST, "invalid_challenge"));
+            };
+            if body.version.is_some() {
+                return Err(error(StatusCode::BAD_REQUEST, "invalid_challenge"));
+            }
+            let Some(value_hash) = body.value_hash.as_deref().filter(|hash| valid_hash(hash))
+            else {
+                return Err(error(StatusCode::BAD_REQUEST, "invalid_challenge"));
+            };
+            let path = resolve(
+                state,
+                principal,
+                Action::Update,
+                raw,
+                Some(audit_key(key)),
+                None,
+            )?;
+            Ok(Operation {
+                purpose,
+                path: Some(path),
+                key: Some(key.to_owned()),
+                version: None,
+                cas: Some(cas),
+                value_hash: Some(value_hash.to_ascii_lowercase()),
+            })
+        }
+        Purpose::Rollback => {
+            let Some(raw) = body.path.as_deref() else {
+                return Err(error(StatusCode::BAD_REQUEST, "invalid_challenge"));
+            };
+            let Some(version) = body.version else {
+                return Err(error(StatusCode::BAD_REQUEST, "invalid_challenge"));
+            };
+            let Some(cas) = body.cas else {
+                return Err(error(StatusCode::BAD_REQUEST, "invalid_challenge"));
+            };
+            if body.key.is_some() {
+                return Err(error(StatusCode::BAD_REQUEST, "invalid_challenge"));
+            }
+            let path = resolve(state, principal, Action::Rollback, raw, None, Some(version))?;
+            Ok(Operation {
+                purpose,
+                path: Some(path),
+                key: None,
+                version: Some(version),
+                cas: Some(cas),
+                value_hash: None,
+            })
+        }
+        Purpose::Delete => {
+            let Some(raw) = body.path.as_deref() else {
+                return Err(error(StatusCode::BAD_REQUEST, "invalid_challenge"));
+            };
+            let Some(cas) = body.cas else {
+                return Err(error(StatusCode::BAD_REQUEST, "invalid_challenge"));
+            };
+            if body.key.is_some() || body.value_hash.is_some() {
+                return Err(error(StatusCode::BAD_REQUEST, "invalid_challenge"));
+            }
+            let path = resolve(state, principal, Action::Delete, raw, None, body.version)?;
+            Ok(Operation {
+                purpose,
+                path: Some(path),
+                key: None,
+                version: body.version,
+                cas: Some(cas),
+                value_hash: None,
+            })
+        }
+    }
+}
+
+#[allow(clippy::result_large_err)]
+async fn require_mutation(
     state: &GatewayState,
     principal: &Principal,
     headers: &HeaderMap,
     action: Action,
-    path: &str,
+    operation: Operation,
     key: Option<&str>,
     version: Option<u64>,
 ) -> Result<(), Response> {
-    let code = header_value(headers, STEP_UP_TOTP_HEADER);
-    if code.is_empty() {
-        state.audit.record(&Event {
+    let path = operation.path.as_deref();
+    let challenge = header_value(headers, STEP_UP_CHALLENGE_HEADER);
+    let signature = header_value(headers, STEP_UP_SIGNATURE_HEADER);
+    if challenge.is_empty() || signature.is_empty() {
+        audit_event(
+            state,
+            principal,
             action,
-            principal: &principal.id,
-            path: Some(path),
+            path,
             key,
             version,
-            outcome: "step_up_required",
-            detail: None,
-        });
+            "step_up_required",
+        );
         return Err(error(StatusCode::FORBIDDEN, "step_up_required"));
     }
     match state
         .stepup
-        .verify_mutation(&principal.id, code, totp::now_unix(), Instant::now())
+        .authorize_mutation(
+            &principal.id,
+            &operation,
+            challenge,
+            signature,
+            now_unix(),
+            Instant::now(),
+        )
+        .await
     {
-        Ok(_) => Ok(()),
-        Err(Failure::RateLimited { retry_after }) => {
-            state.audit.record(&Event {
-                action,
-                principal: &principal.id,
-                path: Some(path),
-                key,
-                version,
-                outcome: "rate_limited",
-                detail: None,
-            });
-            Err(rate_limited(retry_after))
-        }
-        Err(Failure::State) => {
-            state.audit.record(&Event {
-                action,
-                principal: &principal.id,
-                path: Some(path),
-                key,
-                version,
-                outcome: "state_unavailable",
-                detail: None,
-            });
-            Err(error(StatusCode::SERVICE_UNAVAILABLE, "state_unavailable"))
-        }
-        Err(_) => {
-            state.audit.record(&Event {
-                action,
-                principal: &principal.id,
-                path: Some(path),
-                key,
-                version,
-                outcome: "step_up_invalid",
-                detail: None,
-            });
-            Err(error(StatusCode::FORBIDDEN, "step_up_invalid"))
+        Ok(()) => Ok(()),
+        Err(failure) => {
+            let (outcome, response) = failure_response(failure);
+            audit_event(state, principal, action, path, key, version, outcome);
+            Err(response)
         }
     }
+}
+
+fn failure_response(failure: Failure) -> (&'static str, Response) {
+    match failure {
+        Failure::RateLimited { retry_after } => ("rate_limited", rate_limited(retry_after)),
+        Failure::State => (
+            "state_unavailable",
+            error(StatusCode::SERVICE_UNAVAILABLE, "state_unavailable"),
+        ),
+        Failure::NotEnrolled => (
+            "device_not_enrolled",
+            error(StatusCode::FORBIDDEN, "device_not_enrolled"),
+        ),
+        Failure::Expired => (
+            "step_up_expired",
+            error(StatusCode::FORBIDDEN, "step_up_expired"),
+        ),
+        Failure::Invalid => (
+            "step_up_invalid",
+            error(StatusCode::FORBIDDEN, "step_up_invalid"),
+        ),
+    }
+}
+
+fn device_failure(failure: device::Error) -> (&'static str, Option<&'static str>, Response) {
+    match failure {
+        device::Error::EnrollmentClosed => (
+            "enrollment_invalid",
+            Some("enrollment_closed"),
+            error(StatusCode::FORBIDDEN, "enrollment_invalid"),
+        ),
+        device::Error::CodeExpired => (
+            "enrollment_invalid",
+            Some("enrollment_expired"),
+            error(StatusCode::FORBIDDEN, "enrollment_invalid"),
+        ),
+        device::Error::CodeInvalid => (
+            "enrollment_invalid",
+            Some("enrollment_invalid"),
+            error(StatusCode::FORBIDDEN, "enrollment_invalid"),
+        ),
+        device::Error::ChallengeInvalid => (
+            "enrollment_invalid",
+            Some("attestation_challenge_invalid"),
+            error(StatusCode::FORBIDDEN, "enrollment_invalid"),
+        ),
+        device::Error::KeyInvalid => (
+            "enrollment_invalid",
+            Some("public_key_invalid"),
+            error(StatusCode::FORBIDDEN, "enrollment_invalid"),
+        ),
+        device::Error::AttestationInvalid => (
+            "enrollment_invalid",
+            Some("attestation_invalid"),
+            error(StatusCode::FORBIDDEN, "enrollment_invalid"),
+        ),
+        device::Error::Conflict => (
+            "enrollment_conflict",
+            None,
+            error(StatusCode::CONFLICT, "enrollment_conflict"),
+        ),
+        device::Error::RateLimited { retry_after } => {
+            ("rate_limited", None, rate_limited(retry_after))
+        }
+        device::Error::NotEnrolled => (
+            "device_not_enrolled",
+            None,
+            error(StatusCode::FORBIDDEN, "device_not_enrolled"),
+        ),
+        device::Error::Unavailable => (
+            "device_unavailable",
+            None,
+            error(StatusCode::SERVICE_UNAVAILABLE, "device_unavailable"),
+        ),
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn audit_event_with_detail(
+    state: &GatewayState,
+    principal: &Principal,
+    action: Action,
+    path: Option<&str>,
+    key: Option<&str>,
+    version: Option<u64>,
+    outcome: &'static str,
+    detail: Option<&'static str>,
+) {
+    state.audit.record(&Event {
+        action,
+        principal: &principal.id,
+        path,
+        key,
+        version,
+        outcome,
+        detail,
+    });
+}
+
+fn audit_event(
+    state: &GatewayState,
+    principal: &Principal,
+    action: Action,
+    path: Option<&str>,
+    key: Option<&str>,
+    version: Option<u64>,
+    outcome: &'static str,
+) {
+    state.audit.record(&Event {
+        action,
+        principal: &principal.id,
+        path,
+        key,
+        version,
+        outcome,
+        detail: None,
+    });
 }
 
 fn audit_conflict(
@@ -1005,7 +1420,7 @@ fn resolve(
         );
         return Err(error(StatusCode::BAD_REQUEST, "invalid_path"));
     };
-    if state.deny.is_denied(&path) {
+    if state.deny.is_denied(&path) || path.as_str() == state.device.path() {
         audit_outcome(
             state,
             principal,
@@ -1029,6 +1444,15 @@ fn header_value<'a>(headers: &'a HeaderMap, name: &str) -> &'a str {
         .get(name)
         .and_then(|value| value.to_str().ok())
         .unwrap_or_default()
+}
+
+fn valid_hash(hash: &str) -> bool {
+    hash.len() == 64 && hash.bytes().all(|byte| byte.is_ascii_hexdigit())
+}
+
+fn sha256_hex(value: &str) -> String {
+    use sha2::Digest as _;
+    hex::encode(sha2::Sha256::digest(value.as_bytes()))
 }
 
 fn valid_key(key: &str) -> bool {
@@ -1099,6 +1523,10 @@ pub fn route_summary() -> Value {
         "update": "POST /v1/secrets/update/{path}",
         "rollback": "POST /v1/secrets/rollback/{path}",
         "delete": "DELETE /v1/secrets/{path}",
+        "device": "GET /v1/device",
+        "deviceChallenge": "POST /v1/device/challenge",
+        "deviceEnroll": "POST /v1/device/enroll",
+        "stepUpChallenge": "POST /v1/step-up/challenge",
         "stepUp": "POST /v1/step-up",
     })
 }
