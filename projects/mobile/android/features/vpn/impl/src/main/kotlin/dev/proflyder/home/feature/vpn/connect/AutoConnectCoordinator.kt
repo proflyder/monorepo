@@ -1,5 +1,6 @@
 package dev.proflyder.home.feature.vpn.connect
 
+import dev.proflyder.home.core.runtime.AppActivation
 import dev.proflyder.home.core.runtime.AppForeground
 import dev.proflyder.home.core.runtime.AppStartable
 import dev.proflyder.home.feature.vpn.HomeNetworkState
@@ -54,6 +55,7 @@ internal class AutoConnectCoordinator(
     private val userIntent: UserVpnIntent,
     private val systemStarts: SystemVpnStarts,
     private val journal: AutoConnectJournal,
+    private val activation: AppActivation,
     private val scope: CoroutineScope,
 ) : AppStartable {
     private val mutableRoute = MutableStateFlow(HomeRoute.READY)
@@ -65,7 +67,10 @@ internal class AutoConnectCoordinator(
     val permissionRequests: Flow<Unit> = permissionChannel.receiveAsFlow()
 
     override fun start() {
-        scope.launch { triggers().collectLatest(::decide) }
+        scope.launch {
+            activation.awaitActive()
+            triggers().collectLatest(::decide)
+        }
         scope.launch { systemStarts.starts.collect { onSystemStart() } }
     }
 

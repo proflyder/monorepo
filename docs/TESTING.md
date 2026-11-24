@@ -52,7 +52,7 @@ teardown восстанавливает source/volume.
 | HA static | YAML, duplicate keys, entities/services/scripts, Jinja, intents |
 | Hermes | model/provider, MCP allowlist, web search, voice sanitizer |
 | Egress guard | IPv4/IPv6 allowlist, NTP, idempotency |
-| Static gates | shell syntax, ShellCheck errors, Python syntax, secret patterns, workload'ы `projects/home/kubernetes` ↔ каталог отчёта |
+| Static gates | shell syntax, ShellCheck errors, Python syntax, secret patterns, workload'ы `projects/home/kubernetes` ↔ каталог отчёта, `kustomize build` Flux-каталогов (namespace у каждого namespaced ресурса) |
 | Scheduler / HA bridge | SQLite store/tick/planner, Connect API, auth, очереди, at-least-once, ledger |
 | BLE gateway | token, Wi-Fi validation/rollback, WPA, GATT, HTTP auth/status |
 | Windows logon provider | protocol/HMAC/config-векторы, PE exports/imports, install-скрипты, self-test на ПК |
@@ -61,6 +61,14 @@ teardown восстанавливает source/volume.
 | Voice routing | `solutions/voice-proxy`, `test_voice_routing_contract.py`, `test_bb_dispatch.py` |
 | Pulsar | `bazel test //projects/station/pulsar/...` (fmt/clippy/tests, Linux) и кросс-сборка `aarch64`/`armhf` |
 | HA / Gateway live | API, entities, text intents, bearer auth, method guards |
+
+Flux-каталоги проверяются через `kustomize build` (иначе `kubectl kustomize`,
+offline, `KUBECONFIG=/dev/null`) в `KustomizeNamespaceTests`
+(`platform/quality/test_static.py`). Для каждого каталога
+`projects/home/kubernetes/*/manifests`, который Flux применяет без
+`targetNamespace`, каждый namespaced ресурс обязан иметь `metadata.namespace`;
+cluster-scoped kinds заданы allowlist'ом в тесте. Фикстуры с пропущенным
+namespace и с cluster-scoped ресурсом — `platform/quality/testdata/kustomize/`.
 
 ## Сервисы и голос
 
@@ -282,7 +290,7 @@ Push в `develop` CI не запускает: туда попадают толь
 | python | `_python.yml` | все затронутые Python-юниты одним job |
 | js | `_js.yml` | `node --test`, без npm |
 | native | `_native.yml` | кросс-сборка, `SHA256SUMS`, release-shaped `tree-<hash>` |
-| quality | `_quality.yml` | audit, lint:comments, static (включая сверку workload'ов манифестов с каталогом отчёта), ci:units, test:ci, shellcheck, actionlint, Gitleaks — параллельно, всегда; падает со списком всех упавших |
+| quality | `_quality.yml` | audit, lint:comments, static (включая сверку workload'ов манифестов с каталогом отчёта и namespace-гейт Flux-каталогов), ci:units, test:ci, shellcheck, actionlint, Gitleaks — параллельно, всегда; падает со списком всех упавших |
 
 Затронутость:
 

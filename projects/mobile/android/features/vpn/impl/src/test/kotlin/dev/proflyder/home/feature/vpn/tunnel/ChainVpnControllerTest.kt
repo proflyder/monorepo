@@ -155,13 +155,18 @@ class ChainVpnControllerTest {
     }
 
     @Test
-    fun aSilentAutoPolicyStartAwayOffersFallbackButANetworkRestartFailsQuietly() = runTest {
+    fun aSilentUserStartAwayOffersFallbackButAnAutomaticStartEndsQuietly() = runTest {
         val environment = FakeEnvironment(HomeNetworkState.Away(setOf(1L)))
         val silent = FakeTransport("primary", order = 0, handshake = Handshake.SILENT)
+        val user = controller(backgroundScope, listOf(silent), profileWith("primary"), environment)
+        user.connect()
+        settle()
+        assertEquals(VpnConnection.FallbackRequired(emptyList()), user.connection.value)
+
         val auto = controller(backgroundScope, listOf(silent), profileWith("primary"), environment)
         auto.launch(ConnectOrigin.AUTO_POLICY)
         settle()
-        assertEquals(VpnConnection.FallbackRequired(emptyList()), auto.connection.value)
+        assertEquals(VpnConnection.Disconnected, auto.connection.value)
 
         val home = FakeEnvironment(HomeNetworkState.Home(setOf(1L)))
         val flaky = FakeTransport("primary", order = 0, handshake = Handshake.ANSWERS, restartOnNetworkChange = true)

@@ -11,12 +11,14 @@ import dev.proflyder.home.core.model.CreatedAccessToken
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.network.AccessApi
+import dev.proflyder.home.core.runtime.AppActivation
 import dev.proflyder.home.core.testing.FakeClock
 import dev.proflyder.home.core.testing.FakeSyncSignals
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runCurrent
@@ -86,7 +88,35 @@ class AppAccessSessionTest {
         signals: FakeSyncSignals,
         clock: FakeClock,
         scope: kotlinx.coroutines.CoroutineScope,
-    ): AppAccessSession = AppAccessSession(api, settings, signals, clock, scope)
+        activation: AppActivation = FakeActivation(),
+    ): AppAccessSession = AppAccessSession(api, settings, signals, activation, clock, scope)
+
+    private class FakeActivation(active: Boolean = true) : AppActivation {
+        override val active = MutableStateFlow(active)
+
+        override fun activate() {
+            this.active.value = true
+        }
+
+        override suspend fun awaitActive() {
+            this.active.first { it }
+        }
+    }
+
+    @Test
+    fun aColdProcessStartDoesNotCallMeUntilTheAppIsUsed() = runTest(UnconfinedTestDispatcher()) {
+        val api = FakeApi()
+        val activation = FakeActivation(active = false)
+        val session = session(api, FakeSettings("owner-token"), FakeSyncSignals(), FakeClock(), backgroundScope, activation)
+
+        session.start()
+        assertEquals(0, api.calls)
+        assertEquals(AppAccessState.Unknown, session.state.value)
+
+        activation.activate()
+        assertEquals(1, api.calls)
+        assertEquals(FakeApi.access, (session.state.value as AppAccessState.Ready).access)
+    }
 
     @Test
     fun startLoadsTheCurrentTokenAndStaleAccessRefreshesIt() = runTest(UnconfinedTestDispatcher()) {

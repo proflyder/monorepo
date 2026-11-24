@@ -1,6 +1,7 @@
 package dev.proflyder.home.feature.vpn.data
 
 import dev.proflyder.home.core.config.ConnectionSettingsStore
+import dev.proflyder.home.core.runtime.AppActivation
 import dev.proflyder.home.core.runtime.AppStartable
 import dev.proflyder.home.feature.vpn.VpnProfiles
 import dev.zacsweers.metro.Inject
@@ -14,10 +15,12 @@ import kotlinx.coroutines.launch
 internal class VpnProfileSync(
     private val connection: ConnectionSettingsStore,
     private val profiles: VpnProfiles,
+    private val activation: AppActivation,
     private val scope: CoroutineScope,
 ) : AppStartable {
     override fun start() {
         scope.launch {
+            activation.awaitActive()
             connection.config
                 .map { it.isConfigured && it.hasToken }
                 .distinctUntilChanged()

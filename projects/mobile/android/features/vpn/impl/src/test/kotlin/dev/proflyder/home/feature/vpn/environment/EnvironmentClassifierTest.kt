@@ -15,14 +15,19 @@ class EnvironmentClassifierTest {
 
     @Test
     fun withoutAServerEndpointTheNetworkIsUnknownNotAway() {
-        assertEquals(HomeNetworkState.Unknown, EnvironmentClassifier.classify(wifi, endpointKnown = false) { false })
+        assertEquals(HomeNetworkState.Unknown, EnvironmentClassifier.classify(wifi, endpointKnown = false) { HomeProbe.RESOLVED })
     }
 
     @Test
-    fun reachableHomeIsHomeOtherwiseAwayAndNoNetworkIsOffline() {
-        assertEquals(HomeNetworkState.Home(setOf(1L)), EnvironmentClassifier.classify(wifi, true) { true })
-        assertEquals(HomeNetworkState.Away(setOf(1L)), EnvironmentClassifier.classify(wifi, true) { false })
-        assertEquals(HomeNetworkState.Offline, EnvironmentClassifier.classify(NetworkFacts(emptySet()), true) { true })
+    fun reachableHomeIsHomeResolvedHomeIsAwayAndNoNetworkIsOffline() {
+        assertEquals(HomeNetworkState.Home(setOf(1L)), EnvironmentClassifier.classify(wifi, true) { HomeProbe.REACHED })
+        assertEquals(HomeNetworkState.Away(setOf(1L)), EnvironmentClassifier.classify(wifi, true) { HomeProbe.RESOLVED })
+        assertEquals(HomeNetworkState.Offline, EnvironmentClassifier.classify(NetworkFacts(emptySet()), true) { HomeProbe.REACHED })
+    }
+
+    @Test
+    fun anUnresolvedHomeHostIsUnknownNotAway() {
+        assertEquals(HomeNetworkState.Unknown, EnvironmentClassifier.classify(wifi, true) { HomeProbe.UNRESOLVED })
     }
 
     @Test

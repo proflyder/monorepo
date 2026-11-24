@@ -7,6 +7,7 @@ import dev.proflyder.home.feature.vpn.data.StoredVpnProfileTest
 import dev.proflyder.home.feature.vpn.data.VpnProblemsTest
 import dev.proflyder.home.feature.vpn.environment.EnvironmentClassifierTest
 import dev.proflyder.home.feature.vpn.environment.EnvironmentRulesTest
+import dev.proflyder.home.feature.vpn.environment.HomeProbeTest
 import dev.proflyder.home.feature.vpn.presentation.VpnScreenshotTest
 import dev.proflyder.home.feature.vpn.presentation.VpnToolbarScreenshotTest
 import dev.proflyder.home.feature.vpn.transport.TransportProtocolsTest
@@ -22,6 +23,7 @@ import org.junit.runners.Suite
     TransportProtocolsTest::class,
     EnvironmentRulesTest::class,
     EnvironmentClassifierTest::class,
+    HomeProbeTest::class,
     AutoConnectPolicyTest::class,
     AutoConnectCoordinatorTest::class,
     VpnRouteConditionTest::class,

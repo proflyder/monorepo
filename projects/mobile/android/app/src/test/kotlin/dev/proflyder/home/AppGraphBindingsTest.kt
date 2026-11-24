@@ -69,6 +69,7 @@ class AppGraphBindingsTest {
             "VpnProfileSync",
             "ConnectionHealth",
             "ProcessAppForeground",
+            "ProcessAppActivation",
             "FirebaseRemoteConnectionSource",
             "AppearanceInstaller",
             "AppAccessSession",

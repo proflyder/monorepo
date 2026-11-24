@@ -354,28 +354,43 @@ badges are selectors in `render`.
 - Every tunnel start carries a `ConnectOrigin`. `USER` always runs;
   `AUTO_POLICY` runs only when the network is classified `Away` at start;
   `NETWORK_RESTART` (endpoint change after a network switch) needs a known
-  network. Only `USER` and `AUTO_POLICY` failures away from home show the
-  "no handshake" fallback; a failure once the network turns out to be home is
+  network. Only `USER` failures away from home show the "no handshake"
+  fallback and its notification; an `AUTO_POLICY` failure is logged and ends
+  as `Disconnected`, a failure once the network turns out to be home is
   `NotNeededAtHome`, a failed restart quietly ends as `Disconnected`.
 - Android restarts the WireGuard `VpnService` with an empty intent after the
   process is killed (sticky service) and for always-on VPN; both arrive as
   `SystemVpnStarts`. They never connect directly: `AutoConnectCoordinator`
   waits up to 15 s for the environment and asks the same `AutoConnectPolicy`
   (background: only "auto-connect away" and only `Away`, a manual off holds).
-- `Unknown` never connects. In the foreground the route shows "checking"
-  for at most 15 s, then the decision is logged as `ENVIRONMENT_TIMEOUT`.
-  A network blocked for the app (Doze, data saver) is `Unknown`, not `Away`,
-  so a failed home probe during sleep does not look like leaving home. When the
-  same network was already classified `Home`, a blocked-status flap keeps
-  `Home` instead of toggling `Home`/`Unknown`; a different handle still starts
-  as `Unknown`.
+- A cold process start starts `AppStartable`s but not user data work: the
+  auto-connect watcher and every network startable (`/v1/me`, Remote Config,
+  push registration and token fetch, VPN profile sync) wait for
+  `AppActivation`. It flips on the first foreground activity or a real sync
+  signal (a push). Binding the VPN tile or starting a service alone therefore
+  keeps the process silent; a `SystemVpnStarts` restart is still evaluated,
+  so always-on VPN keeps working.
+- `Unknown` never connects and is never guessed from a broken probe. `Home`
+  needs the home host resolved to a private address that accepts TCP on a
+  non-VPN network; `Away` needs that host resolved but not answering; no
+  resolved address at all (DNS failure, a blocked network, no endpoint yet)
+  stays `Unknown`. In the foreground the route shows "checking" for at most
+  15 s, then the decision is logged as `ENVIRONMENT_TIMEOUT`. A network
+  blocked for the app (Doze, data saver) is `Unknown`, not `Away`, so a failed
+  home probe during sleep does not look like leaving home. When the same
+  network was already classified `Home`, a blocked-status flap keeps `Home`
+  instead of toggling `Home`/`Unknown`; a different handle still starts as
+  `Unknown`.
 - Decisions are logged: tag `VpnAutoConnect` (source, action, reason,
   environment, foreground, settings, manual wish; actions at WARN),
   `VpnController` (origin, `atHome`, skipped starts, exhausted outcome) and
   `VpnEnvironment` (classification changes).
   Nothing blocks an OkHttp or main thread; there is no `runBlocking` in core.
-- Network inspection (logcat `HomeHttp`, Chucker) lives in `app/diagnostics`;
-  `--define=home_network_inspection=off` drops it.
+- Network inspection (logcat `HomeHttp`, Chucker) lives in `app/diagnostics`.
+  It is opt-in: only `--define=home_network_inspection=on` on a debug install
+  links it. Release and Firebase distribution builds carry no inspection
+  interceptors, Chucker notifications are off even when linked, and the HTTP
+  body logger is enabled only in a debuggable build.
 
 ### One-way data flow
 

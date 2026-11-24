@@ -6,6 +6,7 @@ resources:
   - external-secrets.yaml
 configMapGenerator:
   - name: secrets-gateway-config
+    namespace: home-assistant
     files:
       - catalog.json
       - deny.json

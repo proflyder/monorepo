@@ -74,10 +74,13 @@ internal class AndroidNetworkEnvironment(
     private fun classify(probe: Probe): HomeNetworkState {
         val endpoint = probe.endpoint
         val snapshot = probe.networks
-        val state = EnvironmentClassifier.classify(snapshot.facts, endpoint != null) {
-            endpoint != null && snapshot.usable.any { reachesHome(it, endpoint) }
-        }
+        val state = EnvironmentClassifier.classify(snapshot.facts, endpoint != null) { reach(snapshot, endpoint) }
         return EnvironmentClassifier.keepKnownHome(state, lastState, snapshot.facts.handles).also { lastState = it }
+    }
+
+    private fun reach(snapshot: NetworkSnapshot, endpoint: ServerEndpoint?): HomeProbe = when (endpoint) {
+        null -> HomeProbe.UNRESOLVED
+        else -> snapshot.usable.map { homeProbe(it, endpoint) }.best()
     }
 
     @SuppressLint("MissingPermission")
@@ -104,8 +107,8 @@ internal class AndroidNetworkEnvironment(
         capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
             capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
 
-    private fun reachesHome(network: Network, endpoint: ServerEndpoint): Boolean =
-        resolve(network, endpoint.host).filter(HomeAddress::isPrivate).any { connects(network, it, endpoint.port) }
+    private fun homeProbe(network: Network, endpoint: ServerEndpoint): HomeProbe =
+        homeProbe(resolve(network, endpoint.host)) { address -> connects(network, address, endpoint.port) }
 
     private fun resolve(network: Network, host: String): List<InetAddress> =
         runCatching { network.getAllByName(host).toList() }.getOrDefault(emptyList())
