@@ -32,9 +32,9 @@ internal data class AccessEditorState(
     val nameError: Boolean = false,
     val errorRes: Int? = null,
 ) {
-    val editable: Boolean get() = !owner
+    val canEditModules: Boolean get() = !owner
 
-    val canSave: Boolean get() = editable && name.trim().isNotEmpty() && name.trim().length <= MAX_NAME && !saving
+    val canSave: Boolean get() = name.trim().isNotEmpty() && name.trim().length <= MAX_NAME && !saving
 }
 
 internal data class AccessUiState(
@@ -66,8 +66,7 @@ internal class AccessViewModel(
     private val repository: AccessRepository,
 ) : StateViewModel<AccessUiState, AccessIntent, AccessEvent>(AccessUiState()) {
     init {
-        repository.state.onEach { tokens -> updateState { copy(tokens = tokens) } }.launchIn(viewModelScope)
-        repository.refresh()
+        repository.state.onEach(::applyTokens).launchIn(viewModelScope)
     }
 
     override fun handle(intent: AccessIntent) {
@@ -94,15 +93,22 @@ internal class AccessViewModel(
         modules = token.modules,
     )
 
+    private fun applyTokens(tokens: AccessTokensState) {
+        val wasLoading = currentState.tokens.loading
+        updateState { copy(tokens = tokens) }
+        val failure = tokens.failure
+        if (wasLoading && failure != null && tokens.tokens.isNotEmpty()) emit(AccessEvent.Failure(failure))
+    }
+
     private fun rename(value: String) {
         val editor = currentState.editor ?: return
-        if (!editor.editable || editor.saving) return
+        if (editor.saving) return
         updateState { copy(editor = editor.copy(name = value, nameError = false, errorRes = null)) }
     }
 
     private fun toggle(module: AppModule, enabled: Boolean) {
         val editor = currentState.editor ?: return
-        if (!editor.editable || editor.saving) return
+        if (!editor.canEditModules || editor.saving) return
         val modules = if (enabled) editor.modules + module else editor.modules - module
         updateState { copy(editor = editor.copy(modules = modules, errorRes = null)) }
     }

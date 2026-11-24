@@ -6,6 +6,7 @@ import dev.proflyder.home.feature.control.domain.SpeakOnStationTest
 import dev.proflyder.home.feature.control.presentation.ControlDiffPayloadTest
 import dev.proflyder.home.feature.control.presentation.ControlFavoritesTest
 import dev.proflyder.home.feature.control.presentation.ControlTapsTest
+import dev.proflyder.home.feature.control.presentation.QuickTileAccessTest
 import org.junit.runner.RunWith
 import org.junit.runners.Suite
 
@@ -23,5 +24,6 @@ import org.junit.runners.Suite
     ControlDiffPayloadTest::class,
     ControlFavoritesTest::class,
     ControlTapsTest::class,
+    QuickTileAccessTest::class,
 )
 class AllControlLogicTests

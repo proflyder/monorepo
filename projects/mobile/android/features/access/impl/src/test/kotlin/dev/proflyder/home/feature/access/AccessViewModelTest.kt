@@ -104,19 +104,20 @@ class AccessViewModelTest {
     }
 
     @Test
-    fun anOwnerTokenIsReadOnlyAndCannotBeRenamedOrGivenNewModules() = runTest(UnconfinedTestDispatcher()) {
+    fun anOwnerTokenCanBeRenamedButItsModulesStayFixed() = runTest(UnconfinedTestDispatcher()) {
         val repository = FakeRepository()
         val viewModel = AccessViewModel(repository)
 
         viewModel.dispatch(AccessIntent.Edit(owner))
         val editor = viewModel.state.value.editor
         assertEquals(owner.modules, editor?.modules)
-        assertFalse(editor?.canSave == true)
+        assertFalse(editor?.canEditModules == true)
 
         viewModel.dispatch(AccessIntent.EditorName("Owner 2"))
         viewModel.dispatch(AccessIntent.EditorModule(AppModule.CHAT, true))
-        assertEquals(owner.name, viewModel.state.value.editor?.name)
+        assertEquals("Owner 2", viewModel.state.value.editor?.name)
         assertEquals(owner.modules, viewModel.state.value.editor?.modules)
+        assertTrue(viewModel.state.value.editor?.canSave == true)
     }
 
     @Test
@@ -138,15 +139,20 @@ class AccessViewModelTest {
     fun refreshAndAServerFailureReachTheRepositoryAndTheState() = runTest(UnconfinedTestDispatcher()) {
         val repository = FakeRepository()
         val viewModel = AccessViewModel(repository)
+        val events = mutableListOf<AccessEvent>()
+        backgroundScope.launch { viewModel.events.toList(events) }
 
         viewModel.dispatch(AccessIntent.Refresh)
-        assertEquals(2, repository.refreshes)
+        assertEquals(1, repository.refreshes)
 
+        repository.mutable.value = repository.mutable.value.copy(loading = true)
         repository.mutable.value = AccessTokensState(
             loading = false,
+            tokens = listOf(phone),
             failure = RemoteFailure.ModuleForbidden("admin"),
         )
         assertEquals(RemoteFailure.ModuleForbidden("admin"), viewModel.state.value.tokens.failure)
+        assertEquals(listOf(AccessEvent.Failure(RemoteFailure.ModuleForbidden("admin"))), events)
     }
 
     private companion object {

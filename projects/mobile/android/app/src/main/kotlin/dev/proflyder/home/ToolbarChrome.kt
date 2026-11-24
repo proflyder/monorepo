@@ -38,11 +38,10 @@ internal class ToolbarChrome(
 
     fun render(chrome: AppChromeState, access: AppAccessState) {
         binding.toolbarTitle.setText(chrome.titleRes)
-        applyAccess(access)
+        applyAccess(access, chrome.overlay)
         renderBack(chrome.canGoBack)
         if (overlay == chrome.overlay) return
         overlay = chrome.overlay
-        binding.toolbar.menu.findItem(R.id.action_menu)?.isVisible = !chrome.overlay && actions.isNotEmpty()
         dismiss()
     }
 
@@ -50,12 +49,14 @@ internal class ToolbarChrome(
         popup?.dismiss()
     }
 
-    private fun applyAccess(access: AppAccessState) {
+    internal val visibleActions: List<ToolbarAction> get() = actions
+
+    private fun applyAccess(access: AppAccessState, overlayShown: Boolean) {
         val next = allActions.filter { access.allows(it.module) }
-        if (next.map(ToolbarAction::itemId) == actions.map(ToolbarAction::itemId)) return
+        val changed = next.map(ToolbarAction::itemId) != actions.map(ToolbarAction::itemId)
         actions = next
-        binding.toolbar.menu.findItem(R.id.action_menu)?.isVisible = actions.isNotEmpty()
-        dismiss()
+        binding.toolbar.menu.findItem(R.id.action_menu)?.isVisible = !overlayShown && actions.isNotEmpty()
+        if (changed) dismiss()
     }
 
     private fun renderBack(canGoBack: Boolean) {

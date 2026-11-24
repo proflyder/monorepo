@@ -11,7 +11,7 @@
     <string name="access_new_title">New token</string>
     <string name="access_name_label">Name</string>
     <string name="access_name_error">Enter a name of up to 64 characters</string>
-    <string name="access_owner_note">The owner token always has every module and cannot be renamed or revoked.</string>
+    <string name="access_owner_note">The owner token always has every module. You can rename it, but it cannot be revoked.</string>
     <string name="access_modules_label">Modules</string>
     <string name="access_editor_save">Save</string>
     <string name="access_action_edit">Rename and modules</string>

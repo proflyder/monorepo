@@ -28,6 +28,7 @@ enum class VpnProfileProblem {
     NOT_CONFIGURED,
     OFFLINE,
     UNAUTHORIZED,
+    NO_ACCESS,
     INVALID,
     CONFLICT,
     LIMIT,

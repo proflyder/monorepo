@@ -29,6 +29,7 @@ home-telemetry = { path = "../../../../packages/rust/home-telemetry" }
 http = { workspace = true }
 reqwest = { workspace = true }
 rustls = { workspace = true }
+serde_json = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }

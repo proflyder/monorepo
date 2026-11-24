@@ -7,6 +7,7 @@ metro_jvm_library(
     srcs = glob(["src/main/kotlin/**/*.kt"]),
     deps = [
         "//packages/kotlin/core",
+        "//projects/mobile/android/core/config",
         "//projects/mobile/android/core/data",
         "//projects/mobile/android/core/model",
         "//projects/mobile/android/core/network/api",
@@ -22,6 +23,7 @@ metro_jvm_test(
     test_class = "dev.proflyder.home.core.access.AppAccessSessionTest",
     deps = [
         ":access",
+        "//projects/mobile/android/core/config",
         "//projects/mobile/android/core/data",
         "//projects/mobile/android/core/model",
         "//projects/mobile/android/core/network/api",

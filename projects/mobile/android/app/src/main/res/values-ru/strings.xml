@@ -2,4 +2,6 @@
 <resources>
     <string name="app_actions">Действия</string>
     <string name="app_back">Назад</string>
+    <string name="home_no_access_title">Нет доступных разделов</string>
+    <string name="home_no_access_hint">У этого токена только базовый доступ. Попросите владельца выдать токен с нужными модулями.</string>
 </resources>

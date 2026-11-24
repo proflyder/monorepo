@@ -10,6 +10,16 @@ use std::sync::Arc;
 
 use crate::domain::{EndpointKind, Identity};
 
+fn module_forbidden() -> ConnectError {
+    ConnectError::permission_denied("module_forbidden").with_detail(
+        connectrpc::error::ErrorDetail {
+            type_url: "home.v1.ModuleForbidden".to_owned(),
+            value: None,
+            debug: Some(serde_json::json!({"module": Module::IntercomCall.id()})),
+        },
+    )
+}
+
 #[derive(Clone)]
 pub struct TokenAuth {
     access: Arc<AccessClient>,
@@ -61,9 +71,7 @@ impl TokenAuth {
                     module = Module::IntercomCall.id(),
                     "intercom call is not allowed for this token"
                 );
-                return Err(ConnectError::permission_denied(
-                    home_app_auth::Forbidden::Module(Module::IntercomCall).body(),
-                ));
+                return Err(module_forbidden());
             }
             tracing::debug!(
                 token = principal.name.as_str(),
@@ -107,5 +115,27 @@ impl Interceptor for TokenAuth {
         let identity = self.identify(request.ctx.header(AUTHORIZATION)).await?;
         request.ctx.extensions_mut().insert(identity);
         next.run(request, inbound).await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_denied_call_token_carries_the_module_detail_for_the_app() {
+        let error = module_forbidden();
+        assert_eq!(error.code, connectrpc::ErrorCode::PermissionDenied);
+        assert_eq!(error.message.as_deref(), Some("module_forbidden"));
+        let detail = error.details.first().expect("module detail");
+        assert_eq!(detail.type_url, "home.v1.ModuleForbidden");
+        assert_eq!(
+            detail
+                .debug
+                .as_ref()
+                .and_then(|debug| debug.get("module"))
+                .and_then(serde_json::Value::as_str),
+            Some("intercom_call")
+        );
     }
 }

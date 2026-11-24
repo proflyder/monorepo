@@ -12,6 +12,7 @@ import dev.proflyder.home.core.testing.TestFixtures
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.runBlocking
+import okhttp3.Interceptor
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.After
@@ -156,6 +157,29 @@ class AccessClientTest {
         assertEquals(400, invalid.httpStatus)
         assertEquals("invalid", invalid.reason)
         assertEquals("token name is required", invalid.message)
+    }
+
+    @Test
+    fun theOneTimeCreateResponseNeverReachesNetworkInspectors() = runBlocking {
+        val seen = mutableListOf<String>()
+        val recorder = Interceptor { chain ->
+            seen += chain.request().url.encodedPath
+            chain.proceed(chain.request())
+        }
+        val endpoint = (ServerEndpoint.parse(server.url("/").toString().removeSuffix("/")) as EndpointParseResult.Valid).endpoint
+        val client = HttpAccessClient(
+            testHttp(
+                Store(ConnectionConfig(endpoint = endpoint, bearerToken = "tok-1")),
+                interceptors = setOf(recorder),
+            ),
+        )
+        respond(201, "created.json")
+        client.createToken("Планшет", setOf(AppModule.HOME))
+        assertEquals(emptyList<String>(), seen)
+
+        respond(200, "tokens.json")
+        client.tokens()
+        assertEquals(listOf("/v1/access/tokens"), seen)
     }
 
     @Test

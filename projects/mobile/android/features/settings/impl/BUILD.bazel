@@ -43,10 +43,13 @@ home_android_local_test(
     test_classes = [
         "dev.proflyder.home.feature.settings.presentation.HistorySwipeTest",
         "dev.proflyder.home.feature.settings.presentation.SettingsScreensScreenshotTest",
+        "dev.proflyder.home.feature.settings.presentation.SettingsViewModelTest",
     ],
     deps = [
+        "//projects/mobile/android/core/access",
         "//projects/mobile/android/core/data",
         "//projects/mobile/android/core/model",
+        "//projects/mobile/android/core/runtime",
         "//projects/mobile/android/core/testing",
         "//projects/mobile/android/features/push/api",
         "@maven//:androidx_appcompat_appcompat",

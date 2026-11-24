@@ -7,6 +7,7 @@ internal object VpnProblems {
     fun of(failure: RemoteFailure): VpnProfileProblem = when (failure) {
         RemoteFailure.NotConfigured -> VpnProfileProblem.NOT_CONFIGURED
         RemoteFailure.Unauthorized -> VpnProfileProblem.UNAUTHORIZED
+        is RemoteFailure.ModuleForbidden -> VpnProfileProblem.NO_ACCESS
         is RemoteFailure.Offline, RemoteFailure.Timeout, is RemoteFailure.Tls -> VpnProfileProblem.OFFLINE
         is RemoteFailure.Server -> ofHttpStatus(failure.httpStatus)
         else -> VpnProfileProblem.SERVER

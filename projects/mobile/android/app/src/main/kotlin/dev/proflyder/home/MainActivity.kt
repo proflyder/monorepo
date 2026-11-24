@@ -4,6 +4,7 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.addCallback
 import androidx.activity.enableEdgeToEdge
+import androidx.core.view.isVisible
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
@@ -91,12 +92,13 @@ class MainActivity : AppCompatActivity(), NavigatorHost, FailureNoticePolicyProv
 
     private fun render(chrome: AppChromeState, accessState: AppAccessState) {
         val visibleTabs = features.tabs().filter { accessState.allows(it.module) }
-        if (visibleTabs.isNotEmpty() && visibleTabs.none { it.id == chrome.tabId }) {
-            router.selectTab(visibleTabs.first().id)
-            return
-        }
+        val withoutSections = accessState is AppAccessState.Ready && visibleTabs.isEmpty()
+        binding.fragmentContainer.isVisible = !withoutSections
+        binding.homeNoAccess.isVisible = withoutSections
         actionsMenu.render(chrome, accessState)
         tabs.render(chrome, accessState)
+        if (withoutSections) return
+        if (visibleTabs.none { it.id == chrome.tabId }) router.selectTab(visibleTabs.first().id)
     }
 
     override fun onNewIntent(intent: Intent) {

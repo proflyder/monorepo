@@ -141,6 +141,7 @@ home_android_local_test(
         "dev.proflyder.home.HomeFabActivityTest",
         "dev.proflyder.home.KeyScreensScreenshotTest",
         "dev.proflyder.home.LauncherAliasesTest",
+        "dev.proflyder.home.ModuleGatingTest",
         "dev.proflyder.home.NarrowScreensTest",
         "dev.proflyder.home.NoticeSwipeActivityTest",
         "dev.proflyder.home.ThemeScreenshotTest",

@@ -143,7 +143,7 @@ internal class AccessFragment :
 
     private fun updateEditor(views: DialogAccessEditorBinding, editor: AccessEditorState) {
         editorName?.render(editor.name)
-        views.accessEditorName.isEnabled = editor.editable && !editor.saving
+        views.accessEditorName.isEnabled = !editor.saving
         views.accessEditorNameLayout.error = getString(R.string.access_name_error).takeIf { editor.nameError }
         views.accessEditorOwnerNote.isVisible = editor.owner
         views.accessEditorProgress.isVisible = editor.saving
@@ -157,7 +157,7 @@ internal class AccessFragment :
         (0 until container.childCount).map(container::getChildAt).filterIsInstance<MaterialSwitch>().forEach { switch ->
             val module = switch.tag as? AppModule ?: return@forEach
             switch.isChecked = module in editor.modules
-            switch.isEnabled = editor.editable && !editor.saving
+            switch.isEnabled = editor.canEditModules && !editor.saving
         }
     }
 

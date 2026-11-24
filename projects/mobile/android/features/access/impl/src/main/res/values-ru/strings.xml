@@ -11,7 +11,7 @@
     <string name="access_new_title">Новый токен</string>
     <string name="access_name_label">Название</string>
     <string name="access_name_error">Введите название до 64 символов</string>
-    <string name="access_owner_note">У owner-токена всегда все модули, его нельзя переименовать или отозвать.</string>
+    <string name="access_owner_note">У owner-токена всегда все модули. Его можно переименовать, но нельзя отозвать.</string>
     <string name="access_modules_label">Модули</string>
     <string name="access_editor_save">Сохранить</string>
     <string name="access_action_edit">Переименовать и модули</string>

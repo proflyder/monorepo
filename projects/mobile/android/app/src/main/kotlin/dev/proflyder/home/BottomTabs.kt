@@ -21,6 +21,8 @@ internal class BottomTabs(
 ) {
     private var tabs: List<FeatureEntry> = features.tabs()
     private var tabIds: List<String> = tabs.map(FeatureEntry::id)
+
+    internal val visibleTabIds: List<String> get() = tabIds
     private val onSelected = NavigationBarView.OnItemSelectedListener(::onItemSelected)
     private var keyboardShown = false
     private var hidden = navigator.chrome.value.hidesBottomBar

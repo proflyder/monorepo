@@ -74,6 +74,9 @@ internal interface AccessHttpApi {
 @Inject
 class HttpAccessClient(private val http: HomeHttp) : AccessApi {
     private val api: AccessHttpApi by lazy { http.rest(AccessHttpApi::class, Target.Scheduler) }
+    private val secretApi: AccessHttpApi by lazy {
+        http.rest(AccessHttpApi::class, Target.Scheduler, inspected = false)
+    }
 
     override suspend fun me(): Outcome<AppAccess> = api.me().mapResult { it.toModel() }
 
@@ -84,7 +87,7 @@ class HttpAccessClient(private val http: HomeHttp) : AccessApi {
     override suspend fun createToken(
         name: String,
         modules: Set<AppModule>,
-    ): Outcome<CreatedAccessToken> = api.create(
+    ): Outcome<CreatedAccessToken> = secretApi.create(
         CreateTokenBody(name = name.trim(), modules = modules.wires()),
     ).mapResult { CreatedAccessToken(it.token, it.access.toModel()) }
 

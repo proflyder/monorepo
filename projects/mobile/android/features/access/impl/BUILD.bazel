@@ -52,6 +52,7 @@ home_android_local_test(
         "//projects/mobile/android/features/access/api",
         "@maven//:androidx_appcompat_appcompat",
         "@maven//:androidx_core_core_ktx",
+        "@maven//:androidx_fragment_fragment_ktx",
         "@maven//:androidx_recyclerview_recyclerview",
         "@maven//:com_google_android_material_material",
         "@maven//:junit_junit",

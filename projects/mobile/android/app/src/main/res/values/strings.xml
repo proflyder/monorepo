@@ -3,4 +3,6 @@
     <string name="app_name" translatable="false">Home</string>
     <string name="app_back">Back</string>
     <string name="app_actions">Actions</string>
+    <string name="home_no_access_title">No available sections</string>
+    <string name="home_no_access_hint">This token has only base access. Ask the owner for a token with the modules you need.</string>
 </resources>

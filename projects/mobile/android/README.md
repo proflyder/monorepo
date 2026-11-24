@@ -16,12 +16,14 @@ a typed router. Device acceptance and open work: [STATE](../../../docs/STATE.md)
 - Top app bar: **Call** (audio call to the station) and **Settings** (overlay
   over the current tab): Connection, Phone notifications and find, VPN home,
   Notification history, Appearance; debug builds also show **Design system**.
-- Access follows the token: on start, on foreground return and after every
-  token change the app reads `GET /v1/me` and hides tabs, settings rows and
-  toolbar actions whose module the token lacks. A `403 module_forbidden`
-  (`{"error":"module_forbidden"}` or the Connect `home.v1.ModuleForbidden`
-  detail) refreshes `/v1/me` once and renders the localized no-access state,
-  not a generic server error.
+- Access follows the token: the app reads `GET /v1/me` on start, when the
+  bearer token changes, on the Access screen's pull-to-refresh, after a
+  `SyncSignal.Stale` foreground return (the 5-minute staleness window) and at
+  most once per 3 seconds after a `403 module_forbidden`. It hides tabs,
+  settings rows, quick tiles, toolbar actions and the action menu whose module
+  the token lacks. Besides the HTTP body `{"error":"module_forbidden"}` that
+  refresh also accepts the Connect `home.v1.ModuleForbidden` detail, and the
+  screen renders the localized no-access state, not a generic server error.
 - **System → Access** (only with the `admin` module) lists named application
   tokens with their modules, creates a named token with module switches
   (the plaintext value is shown once with Copy), renames tokens, toggles

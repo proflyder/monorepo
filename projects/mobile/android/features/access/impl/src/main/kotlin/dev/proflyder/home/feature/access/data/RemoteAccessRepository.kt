@@ -1,6 +1,6 @@
 package dev.proflyder.home.feature.access.data
 
-import dev.proflyder.home.core.access.AppAccessSession
+import dev.proflyder.home.core.access.AccessRefresher
 import dev.proflyder.home.core.model.AccessToken
 import dev.proflyder.home.core.model.AppModule
 import dev.proflyder.home.core.model.CreatedAccessToken
@@ -26,13 +26,17 @@ import kotlinx.coroutines.launch
 @Inject
 class RemoteAccessRepository(
     private val api: AccessApi,
-    private val access: AppAccessSession,
+    private val access: AccessRefresher,
     private val scope: CoroutineScope,
 ) : AccessRepository {
     private val mutableState = MutableStateFlow(AccessTokensState())
     private var loading: Job? = null
 
     override val state: StateFlow<AccessTokensState> = mutableState.asStateFlow()
+
+    init {
+        refresh()
+    }
 
     override fun refresh() {
         access.refresh()
