@@ -62,9 +62,20 @@ internal fun ResponseBody.readBounded(): String {
 }
 
 @Serializable
-internal data class PlainErrorDto(val error: String = "", val module: String = "", val detail: String = "")
+internal data class PlainErrorDto(
+    val error: String = "",
+    val module: String = "",
+    val detail: String = "",
+    val currentVersion: Long? = null,
+    val retryAfter: Long? = null,
+)
 
-internal fun parseConnectFailure(httpCode: Int, text: String): RemoteFailure {
+internal fun parseConnectFailure(
+    httpCode: Int,
+    text: String,
+    detailed: Boolean = false,
+    retryAfterHeader: String? = null,
+): RemoteFailure {
     val parsed = runCatching {
         if (text.isBlank()) null else NetworkJson.decodeFromString(ConnectErrorDto.serializer(), text)
     }.getOrNull()
@@ -91,10 +102,28 @@ internal fun parseConnectFailure(httpCode: Int, text: String): RemoteFailure {
             message = message.ifBlank { "server returned HTTP $httpCode" },
             reason = reason,
             textKey = localized?.first.orEmpty(),
-            textArgs = localized?.second.orEmpty(),
+            textArgs = localized?.second.orEmpty() + errorArguments(detailed, plain, retryAfterHeader),
         )
     }
 }
+
+private fun errorArguments(
+    detailed: Boolean,
+    plain: PlainErrorDto?,
+    retryAfterHeader: String?,
+): Map<String, String> = when {
+    !detailed -> emptyMap()
+    else -> buildMap {
+        plain?.currentVersion?.let { put(CURRENT_VERSION_ARG, it.toString()) }
+        retryAfterSeconds(plain, retryAfterHeader)?.let { put(RETRY_AFTER_ARG, it.toString()) }
+    }
+}
+
+internal fun retryAfterSeconds(plain: PlainErrorDto?, header: String?): Long? =
+    plain?.retryAfter ?: header?.trim()?.toLongOrNull()
+
+private const val CURRENT_VERSION_ARG = "currentVersion"
+private const val RETRY_AFTER_ARG = "retryAfter"
 
 private fun forbiddenModule(parsed: ConnectErrorDto?, plain: PlainErrorDto?): String? {
     val detail = parsed?.details?.firstOrNull { it.type == MODULE_FORBIDDEN_DETAIL } ?: return when {

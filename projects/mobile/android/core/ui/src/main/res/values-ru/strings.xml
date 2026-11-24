@@ -107,6 +107,7 @@
     <string name="ui_validation_control_endpoint">Укажите полный адрес http:// или https:// для службы управления домом или оставьте поле пустым.</string>
     <string name="ui_validation_endpoint">Укажите полный адрес http:// или https://.</string>
     <string name="ui_validation_intercom_endpoint">Укажите полный адрес http:// или https:// для службы звонков или оставьте поле пустым.</string>
+    <string name="ui_validation_secrets_endpoint">Укажите полный адрес http:// или https:// для службы секретов или оставьте поле пустым.</string>
     <string name="ui_validation_token">Проверьте токен.</string>
     <string name="ui_validation_timeout">Тайм-аут должен быть от 1 до 120 секунд.</string>
     <string name="ui_validation_label">Введите короткую подпись.</string>

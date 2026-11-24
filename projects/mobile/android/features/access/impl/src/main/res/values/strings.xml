@@ -39,5 +39,6 @@
     <string name="access_module_system">System</string>
     <string name="access_module_infra_reports">Infrastructure reports</string>
     <string name="access_module_alerts">Alerts</string>
+    <string name="access_module_secrets">Secrets</string>
     <string name="access_module_admin">Administration</string>
 </resources>

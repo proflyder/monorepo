@@ -121,6 +121,27 @@ spec:
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
+  name: secrets-gateway
+  namespace: traefik
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`secrets.${HOME_DOMAIN}`)
+      kind: Rule
+      middlewares:
+        - name: home-allowlist
+      services:
+        - name: secrets-gateway
+          namespace: home-assistant
+          port: 8096
+  tls:
+    secretName: home-wildcard-tls
+
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
   name: intercom
   namespace: traefik
 spec:

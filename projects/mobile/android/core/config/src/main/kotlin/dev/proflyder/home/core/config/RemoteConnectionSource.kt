@@ -30,6 +30,7 @@ sealed interface RemoteConnectionState {
         val endpoint: ServerEndpoint,
         val controlEndpoint: ServerEndpoint?,
         val intercomEndpoint: ServerEndpoint?,
+        val secretsEndpoint: ServerEndpoint? = null,
         val connectTimeoutMillis: Long,
         val readTimeoutMillis: Long,
     ) : RemoteConnectionState
@@ -42,6 +43,7 @@ internal data class RemoteConnectionDocument(
     @SerialName(SCHEDULER_KEY) val scheduler: String? = null,
     @SerialName(CONTROL_KEY) val control: String? = null,
     @SerialName(INTERCOM_KEY) val intercom: String? = null,
+    @SerialName(SECRETS_KEY) val secrets: String? = null,
     @SerialName(CONNECT_TIMEOUT_KEY) val connectTimeout: Long? = null,
     @SerialName(READ_TIMEOUT_KEY) val readTimeout: Long? = null,
 )
@@ -52,6 +54,7 @@ private const val MALFORMED_DETAIL = "Malformed JSON"
 private const val SCHEDULER_KEY = "schedulerBaseUrl"
 private const val CONTROL_KEY = "controlBaseUrl"
 private const val INTERCOM_KEY = "intercomBaseUrl"
+private const val SECRETS_KEY = "secretsBaseUrl"
 private const val CONNECT_TIMEOUT_KEY = "connectTimeoutMs"
 private const val READ_TIMEOUT_KEY = "readTimeoutMs"
 
@@ -61,6 +64,7 @@ private val DOCUMENT_FIELDS = listOf(
     DocumentField(SCHEDULER_KEY, Field.ENDPOINT, String.serializer().nullable),
     DocumentField(CONTROL_KEY, Field.CONTROL_ENDPOINT, String.serializer().nullable),
     DocumentField(INTERCOM_KEY, Field.INTERCOM_ENDPOINT, String.serializer().nullable),
+    DocumentField(SECRETS_KEY, Field.SECRETS_ENDPOINT, String.serializer().nullable),
     DocumentField(CONNECT_TIMEOUT_KEY, Field.TIMEOUT, Long.serializer().nullable),
     DocumentField(READ_TIMEOUT_KEY, Field.TIMEOUT, Long.serializer().nullable),
 )
@@ -98,6 +102,7 @@ private fun RemoteConnectionDocument.toState(): RemoteConnectionState.Loaded {
         endpoint = parseOptionalEndpoint(scheduler, Field.ENDPOINT) ?: invalid(Field.ENDPOINT, "$SCHEDULER_KEY is required"),
         controlEndpoint = parseOptionalEndpoint(control, Field.CONTROL_ENDPOINT),
         intercomEndpoint = parseOptionalEndpoint(intercom, Field.INTERCOM_ENDPOINT),
+        secretsEndpoint = parseOptionalEndpoint(secrets, Field.SECRETS_ENDPOINT),
         connectTimeoutMillis = connect,
         readTimeoutMillis = read,
     )

@@ -29,6 +29,15 @@ a typed router. Device acceptance and open work: [STATE](../../../docs/STATE.md)
   (the plaintext value is shown once with Copy), renames tokens, toggles
   modules and revokes them with confirmation. The owner token is immutable;
   `400`, `409` and `429` have dedicated localized messages.
+- **System → Secrets** (owner with the `secrets` module) opens the
+  `secrets-gateway` catalog: paths grouped by the first segment with their
+  descriptions and a local search. The path screen shows versions and key
+  names with masked values. A device biometric or credential unlocks the
+  module once per process; TOTP opens a 5-minute reveal session, while update,
+  rollback and soft delete ask for a fresh code every time. A tapped value
+  re-masks after 30 s; copying also clears the sensitive clipboard entry after
+  30 s. Every secrets screen sets `FLAG_SECURE`, the client is excluded from
+  network inspection and values are never cached on disk.
 - Push over FCM: ordinary notifications with a `home://` deep link and the
   loud find-phone ring. Built-in VPN home (WireGuard, OpenConnect hand-off).
 - No offline cache and no generic task UI. `EnqueueTask` is one-shot; the
@@ -220,6 +229,7 @@ are ignored.
 | `schedulerBaseUrl` | yes | scheduler base URL, no RPC path |
 | `controlBaseUrl` | no | Home control (catalog, chat, system); empty disables those tabs |
 | `intercomBaseUrl` | no | intercom signaling; empty disables calls |
+| `secretsBaseUrl` | no | owner-only secrets-gateway; empty disables System → Secrets |
 | `connectTimeoutMs` / `readTimeoutMs` | no | default 5000 / 20000, valid 1000–120000 |
 
 ```json
@@ -227,6 +237,7 @@ are ignored.
   "schedulerBaseUrl": "https://alarms.example.test",
   "controlBaseUrl": "http://192.0.2.28:8099",
   "intercomBaseUrl": "https://intercom.home.example.test",
+  "secretsBaseUrl": "https://secrets.home.example.test",
   "connectTimeoutMs": 5000,
   "readTimeoutMs": 20000
 }

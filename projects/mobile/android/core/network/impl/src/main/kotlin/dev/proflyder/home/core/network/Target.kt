@@ -26,4 +26,8 @@ internal sealed class Target(
     data object Intercom : Target(Field.INTERCOM_ENDPOINT, connectProtocol = true) {
         override fun endpointOf(config: ConnectionConfig): ServerEndpoint? = config.intercomEndpoint
     }
+
+    data object Secrets : Target(Field.SECRETS_ENDPOINT, connectProtocol = false) {
+        override fun endpointOf(config: ConnectionConfig): ServerEndpoint? = config.secretsEndpoint
+    }
 }

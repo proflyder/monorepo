@@ -23,5 +23,6 @@ import org.junit.runners.Suite
     ConnectionHealthTest::class,
     RouteGateTest::class,
     AccessClientTest::class,
+    SecretsClientTest::class,
 )
 class AllNetworkTests
