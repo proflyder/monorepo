@@ -13,6 +13,20 @@ LAN/VPN закрыт. Вызывающие в кластере — Traefik, mcp-
 Предварительно: `mise run secrets:login` (operator token на рабочем месте) и
 доступ `mise run kubectl -- ...` (admin kubeconfig + туннель).
 
+0. **DNS-запись.** Одна A-запись `secrets.<HOME_DOMAIN>` → LAN-адрес узла,
+   Cloudflare DNS only (не proxied). Wildcard-сертификат её покрывает, Flux
+   запись не создаёт. Один раз, вручную (владелец, не CI):
+
+   ```bash
+   mise run secrets:file home/vpn/cloudflare.env
+   python3 projects/home/kubernetes/cloudflare_dns.py \
+     secrets/home/vpn/cloudflare.env secrets.<home-domain> <node-lan-ip>
+   mise run secrets:clean
+   ```
+
+   Те же записи перечислены в `projects/home/kubernetes/README.md`,
+   `docs/NETWORK.md` и `docs/STATE.md`; `verify.sh` проверяет DNS и HTTPS.
+
 1. **TOTP-секрет.** Идемпотентно создаёт `totp_secret` в
    `secret/k8s/home-assistant/secrets-gateway` и пишет otpauth URI в файл
    0600; URI и секрет не печатаются:

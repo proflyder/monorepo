@@ -37,7 +37,7 @@ check_any() {
   fi
 }
 
-for host in ha grafana alarms control intercom; do
+for host in ha grafana alarms control secrets intercom; do
   name="$host.$HOME_DOMAIN"
   resolved=$(dig +short A "$name" @harmony.ns.cloudflare.com | tail -1)
   check "dns $host" "$NODE_IP" "$resolved"
@@ -48,6 +48,7 @@ for host in ha grafana alarms control intercom; do
     grafana) check_any "https $host /" "301|302" "$code" ;;
     alarms) check "https $host /" "404" "$code" ;;
     control) check "https $host /" "404" "$code" ;;
+    secrets) check "https $host /" "404" "$code" ;;
     intercom) check_any "https $host /" "404" "$code" ;;
   esac
   redirect=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 \

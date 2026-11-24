@@ -45,6 +45,24 @@ class IntercomRoute(unittest.TestCase):
         self.assertEqual(self.route["spec"]["tls"]["secretName"], "home-wildcard-tls")
 
 
+class CrossNamespaceServices(unittest.TestCase):
+    def test_the_crd_provider_allows_services_in_other_namespaces(self):
+        values = yaml.safe_load((HERE / "traefik" / "values.yaml").read_text(encoding="utf-8"))
+        provider = values["providers"]["kubernetesCRD"]
+        self.assertTrue(provider["enabled"])
+        self.assertTrue(provider["allowCrossNamespace"])
+
+    def test_every_route_service_uses_its_own_namespace(self):
+        routes = load_all(ROUTES / "routes.yaml")
+        namespaces = {
+            service["namespace"]
+            for route in routes
+            for rule in route["spec"]["routes"]
+            for service in rule["services"]
+        }
+        self.assertEqual({"monitoring", "home-assistant", "currency-bot"}, namespaces)
+
+
 class StreamingTimeouts(unittest.TestCase):
     def test_websecure_entrypoint_allows_long_lived_streams(self):
         values = yaml.safe_load((HERE / "traefik" / "values.yaml").read_text(encoding="utf-8"))

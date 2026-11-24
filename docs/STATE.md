@@ -71,7 +71,8 @@
   `2.14.0`, Vaultwarden `1.37.5`.
 - HTTPS `https://<name>.home.example.com` (Traefik + wildcard Let's Encrypt,
   DNS-01 Cloudflare, только LAN/VPN): `ha`, `grafana`, `alarms`, `control`,
-  `currency`, `intercom`, `vault`, `passwords`, `nexus`. Grafana также LAN
+  `currency`, `intercom`, `secrets`, `vault`, `passwords`, `nexus`. Grafana
+  также LAN
   NodePort `30300`.
 - Алерты: Alertmanager → личный чат владельца через инфра-бот Hermes
   (Secret `alertmanager-telegram`, шаблон
