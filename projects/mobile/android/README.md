@@ -238,9 +238,11 @@ without a tap.
   crashes.
 - **Tests**: `features/update/impl:robolectric_test` drives `UpdateCoordinator`
   through a fake `AppUpdater` (throttle, activation gate, available/sign-in/
-  failure/progress states) and renders the dialog in the screenshot tests;
-  `app:apk_app_distribution_test` fails if the full SDK is absent with
-  `home_app_distribution=on` or present without it.
+  failure/progress states) and renders the real dialog window in the Emerald
+  theme, dark and light, with the `ru` locale; each screenshot asserts that the
+  window paints the dialog surface and that the labels keep a 4.5:1 contrast
+  against it. `app:apk_app_distribution_test` fails if the full SDK is absent
+  with `home_app_distribution=on` or present without it.
 
 First run on a phone: open the Settings row, tap **Sign in** once with the
 Google account invited to the `admins` tester group, then tap **Update** when a

@@ -76,6 +76,7 @@ home_android_local_test(
         "//projects/mobile/android/core/model",
         "//projects/mobile/android/core/runtime",
         "//projects/mobile/android/core/testing",
+        "//projects/mobile/android/core/theme",
         "//projects/mobile/android/features/update/api",
         "@maven//:androidx_appcompat_appcompat",
         "@maven//:com_google_android_material_material",

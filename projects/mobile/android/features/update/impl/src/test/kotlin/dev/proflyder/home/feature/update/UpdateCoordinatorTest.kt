@@ -11,6 +11,7 @@ import dev.proflyder.home.feature.update.data.AppUpdater
 import dev.proflyder.home.feature.update.data.UpdateCheckStore
 import dev.proflyder.home.feature.update.data.UpdateEvent
 import dev.proflyder.home.feature.update.data.UpdateResult
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -26,6 +27,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class UpdateCoordinatorTest {
     private val logger = FakeAppLogger()
 
