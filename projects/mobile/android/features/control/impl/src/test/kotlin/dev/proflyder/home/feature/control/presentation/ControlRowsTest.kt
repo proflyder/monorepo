@@ -1,6 +1,7 @@
 package dev.proflyder.home.feature.control.presentation
 
 import android.graphics.drawable.RippleDrawable
+import android.view.LayoutInflater
 import android.view.View
 import android.widget.FrameLayout
 import android.widget.LinearLayout
@@ -50,6 +51,18 @@ class ControlRowsTest {
         RuntimeEnvironment.getApplication(),
         com.google.android.material.R.style.Theme_Material3_DayNight_NoActionBar,
     )
+
+    @Test
+    fun roomHeaderIsOneCompactLine() {
+        val context = themed()
+        val header = LayoutInflater.from(context).inflate(R.layout.item_control_header, FrameLayout(context), false)
+        val density = context.resources.displayMetrics.density
+        val title = header.findViewById<TextView>(R.id.control_header_title)
+        assertEquals((14 * density).toInt(), header.paddingTop)
+        assertEquals((6 * density).toInt(), header.paddingBottom)
+        assertEquals((44 * density).toInt(), header.minimumHeight)
+        assertEquals(1, title.maxLines)
+    }
 
     @Test
     fun powerChangeRendersFromStateAndATapOnlySendsAnIntent() {

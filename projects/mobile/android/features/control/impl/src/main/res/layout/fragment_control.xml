@@ -46,7 +46,6 @@
                     app:layout_behavior="@string/appbar_scrolling_view_behavior"
                     android:clipToPadding="false"
                     android:paddingStart="@dimen/ds_space_l"
-                    android:paddingTop="@dimen/ds_space_s"
                     android:paddingEnd="@dimen/ds_space_l"
                     android:paddingBottom="@dimen/ds_space_xl" />
             </androidx.coordinatorlayout.widget.CoordinatorLayout>

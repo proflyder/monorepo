@@ -56,6 +56,18 @@ a typed router. Device acceptance and open work: [STATE](../../../docs/STATE.md)
 - No offline cache and no generic task UI. `EnqueueTask` is one-shot; the
   phone only queues, the server executors (`ha-control`, `ha-scenario`) run.
 
+## App chrome
+
+`MainActivity` hosts one glass app bar for every screen
+(`core/designsystem/glass`). The fragment container draws edge to edge under
+it: the bar renders a blurred `RenderNode` snapshot of the content on API 31+
+and an opaque surface tint on older devices, with an outline hairline and a
+14 dp fade into the content. `BaseFragment` pads the primary vertical scroller
+of every screen by the live `AppBarHeightSource.appBarHeight`, so the first
+row rests below the bar while scrolling content passes under it. Sticky
+section headers pin at that padding and reuse the same surface tint, hairline
+and fade; the Home room header is a single compact line.
+
 ## Build and test
 
 Prerequisites: macOS/Linux, JDK 21, Android SDK platform 36 and build-tools
