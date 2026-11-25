@@ -4,10 +4,7 @@ import android.graphics.Typeface
 import android.view.LayoutInflater
 import android.view.ViewGroup
 import androidx.core.view.ViewCompat
-import dev.proflyder.home.core.designsystem.list.GroupSlot
-import dev.proflyder.home.core.designsystem.list.GroupedRowRipple
 import dev.proflyder.home.core.designsystem.list.SectionedAdapter
-import dev.proflyder.home.core.designsystem.list.slotOf
 import dev.proflyder.home.core.model.NotificationHistoryType
 import dev.proflyder.home.core.presentation.KeyedDiff
 import dev.proflyder.home.core.ui.AdapterCallback
@@ -20,7 +17,6 @@ import dev.proflyder.home.feature.settings.impl.databinding.ItemHistoryDayBindin
 import dev.proflyder.home.feature.settings.impl.databinding.ItemNotificationHistoryBinding
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
-import dev.proflyder.home.core.designsystem.R as DesignR
 
 internal interface NotificationHistoryAdapterCallback : AdapterCallback<HistoryRow>
 
@@ -38,10 +34,8 @@ internal class NotificationHistoryAdapter(
         if (viewType == DAY) {
             DayHolder(ItemHistoryDayBinding.inflate(inflater, parent, false), callback)
         } else {
-            EntryHolder(ItemNotificationHistoryBinding.inflate(inflater, parent, false), callback, ::slotAt)
+            EntryHolder(ItemNotificationHistoryBinding.inflate(inflater, parent, false), callback)
         }
-
-    private fun slotAt(position: Int): GroupSlot? = slotOf(position, itemCount)
 
     private class DayHolder(
         private val views: ItemHistoryDayBinding,
@@ -64,12 +58,7 @@ internal class NotificationHistoryAdapter(
     private class EntryHolder(
         private val views: ItemNotificationHistoryBinding,
         callback: NotificationHistoryAdapterCallback,
-        private val slotAt: (Int) -> GroupSlot?,
     ) : HistoryHolder(views, callback) {
-        private val ripple = GroupedRowRipple(
-            views.root,
-            views.root.resources.getDimension(DesignR.dimen.ds_radius_l),
-        )
 
         override fun bind(item: HistoryRow) {
             val row = item as? HistoryRow.Item ?: return
@@ -84,7 +73,8 @@ internal class NotificationHistoryAdapter(
             views.historyItemUnread.setVisible(!entry.read)
             views.historyItemTitle.setTypeface(null, if (entry.read) Typeface.NORMAL else Typeface.BOLD)
             if (open) forwardRowClicks() else clearClicks()
-            ripple.bind(slotAt(bindingAdapterPosition), open)
+            views.root.isClickable = open
+            views.root.isFocusable = open
         }
 
         private fun clearClicks() {
