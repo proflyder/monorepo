@@ -166,7 +166,7 @@ fn outcome_label(outcome: &str) -> &'static str {
         "step_up_expired" => " — подтверждение истекло",
         "device_not_enrolled" => " — телефон не привязан",
         "device_unavailable" => " — устройство недоступно",
-        "enrollment_invalid" => " — неверный код привязки",
+        "enrollment_invalid" => " отклонена",
         "enrollment_closed" => " — код привязки не выдан",
         "enrollment_expired" => " — код привязки истёк",
         "enrollment_conflict" => " — привязка изменилась",
@@ -258,6 +258,20 @@ mod tests {
                 .expect("json")
                 .contains("value")
         );
+    }
+
+    #[test]
+    fn a_rejected_enrollment_does_not_blame_the_code() {
+        let body = push_body(&Event {
+            action: Action::Enroll,
+            principal: "owner",
+            path: None,
+            key: None,
+            version: None,
+            outcome: "enrollment_invalid",
+            detail: Some("attestation_invalid"),
+        });
+        assert_eq!(body.body, "Привязка телефона отклонена");
     }
 
     #[test]

@@ -1,15 +1,16 @@
 package dev.proflyder.home.feature.settings.presentation
 
+import android.content.res.ColorStateList
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.PointF
-import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.RippleDrawable
 import android.view.LayoutInflater
 import android.view.View
 import androidx.appcompat.view.ContextThemeWrapper
 import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.LinearLayoutManager
+import com.google.android.material.shape.MaterialShapeDrawable
 import dev.proflyder.home.core.access.AppAccessState
 import dev.proflyder.home.core.model.NotificationHistory
 import dev.proflyder.home.core.model.NotificationHistoryType
@@ -65,16 +66,19 @@ class NotificationHistoryRowTest {
     fun aPressedRowDrawsTheRippleInTheLightTheme() =
         shootPressed("light", ContextThemeWrapper(RuntimeEnvironment.getApplication(), LIGHT_THEME))
 
-    private fun shootPressed(mode: String, themed: ContextThemeWrapper) {
+    private fun shootPressed(mode: String, themed: ContextThemeWrapper) =
+        mapOf("first" to OPEN_ROW, "last" to LAST_ROW).forEach { (name, position) -> shootPressed("$name-$mode", themed, position) }
+
+    private fun shootPressed(name: String, themed: ContextThemeWrapper, position: Int) {
         val binding = list(themed, RecordingCallback())
-        val pressed = row(binding, OPEN_ROW)
+        val pressed = row(binding, position)
         val bitmap = Bitmap.createBitmap(binding.root.width, binding.root.height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         binding.root.draw(canvas)
         drawPressedLayer(canvas, binding.root, pressed)
         val dir = System.getenv("TEST_UNDECLARED_OUTPUTS_DIR") ?: return
         File(dir).mkdirs()
-        File(dir, "notification-history-pressed-$mode.png").outputStream()
+        File(dir, "notification-history-pressed-$name.png").outputStream()
             .use { bitmap.compress(Bitmap.CompressFormat.PNG, PNG_QUALITY, it) }
     }
 
@@ -82,15 +86,19 @@ class NotificationHistoryRowTest {
         val pressed = ContextCompat.getColorStateList(row.context, DesignR.color.ds_row_item_ripple)
             ?.getColorForState(intArrayOf(android.R.attr.state_pressed), android.graphics.Color.TRANSPARENT)
             ?: return
-        val radius = row.resources.getDimension(DesignR.dimen.ds_radius_l)
-        val layer = GradientDrawable().apply {
-            setColor(pressed)
-            cornerRadii = floatArrayOf(radius, radius, radius, radius, 0f, 0f, 0f, 0f)
+        val mask = (row.foreground as RippleDrawable).findDrawableByLayerId(android.R.id.mask) as MaterialShapeDrawable
+        val offset = offsetIn(root, row)
+        MaterialShapeDrawable(mask.shapeAppearanceModel).apply {
+            fillColor = ColorStateList.valueOf(pressed)
+            setBounds(offset.x.toInt(), offset.y.toInt(), offset.x.toInt() + row.width, offset.y.toInt() + row.height)
+            draw(canvas)
         }
-        val left = offsetIn(root, row).x.toInt()
-        val top = offsetIn(root, row).y.toInt()
-        layer.setBounds(left, top, left + row.width, top + row.height)
-        layer.draw(canvas)
+    }
+
+    private fun windowBackground(themed: ContextThemeWrapper): android.graphics.drawable.Drawable? {
+        val value = android.util.TypedValue()
+        themed.theme.resolveAttribute(android.R.attr.windowBackground, value, true)
+        return ContextCompat.getDrawable(themed, value.resourceId)
     }
 
     private fun offsetIn(root: View, view: View): PointF {
@@ -112,6 +120,7 @@ class NotificationHistoryRowTest {
         binding.historyList.addHistoryDecorations()
         binding.historyEmpty.visibility = View.GONE
         binding.historyProgress.visibility = View.GONE
+        binding.root.background = windowBackground(themed)
         val metrics = themed.resources.displayMetrics
         val width = (WIDTH_DP * metrics.density).toInt()
         val height = (HEIGHT_DP * metrics.density).toInt()

@@ -9,7 +9,6 @@ import androidx.annotation.Px
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.color.MaterialColors
 import com.google.android.material.shape.MaterialShapeDrawable
-import com.google.android.material.shape.ShapeAppearanceModel
 
 class GroupDividers(@Px private val insetStart: Int = 0) : RecyclerView.ItemDecoration() {
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -40,24 +39,12 @@ class GroupCards(
     }
 
     private fun drawBackground(canvas: Canvas, child: View, slot: GroupSlot, color: Int) {
-        val background = backgrounds.getOrPut(slot) { shapeFor(slot) }
+        val background = backgrounds.getOrPut(slot) { MaterialShapeDrawable(slot.shape(radius)) }
         background.fillColor = ColorStateList.valueOf(color)
         val shift = child.translationY.toInt()
         background.setBounds(child.left, child.top + shift, child.right, child.bottom + shift)
         background.alpha = (child.alpha * OPAQUE).toInt()
         background.draw(canvas)
-    }
-
-    private fun shapeFor(slot: GroupSlot): MaterialShapeDrawable {
-        val top = if (slot.first) radius else 0f
-        val bottom = if (slot.last) radius else 0f
-        val shape = ShapeAppearanceModel.builder()
-            .setTopLeftCornerSize(top)
-            .setTopRightCornerSize(top)
-            .setBottomLeftCornerSize(bottom)
-            .setBottomRightCornerSize(bottom)
-            .build()
-        return MaterialShapeDrawable(shape)
     }
 
     private companion object {
