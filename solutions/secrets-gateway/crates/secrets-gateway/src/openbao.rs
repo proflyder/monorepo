@@ -44,6 +44,25 @@ pub struct Metadata {
     pub versions: Vec<VersionInfo>,
 }
 
+impl VersionInfo {
+    #[must_use]
+    pub fn is_available(&self) -> bool {
+        !self.destroyed && self.deletion_time.is_empty()
+    }
+}
+
+impl Metadata {
+    #[must_use]
+    pub fn version(&self, version: u64) -> Option<&VersionInfo> {
+        self.versions.iter().find(|item| item.version == version)
+    }
+
+    #[must_use]
+    pub fn is_available(&self, version: u64) -> bool {
+        self.version(version).is_some_and(VersionInfo::is_available)
+    }
+}
+
 #[derive(Clone, PartialEq, Eq)]
 pub struct SecretVersion {
     pub version: u64,
@@ -342,7 +361,6 @@ impl OpenBao {
         serde_json::from_str(&text).map_err(|_| Error::Parse)
     }
 
-    #[allow(clippy::significant_drop_tightening)]
     async fn token(&self) -> Result<Secret, Error> {
         let mut guard = self.token.lock().await;
         if let Some(cached) = guard.as_ref()
@@ -355,6 +373,7 @@ impl OpenBao {
             token: token.clone(),
             expires_at,
         });
+        drop(guard);
         Ok(token)
     }
 
