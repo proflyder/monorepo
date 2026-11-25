@@ -21,6 +21,7 @@ concurrency:
 jobs:
   release:
     permissions:
+      actions: read
       contents: write
       packages: write
       id-token: write
