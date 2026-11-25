@@ -61,6 +61,18 @@ class NotificationHistorySwipeFragmentTest {
     }
 
     @Test
+    @Config(qualifiers = "w411dp-h891dp-night-xxhdpi")
+    fun swipeActionsShowInDark() {
+        val list = show()
+        val key = firstItemKey(list)
+        val row = rowOf(list, key)
+        assertEquals(color(row, MaterialR.attr.colorError), swipe(list, row, -1))
+        assertFalse(key in keys())
+        val next = rowOf(list, null)
+        assertEquals(color(next, androidx.appcompat.R.attr.colorPrimary), swipe(list, next, 1))
+    }
+
+    @Test
     fun swipingLeftDeletesARowUnderAPinnedHeader() {
         val list = show()
         val manager = list.layoutManager as StickyHeadersLayoutManager
