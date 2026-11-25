@@ -3,10 +3,7 @@ package dev.proflyder.home
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
-import android.view.LayoutInflater
 import android.view.View
-import android.view.ViewGroup
-import android.widget.FrameLayout
 import android.widget.TextView
 import androidx.core.graphics.Insets
 import androidx.core.view.ViewCompat
@@ -15,9 +12,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.appbar.AppBarLayout
 import com.google.android.material.bottomnavigation.BottomNavigationView
-import com.google.android.material.card.MaterialCardView
 import com.google.android.material.color.MaterialColors
-import dev.proflyder.home.core.designsystem.list.SectionedAdapter
 import dev.proflyder.home.core.theme.AppTheme
 import java.io.File
 import kotlinx.coroutines.runBlocking
@@ -75,7 +70,10 @@ class GlassToolbarScreenshotTest {
         val root = activity.window.decorView
         val list = root.findViewById<RecyclerView>(ControlR.id.control_list)
         list.layoutManager = LinearLayoutManager(activity)
-        list.adapter = SectionedRows(activity)
+        list.adapter = TestSectionedRows(activity, ControlR.layout.item_control_header) { view, section ->
+            view.findViewById<TextView>(ControlR.id.control_header_title).text = TITLES[section]
+            view.findViewById<TextView>(ControlR.id.control_header_summary).text = SUMMARIES[section]
+        }
         applyInsets(activity, 0)
         root.findViewById<View>(ControlR.id.control_error).visibility = View.GONE
         root.findViewById<View>(ControlR.id.control_content).visibility = View.VISIBLE
@@ -167,55 +165,6 @@ class GlassToolbarScreenshotTest {
         return bitmap
     }
 
-    private class SectionedRows(context: android.content.Context) : RecyclerView.Adapter<RecyclerView.ViewHolder>(), SectionedAdapter {
-        private val inflater = LayoutInflater.from(context)
-        private val density = context.resources.displayMetrics.density
-
-        override fun isSectionHeader(position: Int): Boolean = position % (ROWS + 1) == 0
-
-        override fun getItemCount(): Int = SECTIONS * (ROWS + 1)
-
-        override fun getItemViewType(position: Int): Int = if (isSectionHeader(position)) HEADER else ROW
-
-        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder = when (viewType) {
-            HEADER -> object : RecyclerView.ViewHolder(
-                inflater.inflate(ControlR.layout.item_control_header, parent, false),
-            ) {}
-            else -> object : RecyclerView.ViewHolder(card(parent)) {}
-        }
-
-        override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
-            when {
-                isSectionHeader(position) -> bindHeader(holder.itemView, position / (ROWS + 1))
-                else -> (holder.itemView as MaterialCardView).getChildAt(0).let { (it as TextView).text = "Устройство ${position - 1}" }
-            }
-        }
-
-        private fun bindHeader(view: View, section: Int) {
-            view.findViewById<TextView>(ControlR.id.control_header_title).text = TITLES[section]
-            view.findViewById<TextView>(ControlR.id.control_header_summary).text = SUMMARIES[section]
-        }
-
-        private fun card(parent: ViewGroup): MaterialCardView {
-            val margin = (6 * density).toInt()
-            val card = MaterialCardView(parent.context).apply {
-                layoutParams = RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (72 * density).toInt()).apply {
-                    topMargin = margin
-                    bottomMargin = margin
-                }
-                radius = 16 * density
-            }
-            card.addView(
-                TextView(parent.context).apply {
-                    setTextAppearance(com.google.android.material.R.style.TextAppearance_Material3_BodyLarge)
-                    setPadding(margin * 3, margin * 3, margin * 3, margin * 3)
-                },
-                FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT),
-            )
-            return card
-        }
-    }
-
     private companion object {
         const val LIGHT = "w411dp-h891dp-notnight-xxhdpi"
         const val WIDTH_DP = 411
@@ -226,10 +175,6 @@ class GlassToolbarScreenshotTest {
         const val SYSTEM_TAB = 4
         const val STATUS_TOLERANCE = 6
         const val HEADER_PROBE_DP = 12
-        const val SECTIONS = 4
-        const val ROWS = 6
-        const val HEADER = 0
-        const val ROW = 1
         const val SETTLE_PASSES = 3
         const val PNG_QUALITY = 100
         val TITLES = listOf("Спальня", "Гостиная", "Кухня", "Прихожая")

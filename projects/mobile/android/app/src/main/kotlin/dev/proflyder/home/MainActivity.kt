@@ -78,7 +78,8 @@ class MainActivity private constructor(
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
         binding.glassBar.bindBackdrop(binding.fragmentContainer)
-        barHeights.edgeMergeListener = { merged -> binding.glassBar.setEdgeVisible(!merged) }
+        barHeights.pinnedHeaderListener = binding.glassBar::setPinnedHeader
+        barHeights.backdropListener = binding.glassBar::requestSnapshot
         binding.appbar.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> syncGlassBarHeight() }
         syncGlassBarHeight()
         router = FragmentRouter(

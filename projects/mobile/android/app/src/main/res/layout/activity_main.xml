@@ -20,7 +20,7 @@
         <dev.proflyder.home.core.designsystem.glass.GlassBarView
             android:id="@+id/glass_bar"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            android:layout_height="match_parent"
             android:layout_gravity="top"
             android:importantForAccessibility="no" />
 

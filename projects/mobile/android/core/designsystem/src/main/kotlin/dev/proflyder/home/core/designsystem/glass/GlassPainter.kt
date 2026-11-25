@@ -15,7 +15,8 @@ import com.google.android.material.R as MaterialR
 
 class GlassPainter(context: Context, @IntegerRes tintAlpha: Int) {
     private val surface = MaterialColors.getColor(context, MaterialR.attr.colorSurface, Color.BLACK)
-    private val tintPaint = Paint().apply { color = ColorUtils.setAlphaComponent(surface, context.resources.getInteger(tintAlpha)) }
+    internal val tintAlpha = context.resources.getInteger(tintAlpha)
+    private val tintPaint = Paint().apply { color = ColorUtils.setAlphaComponent(surface, this@GlassPainter.tintAlpha) }
     private val dividerPaint = Paint().apply {
         color = MaterialColors.getColor(context, MaterialR.attr.colorOutlineVariant, Color.GRAY)
     }
