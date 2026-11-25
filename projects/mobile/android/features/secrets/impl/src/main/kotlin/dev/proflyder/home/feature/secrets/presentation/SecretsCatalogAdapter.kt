@@ -3,6 +3,7 @@ package dev.proflyder.home.feature.secrets.presentation
 import android.view.LayoutInflater
 import android.view.ViewGroup
 import dev.proflyder.home.core.designsystem.list.SectionedAdapter
+import dev.proflyder.home.core.designsystem.list.applyFullRowRipple
 import dev.proflyder.home.core.presentation.KeyedDiff
 import dev.proflyder.home.core.ui.AdapterCallback
 import dev.proflyder.home.core.ui.BaseAdapterCallback
@@ -55,6 +56,10 @@ internal class SecretsCatalogAdapter(
     }
 
     private inner class EntryHolder(private val views: ItemSecretPathBinding) : CatalogHolder(views, BaseAdapterCallback<SecretsCatalogRow>()) {
+        init {
+            views.root.applyFullRowRipple()
+        }
+
         override fun bind(item: SecretsCatalogRow) {
             val row = item as SecretsCatalogRow.EntryRow
             views.secretPathRow.title = row.entry.path

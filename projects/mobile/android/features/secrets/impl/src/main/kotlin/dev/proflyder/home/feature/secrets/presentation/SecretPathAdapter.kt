@@ -4,6 +4,7 @@ import android.view.LayoutInflater
 import android.view.ViewGroup
 import dev.proflyder.home.core.designsystem.joinMeta
 import dev.proflyder.home.core.designsystem.list.SectionedAdapter
+import dev.proflyder.home.core.designsystem.list.applyFullRowRipple
 import dev.proflyder.home.core.model.SecretVersion
 import dev.proflyder.home.core.presentation.KeyedDiff
 import dev.proflyder.home.core.ui.AdapterCallback
@@ -81,6 +82,10 @@ internal class SecretPathAdapter(
     private inner class KeyHolder(
         private val views: ItemSecretKeyBinding,
     ) : PathHolder(views, BaseAdapterCallback()) {
+        init {
+            views.root.applyFullRowRipple()
+        }
+
         override fun bind(item: SecretPathRow) {
             val row = item as SecretPathRow.KeyRow
             views.secretKeyRow.title = row.name

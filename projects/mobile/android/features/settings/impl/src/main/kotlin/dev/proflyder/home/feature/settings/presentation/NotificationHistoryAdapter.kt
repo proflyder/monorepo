@@ -5,6 +5,7 @@ import android.view.LayoutInflater
 import android.view.ViewGroup
 import androidx.core.view.ViewCompat
 import dev.proflyder.home.core.designsystem.list.SectionedAdapter
+import dev.proflyder.home.core.designsystem.list.applyFullRowRipple
 import dev.proflyder.home.core.model.NotificationHistoryType
 import dev.proflyder.home.core.presentation.KeyedDiff
 import dev.proflyder.home.core.ui.AdapterCallback
@@ -75,6 +76,7 @@ internal class NotificationHistoryAdapter(
             if (open) forwardRowClicks() else clearClicks()
             views.root.isClickable = open
             views.root.isFocusable = open
+            views.root.applyFullRowRipple()
         }
 
         private fun clearClicks() {

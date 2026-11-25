@@ -3,7 +3,6 @@ package dev.proflyder.home.core.designsystem.list
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
-import android.graphics.Rect
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.RippleDrawable
 import android.view.View
@@ -17,11 +16,6 @@ import dev.proflyder.home.core.designsystem.R
 class FullWidthRows(@Px private val dividerInset: Int) : RecyclerView.ItemDecoration() {
     private val divider = Paint(Paint.ANTI_ALIAS_FLAG)
 
-    override fun getItemOffsets(outRect: Rect, view: View, parent: RecyclerView, state: RecyclerView.State) {
-        if (parent.slotOfChild(view) == null) return
-        view.foreground = view.fullRowRipple().takeIf { view.isClickable }
-    }
-
     override fun onDraw(canvas: Canvas, parent: RecyclerView, state: RecyclerView.State) {
         divider.color = MaterialColors.getColor(parent, com.google.android.material.R.attr.colorOutlineVariant)
         val thickness = parent.resources.displayMetrics.density.coerceAtLeast(1f)
@@ -33,6 +27,10 @@ class FullWidthRows(@Px private val dividerInset: Int) : RecyclerView.ItemDecora
         val bottom = child.bottom + child.translationY
         canvas.drawRect(child.left + child.translationX + dividerInset, bottom - thickness, child.right + child.translationX, bottom, divider)
     }
+}
+
+fun View.applyFullRowRipple() {
+    foreground = fullRowRipple().takeIf { isClickable }
 }
 
 private fun View.fullRowRipple(): Drawable =
