@@ -12,6 +12,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.google.android.material.color.MaterialColors
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import dev.proflyder.home.core.designsystem.glass.applyAppBarContentPadding
 import dev.proflyder.home.core.model.RemoteFailure
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
@@ -34,6 +35,7 @@ abstract class BaseFragment<VB : ViewBinding>(
     final override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         onBindingCreated(binding, savedInstanceState)
+        view.applyAppBarContentPadding()
     }
 
     final override fun onDestroyView() {

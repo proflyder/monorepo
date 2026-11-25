@@ -14,6 +14,7 @@ import dev.proflyder.home.core.designsystem.list.StickySectionHeaders
 import dev.proflyder.home.core.theme.AppTheme
 import java.io.File
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -32,8 +33,8 @@ class StickyHeadersScreenshotTest {
         val list = sectionedList(clipToPadding = false)
         list.scrollBy(0, MID_SCROLL)
         val shot = render(list, "sticky-headers-mid-list.png")
-        assertEquals(screenColor, shot.getPixel(1, 1))
-        assertEquals(screenColor, shot.getPixel(shot.width - 2, HEADER_HEIGHT - 2))
+        assertNotEquals(CARD, shot.getPixel(1, 1))
+        assertNotEquals(CARD, shot.getPixel(shot.width - 2, HEADER_HEIGHT - 2))
         assertEquals(CARD, shot.getPixel(shot.width / 2, HEADER_HEIGHT + PADDING + ROW_HEIGHT / 2))
     }
 
@@ -42,8 +43,8 @@ class StickyHeadersScreenshotTest {
         val list = sectionedList(clipToPadding = true)
         list.scrollBy(0, PUSH_SCROLL)
         val shot = render(list, "sticky-headers-push.png")
-        assertEquals(screenColor, shot.getPixel(shot.width / 2, PADDING / 2))
-        assertEquals(screenColor, shot.getPixel(shot.width - 2, PADDING + 1))
+        assertNotEquals(CARD, shot.getPixel(shot.width / 2, PADDING / 2))
+        assertNotEquals(CARD, shot.getPixel(shot.width - 2, PADDING + 1))
     }
 
     private fun sectionedList(clipToPadding: Boolean) = RecyclerView(context).apply {

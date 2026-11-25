@@ -4,14 +4,16 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.addCallback
 import androidx.activity.enableEdgeToEdge
-import androidx.core.view.isVisible
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.isVisible
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import dev.proflyder.home.core.access.AppAccessSession
 import dev.proflyder.home.core.access.AppAccessState
 import dev.proflyder.home.core.access.allows
+import dev.proflyder.home.core.designsystem.glass.AppBarHeightTracker
+import dev.proflyder.home.core.designsystem.glass.AppBarHost
 import dev.proflyder.home.core.model.AppLogger
 import dev.proflyder.home.core.navigation.AppActivityContribution
 import dev.proflyder.home.core.navigation.AppChromeState
@@ -30,7 +32,14 @@ import dev.zacsweers.metro.Inject
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
-class MainActivity : AppCompatActivity(), NavigatorHost, FailureNoticePolicyProvider {
+class MainActivity private constructor(
+    private val barHeights: AppBarHeightTracker,
+) : AppCompatActivity(),
+    NavigatorHost,
+    FailureNoticePolicyProvider,
+    AppBarHost by barHeights {
+    constructor() : this(AppBarHeightTracker())
+
     internal lateinit var router: FragmentRouter
     internal lateinit var actionsMenu: ToolbarChrome
     private lateinit var binding: ActivityMainBinding
@@ -68,6 +77,10 @@ class MainActivity : AppCompatActivity(), NavigatorHost, FailureNoticePolicyProv
         enableEdgeToEdge()
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        binding.glassBar.bindBackdrop(binding.fragmentContainer)
+        barHeights.edgeMergeListener = { merged -> binding.glassBar.setEdgeVisible(!merged) }
+        binding.appbar.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> syncGlassBarHeight() }
+        syncGlassBarHeight()
         router = FragmentRouter(
             fragmentManager = supportFragmentManager,
             containerId = R.id.fragment_container,
@@ -95,7 +108,14 @@ class MainActivity : AppCompatActivity(), NavigatorHost, FailureNoticePolicyProv
         activityContributions.sortedBy { it.order }.forEach { it.attach(this) }
     }
 
+    private fun syncGlassBarHeight() {
+        val height = binding.appbar.height
+        binding.glassBar.setBarHeight(height, binding.appbar.paddingTop)
+        barHeights.update(height)
+    }
+
     private fun render(chrome: AppChromeState, accessState: AppAccessState) {
+        binding.glassBar.requestSnapshot()
         val visibleTabs = features.tabs().filter { accessState.allows(it.module) }
         val withoutSections = accessState is AppAccessState.Ready && visibleTabs.isEmpty()
         binding.fragmentContainer.isVisible = !withoutSections

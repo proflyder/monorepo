@@ -6,9 +6,10 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:gravity="center_vertical"
+    android:minHeight="@dimen/control_header_min_height"
     android:orientation="horizontal"
-    android:paddingTop="@dimen/ds_space_xl"
-    android:paddingBottom="@dimen/ds_space_s">
+    android:paddingTop="@dimen/control_header_padding_top"
+    android:paddingBottom="@dimen/control_header_padding_bottom">
 
     <TextView
         android:id="@+id/control_header_title"
