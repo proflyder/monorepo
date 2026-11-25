@@ -2,22 +2,27 @@ package dev.proflyder.home
 
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.Color
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.TextView
-import com.google.android.material.bottomnavigation.BottomNavigationView
 import androidx.core.graphics.Insets
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.appbar.AppBarLayout
+import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.google.android.material.card.MaterialCardView
+import com.google.android.material.color.MaterialColors
 import dev.proflyder.home.core.designsystem.list.SectionedAdapter
 import dev.proflyder.home.core.theme.AppTheme
 import java.io.File
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
@@ -26,8 +31,8 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import com.google.android.material.R as MaterialR
 import dev.proflyder.home.feature.control.impl.R as ControlR
-import kotlinx.coroutines.runBlocking
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], qualifiers = "w411dp-h891dp-night-xxhdpi")
@@ -76,15 +81,46 @@ class GlassToolbarScreenshotTest {
         root.findViewById<View>(ControlR.id.control_content).visibility = View.VISIBLE
         list.visibility = View.VISIBLE
         layout(root)
+        val scrolled = scrollDp > 0
+        root.findViewById<AppBarLayout>(ControlR.id.control_appbar).setExpanded(!scrolled, false)
         list.scrollBy(0, dp(root, scrollDp))
-        layout(root)
-        idle(activity)
-        layout(root)
-
-        val bar = root.findViewById<View>(R.id.appbar)
-        assertEquals("list starts at the glass bar edge", bar.height, list.paddingTop)
-        shoot(root, "glass-toolbar-home-$mode.png")
+        repeat(SETTLE_PASSES) {
+            layout(root)
+            idle(activity)
+        }
+        val shot = shoot(root, "glass-toolbar-home-$mode.png")
+        val barBottom = root.findViewById<View>(R.id.appbar).height
+        assertStatusBandIsSolid(shot, dp(root, STATUS_BAR_DP))
+        if (scrolled) assertHeaderPinnedAtBarEdge(activity, shot, list, barBottom)
+        if (!scrolled) assertInnerHeaderBelowBar(root, barBottom)
     }
+
+    private fun assertStatusBandIsSolid(shot: Bitmap, statusBar: Int) {
+        val reference = shot.getPixel(shot.width / 2, statusBar / 2)
+        val deviation = (0 until statusBar).flatMap { y -> (0 until shot.width).map { x -> shot.getPixel(x, y) } }
+            .maxOf { channelDistance(it, reference) }
+        assertTrue("content shows through the status bar band: $deviation", deviation <= STATUS_TOLERANCE)
+    }
+
+    private fun assertHeaderPinnedAtBarEdge(activity: MainActivity, shot: Bitmap, list: RecyclerView, barBottom: Int) {
+        val listTop = IntArray(2).also(list::getLocationInWindow)[1]
+        assertEquals("list top sits at the glass bar edge", barBottom, listTop + list.paddingTop)
+        val surface = MaterialColors.getColor(activity, MaterialR.attr.colorSurface, 0)
+        val band = (barBottom until barBottom + dp(list, HEADER_PROBE_DP)).flatMap { y -> (0 until shot.width).map { x -> shot.getPixel(x, y) } }
+        assertTrue("pinned header must start at the bar edge", band.all { channelDistance(it, surface) <= 1 })
+    }
+
+    private fun assertInnerHeaderBelowBar(root: View, barBottom: Int) {
+        val slot = root.findViewById<View>(ControlR.id.control_alarms_slot)
+        val slotTop = IntArray(2).also(slot::getLocationInWindow)[1]
+        assertEquals("inner app bar content starts at the glass bar edge", barBottom, slotTop)
+    }
+
+    private fun channelDistance(first: Int, second: Int): Int = listOf(
+        Color.red(first) - Color.red(second),
+        Color.green(first) - Color.green(second),
+        Color.blue(first) - Color.blue(second),
+    ).maxOf { kotlin.math.abs(it) }
 
     private fun launch(theme: AppTheme): MainActivity {
         val app = RuntimeEnvironment.getApplication() as HomeApplication
@@ -121,12 +157,14 @@ class GlassToolbarScreenshotTest {
         root.layout(0, 0, root.measuredWidth, root.measuredHeight)
     }
 
-    private fun shoot(root: View, name: String) {
+    private fun shoot(root: View, name: String): Bitmap {
         val bitmap = Bitmap.createBitmap(root.width, root.height, Bitmap.Config.ARGB_8888)
         root.draw(Canvas(bitmap))
-        val dir = System.getenv("TEST_UNDECLARED_OUTPUTS_DIR") ?: return
-        File(dir).mkdirs()
-        File(dir, name).outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, PNG_QUALITY, it) }
+        System.getenv("TEST_UNDECLARED_OUTPUTS_DIR")?.let { dir ->
+            File(dir).mkdirs()
+            File(dir, name).outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, PNG_QUALITY, it) }
+        }
+        return bitmap
     }
 
     private class SectionedRows(context: android.content.Context) : RecyclerView.Adapter<RecyclerView.ViewHolder>(), SectionedAdapter {
@@ -186,6 +224,8 @@ class GlassToolbarScreenshotTest {
         const val NAV_BAR_DP = 24
         const val SCROLL_DP = 90
         const val SYSTEM_TAB = 4
+        const val STATUS_TOLERANCE = 6
+        const val HEADER_PROBE_DP = 12
         const val SECTIONS = 4
         const val ROWS = 6
         const val HEADER = 0

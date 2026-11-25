@@ -64,9 +64,11 @@ it: the bar renders a blurred `RenderNode` snapshot of the content on API 31+
 and a near-opaque surface tint on older devices and in software rendering (`GlassPainter` draws tint, hairline and fade for both the bar and pinned section headers). Screens without a vertical scroller get the bar height as root padding, with an `colorOutlineVariant` hairline and a
 12 dp fade into the content. `BaseFragment` pads the primary vertical scroller
 of every screen by the live `AppBarHeightSource.appBarHeight`, so the first
-row rests below the bar while scrolling content passes under it. Sticky
-section headers pin at that padding and reuse the same surface tint, hairline
-and fade; the Home room header is a single compact line.
+row rests below the bar while scrolling content passes under it. A screen whose scroller sits under its own `AppBarLayout` pads that app bar
+instead, so its content also rests below the bar. The status bar band is
+always opaque. Sticky section headers pin at the bar edge with the same
+`GlassPainter`; while one is pinned there, the bar hides its own hairline and
+fade (`AppBarHost.mergeBarEdge`) so bar and header read as one block; the Home room header is a single compact line.
 
 ## Build and test
 

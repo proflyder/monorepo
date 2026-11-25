@@ -4,16 +4,16 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.addCallback
 import androidx.activity.enableEdgeToEdge
-import androidx.core.view.isVisible
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.isVisible
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import dev.proflyder.home.core.access.AppAccessSession
 import dev.proflyder.home.core.access.AppAccessState
 import dev.proflyder.home.core.access.allows
-import dev.proflyder.home.core.designsystem.glass.AppBarHeightSource
 import dev.proflyder.home.core.designsystem.glass.AppBarHeightTracker
+import dev.proflyder.home.core.designsystem.glass.AppBarHost
 import dev.proflyder.home.core.model.AppLogger
 import dev.proflyder.home.core.navigation.AppActivityContribution
 import dev.proflyder.home.core.navigation.AppChromeState
@@ -37,7 +37,7 @@ class MainActivity private constructor(
 ) : AppCompatActivity(),
     NavigatorHost,
     FailureNoticePolicyProvider,
-    AppBarHeightSource by barHeights {
+    AppBarHost by barHeights {
     constructor() : this(AppBarHeightTracker())
 
     internal lateinit var router: FragmentRouter
@@ -78,6 +78,7 @@ class MainActivity private constructor(
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
         binding.glassBar.bindBackdrop(binding.fragmentContainer)
+        barHeights.edgeMergeListener = { merged -> binding.glassBar.setEdgeVisible(!merged) }
         binding.appbar.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> syncGlassBarHeight() }
         syncGlassBarHeight()
         router = FragmentRouter(
@@ -109,7 +110,7 @@ class MainActivity private constructor(
 
     private fun syncGlassBarHeight() {
         val height = binding.appbar.height
-        binding.glassBar.setBarHeight(height)
+        binding.glassBar.setBarHeight(height, binding.appbar.paddingTop)
         barHeights.update(height)
     }
 

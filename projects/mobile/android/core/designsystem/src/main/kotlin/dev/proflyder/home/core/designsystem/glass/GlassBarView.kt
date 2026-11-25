@@ -20,7 +20,9 @@ class GlassBarView @JvmOverloads constructor(
     private var backdrop: View? = null
     private var blur: BlurBackdrop? = null
     private var barHeight = 0
+    private var statusInset = 0
     private var snapshotDirty = true
+    private var edgeVisible = true
 
     init {
         setWillNotDraw(false)
@@ -37,9 +39,16 @@ class GlassBarView @JvmOverloads constructor(
         postInvalidateOnAnimation()
     }
 
-    fun setBarHeight(height: Int) {
-        if (height == barHeight) return
+    fun setEdgeVisible(visible: Boolean) {
+        if (visible == edgeVisible) return
+        edgeVisible = visible
+        invalidate()
+    }
+
+    fun setBarHeight(height: Int, topInset: Int) {
+        if (height == barHeight && topInset == statusInset) return
         barHeight = height
+        statusInset = topInset
         updateOwnHeight()
         requestSnapshot()
     }
@@ -63,8 +72,9 @@ class GlassBarView @JvmOverloads constructor(
             content != null && canBlur(canvas) -> blurredPainter.also { drawBlurred(canvas, content) }
             else -> opaquePainter
         }
-        painter.drawSurface(canvas, width, 0, barHeight)
-        painter.drawEdge(canvas, width, barHeight)
+        opaquePainter.drawSurface(canvas, width, 0, statusInset)
+        painter.drawSurface(canvas, width, statusInset, barHeight)
+        if (edgeVisible) painter.drawEdge(canvas, width, barHeight)
         snapshotDirty = false
     }
 

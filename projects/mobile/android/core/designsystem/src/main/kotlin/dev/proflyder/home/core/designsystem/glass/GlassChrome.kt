@@ -14,16 +14,20 @@ fun interface AppBarHeightListener {
     fun onAppBarHeightChanged(height: Int)
 }
 
-interface AppBarHeightSource {
+interface AppBarHost {
     val appBarHeight: Int
 
     fun addAppBarHeightListener(listener: AppBarHeightListener)
 
     fun removeAppBarHeightListener(listener: AppBarHeightListener)
+
+    fun mergeBarEdge(merged: Boolean)
 }
 
-class AppBarHeightTracker : AppBarHeightSource {
+class AppBarHeightTracker : AppBarHost {
     private val listeners = mutableListOf<AppBarHeightListener>()
+    var edgeMergeListener: ((Boolean) -> Unit)? = null
+    private var edgeMerged = false
     override var appBarHeight: Int = 0
         private set
 
@@ -36,6 +40,12 @@ class AppBarHeightTracker : AppBarHeightSource {
         listeners.remove(listener)
     }
 
+    override fun mergeBarEdge(merged: Boolean) {
+        if (merged == edgeMerged) return
+        edgeMerged = merged
+        edgeMergeListener?.invoke(merged)
+    }
+
     fun update(height: Int) {
         if (height == appBarHeight) return
         appBarHeight = height
@@ -43,19 +53,18 @@ class AppBarHeightTracker : AppBarHeightSource {
     }
 }
 
-fun Context.appBarHeightSource(): AppBarHeightSource? {
+fun Context.appBarHost(): AppBarHost? {
     var current: Context? = this
     while (current is ContextWrapper) {
-        if (current is AppBarHeightSource) return current
+        if (current is AppBarHost) return current
         current = current.baseContext
     }
-    return current as? AppBarHeightSource
+    return current as? AppBarHost
 }
 
 fun View.applyAppBarContentPadding() {
-    val source = context.appBarHeightSource() ?: return
-    val content = primaryScroller() ?: this
-    (content as? ViewGroup)?.clipToPadding = content === this
+    val source = context.appBarHost() ?: return
+    val content = appBarInsetTarget()
     val baseTop = content.paddingTop
     val listener = AppBarHeightListener { height -> content.updatePadding(top = baseTop + height) }
     source.addAppBarHeightListener(listener)
@@ -63,7 +72,7 @@ fun View.applyAppBarContentPadding() {
 }
 
 private class DetachUnregister(
-    private val source: AppBarHeightSource,
+    private val source: AppBarHost,
     private val listener: AppBarHeightListener,
 ) : View.OnAttachStateChangeListener {
     override fun onViewAttachedToWindow(view: View) = Unit
@@ -72,6 +81,16 @@ private class DetachUnregister(
         source.removeAppBarHeightListener(listener)
         view.removeOnAttachStateChangeListener(this)
     }
+}
+
+internal fun View.appBarInsetTarget(): View {
+    val scroller = primaryScroller() ?: return this
+    val parent = scroller.parent as? ViewGroup
+    val header = parent?.let { group -> (0 until group.childCount).map(group::getChildAt).firstOrNull { it is AppBarLayout } }
+    val target = header ?: scroller
+    (scroller as? ViewGroup)?.clipToPadding = false
+    parent?.takeIf { header != null }?.clipChildren = false
+    return target
 }
 
 internal fun View.primaryScroller(): View? = when {

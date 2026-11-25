@@ -10,6 +10,7 @@ import androidx.core.graphics.withTranslation
 import androidx.recyclerview.widget.RecyclerView
 import dev.proflyder.home.core.designsystem.R
 import dev.proflyder.home.core.designsystem.glass.GlassPainter
+import dev.proflyder.home.core.designsystem.glass.appBarHost
 
 class StickySectionHeaders : RecyclerView.ItemDecoration() {
     private var cachedHeader: Pair<Int, View>? = null
@@ -32,16 +33,22 @@ class StickySectionHeaders : RecyclerView.ItemDecoration() {
     fun attachTo(list: RecyclerView) {
         list.addItemDecoration(this)
         list.addOnItemTouchListener(PinnedTouches())
+        list.addOnAttachStateChangeListener(ReleaseBarEdge())
     }
 
     override fun onDrawOver(canvas: Canvas, parent: RecyclerView, state: RecyclerView.State) {
+        val merged = drawPinnedHeader(canvas, parent)
+        parent.context.appBarHost()?.mergeBarEdge(merged)
+    }
+
+    private fun drawPinnedHeader(canvas: Canvas, parent: RecyclerView): Boolean {
         pinned.setEmpty()
-        val (adapter, sections) = parent.sectionedAdapter() ?: return
+        val (adapter, sections) = parent.sectionedAdapter() ?: return false
         observe(adapter)
         val glass = painterFor(parent)
         val edge = parent.visibleTop()
-        val position = parent.firstPositionBelow(edge) ?: return
-        val headerPosition = sections.headerAtOrBefore(position) ?: return
+        val position = parent.firstPositionBelow(edge) ?: return false
+        val headerPosition = sections.headerAtOrBefore(position) ?: return false
         val header = headerView(parent, adapter, headerPosition)
         val y = edge + pushOffset(parent, sections, edge, edge + header.height)
         val top = maxOf(y, edge)
@@ -49,6 +56,7 @@ class StickySectionHeaders : RecyclerView.ItemDecoration() {
         canvas.withClip(0f, top.toFloat(), parent.width.toFloat(), top + header.height + glass.fadeHeight.toFloat()) {
             drawPinned(this, glass, parent, header, y, top)
         }
+        return top == edge && parent.windowTop() + edge == parent.context.appBarHost()?.appBarHeight
     }
 
     private fun drawPinned(canvas: Canvas, glass: GlassPainter, parent: RecyclerView, header: View, y: Int, top: Int) {
@@ -105,6 +113,14 @@ class StickySectionHeaders : RecyclerView.ItemDecoration() {
         return holder.itemView
     }
 
+    private class ReleaseBarEdge : View.OnAttachStateChangeListener {
+        override fun onViewAttachedToWindow(view: View) = Unit
+
+        override fun onViewDetachedFromWindow(view: View) {
+            view.context.appBarHost()?.mergeBarEdge(false)
+        }
+    }
+
     private inner class PinnedTouches : RecyclerView.SimpleOnItemTouchListener() {
         override fun onInterceptTouchEvent(rv: RecyclerView, e: MotionEvent): Boolean =
             e.actionMasked == MotionEvent.ACTION_DOWN && pinned.contains(e.x.toInt(), e.y.toInt())
@@ -116,6 +132,8 @@ class StickySectionHeaders : RecyclerView.ItemDecoration() {
         }
     }
 }
+
+private fun View.windowTop(): Int = IntArray(2).also(::getLocationInWindow)[1]
 
 internal fun RecyclerView.visibleTop(): Int = paddingTop
 
