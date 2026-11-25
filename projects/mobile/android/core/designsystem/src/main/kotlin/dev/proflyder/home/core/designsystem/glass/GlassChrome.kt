@@ -22,6 +22,27 @@ interface AppBarHeightSource {
     fun removeAppBarHeightListener(listener: AppBarHeightListener)
 }
 
+class AppBarHeightTracker : AppBarHeightSource {
+    private val listeners = mutableListOf<AppBarHeightListener>()
+    override var appBarHeight: Int = 0
+        private set
+
+    override fun addAppBarHeightListener(listener: AppBarHeightListener) {
+        listeners.add(listener)
+        listener.onAppBarHeightChanged(appBarHeight)
+    }
+
+    override fun removeAppBarHeightListener(listener: AppBarHeightListener) {
+        listeners.remove(listener)
+    }
+
+    fun update(height: Int) {
+        if (height == appBarHeight) return
+        appBarHeight = height
+        listeners.toList().forEach { it.onAppBarHeightChanged(height) }
+    }
+}
+
 fun Context.appBarHeightSource(): AppBarHeightSource? {
     var current: Context? = this
     while (current is ContextWrapper) {
@@ -33,12 +54,12 @@ fun Context.appBarHeightSource(): AppBarHeightSource? {
 
 fun View.applyAppBarContentPadding() {
     val source = context.appBarHeightSource() ?: return
-    val content = primaryScroller() ?: return
+    val content = primaryScroller() ?: this
+    (content as? ViewGroup)?.clipToPadding = content === this
     val baseTop = content.paddingTop
     val listener = AppBarHeightListener { height -> content.updatePadding(top = baseTop + height) }
     source.addAppBarHeightListener(listener)
     content.addOnAttachStateChangeListener(DetachUnregister(source, listener))
-    listener.onAppBarHeightChanged(source.appBarHeight)
 }
 
 private class DetachUnregister(

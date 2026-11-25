@@ -2,6 +2,8 @@ package dev.proflyder.home.core.designsystem.glass
 
 import android.content.Context
 import android.content.ContextWrapper
+import android.widget.FrameLayout
+import android.widget.TextView
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import org.junit.Assert.assertEquals
@@ -39,6 +41,15 @@ class GlassChromeTest {
         assertEquals(84, list.paddingTop)
         source.update(184)
         assertEquals(188, list.paddingTop)
+    }
+
+    @Test
+    fun screenWithoutScrollerPadsItsRoot() {
+        val source = FakeSource(barHeight = 96)
+        val context = SourceContext(RuntimeEnvironment.getApplication(), source)
+        val root = FrameLayout(context).apply { addView(TextView(context)) }
+        root.applyAppBarContentPadding()
+        assertEquals(96, root.paddingTop)
     }
 
     private class FakeSource(barHeight: Int) : AppBarHeightSource {

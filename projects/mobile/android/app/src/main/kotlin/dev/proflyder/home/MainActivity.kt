@@ -12,8 +12,8 @@ import androidx.lifecycle.repeatOnLifecycle
 import dev.proflyder.home.core.access.AppAccessSession
 import dev.proflyder.home.core.access.AppAccessState
 import dev.proflyder.home.core.access.allows
-import dev.proflyder.home.core.designsystem.glass.AppBarHeightListener
 import dev.proflyder.home.core.designsystem.glass.AppBarHeightSource
+import dev.proflyder.home.core.designsystem.glass.AppBarHeightTracker
 import dev.proflyder.home.core.model.AppLogger
 import dev.proflyder.home.core.navigation.AppActivityContribution
 import dev.proflyder.home.core.navigation.AppChromeState
@@ -32,24 +32,18 @@ import dev.zacsweers.metro.Inject
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
-class MainActivity : AppCompatActivity(), NavigatorHost, FailureNoticePolicyProvider, AppBarHeightSource {
+class MainActivity private constructor(
+    private val barHeights: AppBarHeightTracker,
+) : AppCompatActivity(),
+    NavigatorHost,
+    FailureNoticePolicyProvider,
+    AppBarHeightSource by barHeights {
+    constructor() : this(AppBarHeightTracker())
+
     internal lateinit var router: FragmentRouter
     internal lateinit var actionsMenu: ToolbarChrome
     private lateinit var binding: ActivityMainBinding
     private lateinit var tabs: BottomTabs
-    private val barHeightListeners = mutableListOf<AppBarHeightListener>()
-    private var reportedBarHeight = -1
-
-    override val appBarHeight: Int get() = binding.appbar.height
-
-    override fun addAppBarHeightListener(listener: AppBarHeightListener) {
-        barHeightListeners.add(listener)
-        listener.onAppBarHeightChanged(appBarHeight)
-    }
-
-    override fun removeAppBarHeightListener(listener: AppBarHeightListener) {
-        barHeightListeners.remove(listener)
-    }
 
     @Inject
     internal lateinit var features: FeatureRegistry
@@ -116,9 +110,7 @@ class MainActivity : AppCompatActivity(), NavigatorHost, FailureNoticePolicyProv
     private fun syncGlassBarHeight() {
         val height = binding.appbar.height
         binding.glassBar.setBarHeight(height)
-        if (height == reportedBarHeight) return
-        reportedBarHeight = height
-        barHeightListeners.toList().forEach { it.onAppBarHeightChanged(height) }
+        barHeights.update(height)
     }
 
     private fun render(chrome: AppChromeState, accessState: AppAccessState) {

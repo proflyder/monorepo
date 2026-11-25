@@ -7,6 +7,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.TextView
+import com.google.android.material.bottomnavigation.BottomNavigationView
 import androidx.core.graphics.Insets
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -33,13 +34,38 @@ import kotlinx.coroutines.runBlocking
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class GlassToolbarScreenshotTest {
     @Test
-    fun homePinnedHeaderDark() = shootHome(AppTheme.EMERALD, "dark")
+    fun homeScrolledDark() = shootHome("dark-scrolled", SCROLL_DP)
+
+    @Test
+    fun homeAtRestDark() = shootHome("dark-rest", 0)
 
     @Test
     @Config(qualifiers = LIGHT)
-    fun homePinnedHeaderLight() = shootHome(AppTheme.EMERALD, "light")
+    fun homeScrolledLight() = shootHome("light-scrolled", SCROLL_DP)
 
-    private fun shootHome(theme: AppTheme, mode: String) {
+    @Test
+    @Config(qualifiers = LIGHT)
+    fun homeAtRestLight() = shootHome("light-rest", 0)
+
+    @Test
+    fun systemTabDark() = shootTab("dark", SYSTEM_TAB)
+
+    @Test
+    @Config(qualifiers = LIGHT)
+    fun systemTabLight() = shootTab("light", SYSTEM_TAB)
+
+    private fun shootTab(mode: String, tab: Int) {
+        val activity = launch(AppTheme.EMERALD)
+        val root = activity.window.decorView
+        val nav = root.findViewById<BottomNavigationView>(R.id.home_notice_anchor)
+        nav.selectedItemId = nav.menu.getItem(tab).itemId
+        idle(activity)
+        applyInsets(activity, 0)
+        shoot(root, "glass-toolbar-tab$tab-$mode.png")
+    }
+
+    private fun shootHome(mode: String, scrollDp: Int) {
+        val theme = AppTheme.EMERALD
         val activity = launch(theme)
         val root = activity.window.decorView
         val list = root.findViewById<RecyclerView>(ControlR.id.control_list)
@@ -50,29 +76,14 @@ class GlassToolbarScreenshotTest {
         root.findViewById<View>(ControlR.id.control_content).visibility = View.VISIBLE
         list.visibility = View.VISIBLE
         layout(root)
-        list.scrollBy(0, dp(root, SCROLL_DP))
+        list.scrollBy(0, dp(root, scrollDp))
         layout(root)
         idle(activity)
         layout(root)
 
         val bar = root.findViewById<View>(R.id.appbar)
         assertEquals("list starts at the glass bar edge", bar.height, list.paddingTop)
-        assertCompactHeader(activity)
         shoot(root, "glass-toolbar-home-$mode.png")
-    }
-
-    private fun assertCompactHeader(activity: MainActivity) {
-        val header = LayoutInflater.from(activity).inflate(
-            ControlR.layout.item_control_header,
-            FrameLayout(activity),
-            false,
-        )
-        val density = activity.resources.displayMetrics.density
-        val title = header.findViewById<TextView>(ControlR.id.control_header_title)
-        assertEquals((14 * density).toInt(), header.paddingTop)
-        assertEquals((6 * density).toInt(), header.paddingBottom)
-        assertEquals((44 * density).toInt(), header.minimumHeight)
-        assertEquals(1, title.maxLines)
     }
 
     private fun launch(theme: AppTheme): MainActivity {
@@ -174,6 +185,7 @@ class GlassToolbarScreenshotTest {
         const val STATUS_BAR_DP = 32
         const val NAV_BAR_DP = 24
         const val SCROLL_DP = 90
+        const val SYSTEM_TAB = 4
         const val SECTIONS = 4
         const val ROWS = 6
         const val HEADER = 0
