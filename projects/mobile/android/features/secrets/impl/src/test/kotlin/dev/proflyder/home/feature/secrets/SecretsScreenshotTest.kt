@@ -127,7 +127,13 @@ class SecretsScreenshotTest {
     }
 
     @Test
-    fun thePathScreenShowsVersionsAndMasksKeyValues() {
+    fun thePathScreenShowsVersionsAndMasksKeyValues() = pathScreen("secrets-path-masked-light.png")
+
+    @Test
+    @Config(qualifiers = "ru-w411dp-h891dp-night-xxhdpi")
+    fun thePathScreenShowsVersionsAndMasksKeyValuesInDark() = pathScreen("secrets-path-masked-dark.png")
+
+    private fun pathScreen(name: String) {
         val context = themed()
         val binding = FragmentSecretPathBinding.inflate(LayoutInflater.from(context))
         val adapter = SecretPathAdapter(
@@ -144,6 +150,7 @@ class SecretsScreenshotTest {
             },
         )
         binding.secretPathList.adapter = adapter
+        binding.secretPathList.addGroupedRows()
         val rows = buildList {
             add(
                 SecretPathRow.Header(
@@ -180,7 +187,7 @@ class SecretsScreenshotTest {
         shadowOf(android.os.Looper.getMainLooper()).idle()
 
         val bitmap = render(surface(context, binding.root), 411, 891)
-        save(bitmap, "secrets-path-masked.png")
+        save(bitmap, name)
         assertTrue(bitmap.width > 0)
     }
 

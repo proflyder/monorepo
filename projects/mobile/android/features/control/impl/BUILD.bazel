@@ -56,6 +56,7 @@ home_android_local_test(
         "dev.proflyder.home.feature.control.presentation.ControlPullToRefreshTest",
         "dev.proflyder.home.feature.control.presentation.ControlRowsTest",
         "dev.proflyder.home.feature.control.presentation.DeviceStateScreenshotTest",
+        "dev.proflyder.home.feature.control.presentation.HubRowsScreenshotTest",
         "dev.proflyder.home.feature.control.presentation.LightSheetScreenshotTest",
     ],
     deps = [

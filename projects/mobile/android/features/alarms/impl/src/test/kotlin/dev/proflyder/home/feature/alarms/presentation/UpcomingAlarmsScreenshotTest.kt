@@ -13,6 +13,7 @@ import java.io.File
 import java.time.LocalDateTime
 import java.time.ZoneId
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -28,7 +29,13 @@ class UpcomingAlarmsScreenshotTest {
     private val now = LocalDateTime.of(2026, 11, 23, 21, 0).atZone(ZoneId.systemDefault()).toEpochSecond()
 
     @Test
-    fun theHomeSectionShowsTheNextAlarmsWithTheirSwitches() {
+    fun theHomeSectionShowsTheNextAlarmsWithTheirSwitches() = renderSection("alarms-upcoming-section-dark.png")
+
+    @Test
+    @Config(qualifiers = "ru-w411dp-h891dp-notnight-xxhdpi")
+    fun theHomeSectionShowsTheNextAlarmsInTheLightTheme() = renderSection("alarms-upcoming-section-light.png")
+
+    private fun renderSection(name: String) {
         val binding = FragmentAlarmsUpcomingBinding.inflate(LayoutInflater.from(themed()))
         val texts = UpcomingAlarmTexts(themed())
         val rows = listOf(binding.alarmsUpcomingFirst, binding.alarmsUpcomingSecond, binding.alarmsUpcomingThird)
@@ -41,12 +48,13 @@ class UpcomingAlarmsScreenshotTest {
         rows.forEachIndexed { index, row -> row.bind(alarms.getOrNull(index), now) }
         assertEquals(View.GONE, binding.alarmsUpcomingThird.visibility)
         assertTrue(ItemAlarmsUpcomingBinding.bind(binding.alarmsUpcomingFirst).alarmsUpcomingLabel.text.contains("Подъём"))
-        savePng(binding.root, "alarms-upcoming-section-dark.png", 411, 140)
+        savePng(binding.root, name, 411, 140)
+        assertNotNull(binding.alarmsUpcomingFirst.foreground)
     }
 
     private fun themed(): ContextThemeWrapper = ContextThemeWrapper(
         RuntimeEnvironment.getApplication(),
-        com.google.android.material.R.style.Theme_Material3_Dark_NoActionBar,
+        com.google.android.material.R.style.Theme_Material3_DayNight_NoActionBar,
     ).apply { theme.applyStyle(dev.proflyder.home.core.theme.R.style.ThemeOverlay_Home_Neon, true) }
 
     private fun savePng(root: View, name: String, widthDp: Int, heightDp: Int) {
