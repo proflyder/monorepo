@@ -191,7 +191,7 @@
           "ready": true,
           "runningTimers": 1,
           "scenarioStoreSupported": true,
-          "schemaVersion": 10,
+          "schemaVersion": 11,
           "version": "test"
         }
       }

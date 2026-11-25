@@ -165,7 +165,7 @@
 
 ## Планировщик и Android
 
-- scheduler (`solutions/scheduler`): SQLite на PVC `scheduler-data`, схема v10,
+- scheduler (`solutions/scheduler`): SQLite на PVC `scheduler-data`, схема v11,
   хранит только UTC, клиентская зона — заголовок `Time-Zone`; app-доступ —
   модули `base/home/scenarios/alarms_timers/intercom_call/notifications/chat/
   vpn/system/infra_reports/alerts/secrets/admin` (токены в `app_tokens`, только

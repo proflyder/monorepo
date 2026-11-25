@@ -2,6 +2,8 @@ package dev.proflyder.home.feature.push.presentation
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import dev.proflyder.home.core.access.AppAccessSource
+import dev.proflyder.home.core.access.AppAccessState
 import dev.proflyder.home.core.presentation.StateViewModel
 import dev.proflyder.home.core.ui.ViewModelSource
 import dev.proflyder.home.feature.push.PushPermissionProbe
@@ -24,22 +26,18 @@ internal data class PushSettingsUiState(
     val permissions: PushPermissionStatus = PushPermissionStatus(),
     val registration: PushRegistration = PushRegistration(),
     val sync: PushSyncStatus = PushSyncStatus(),
-    val nameDraft: String? = null,
+    val deviceName: String = "",
 ) {
     val canRing: Boolean get() = permissions.canRing
-    val deviceName: String get() = nameDraft ?: registration.deviceName
 }
 
 internal sealed interface PushSettingsIntent {
     data object Register : PushSettingsIntent
-    data class EditName(val name: String) : PushSettingsIntent
-    data object SaveName : PushSettingsIntent
     data class OpenSettings(val screen: PushSettingsScreen) : PushSettingsIntent
 }
 
 internal sealed interface PushSettingsEvent {
     data object Registered : PushSettingsEvent
-    data object NameSaved : PushSettingsEvent
     data class Failed(val result: PushRegistrationResult) : PushSettingsEvent
     data class OpenSettings(val screen: PushSettingsScreen) : PushSettingsEvent
 }
@@ -49,19 +47,19 @@ internal class PushSettingsViewModel(
     private val registrar: PushRegistrar,
     private val probe: PushPermissionProbe,
     store: PushRegistrationStore,
+    access: AppAccessSource,
 ) : StateViewModel<PushSettingsUiState, PushSettingsIntent, PushSettingsEvent>(PushSettingsUiState()) {
     init {
         combine(store.registration, registrar.status) { registration, sync -> registration to sync }
             .onEach { (registration, sync) -> updateState { copy(registration = registration, sync = sync) } }
             .launchIn(viewModelScope)
+        access.state.onEach { updateState { copy(deviceName = it.tokenName()) } }.launchIn(viewModelScope)
         visibility.shown.onEach { updateState { copy(permissions = probe.status()) } }.launchIn(viewModelScope)
     }
 
     override fun handle(intent: PushSettingsIntent) {
         when (intent) {
             PushSettingsIntent.Register -> register()
-            is PushSettingsIntent.EditName -> updateState { copy(nameDraft = intent.name) }
-            PushSettingsIntent.SaveName -> saveName()
             is PushSettingsIntent.OpenSettings -> emit(PushSettingsEvent.OpenSettings(intent.screen))
         }
     }
@@ -70,14 +68,7 @@ internal class PushSettingsViewModel(
         launch { emit(registrar.registerNow().toEvent(PushSettingsEvent.Registered)) }
     }
 
-    private fun saveName() {
-        val name = state.value.deviceName
-        launch {
-            val saved = registrar.saveDeviceName(name)
-            updateState { copy(nameDraft = null) }
-            emit(saved.toEvent(PushSettingsEvent.NameSaved))
-        }
-    }
+    private fun AppAccessState.tokenName(): String = (this as? AppAccessState.Ready)?.access?.name.orEmpty()
 
     private fun PushRegistrationResult.toEvent(success: PushSettingsEvent): PushSettingsEvent = when (this) {
         PushRegistrationResult.Done -> success

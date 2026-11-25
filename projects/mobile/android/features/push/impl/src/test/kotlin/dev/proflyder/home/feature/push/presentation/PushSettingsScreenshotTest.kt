@@ -39,8 +39,7 @@ class PushSettingsScreenshotTest {
         binding.pushDndRow.subtitle = missing
         binding.pushFullScreenRow.subtitle = missing
         binding.pushRingSummary.text = themed.getString(R.string.push_ring_incomplete)
-        binding.pushDeviceName.setText(SAMPLE_DEVICE_NAME)
-        binding.pushDeviceNameSave.isEnabled = true
+        binding.pushDeviceName.text = SAMPLE_DEVICE_NAME
         binding.pushRegistration.text = themed.getString(R.string.push_not_registered)
         savePng(binding.root, name)
         assertNotNull(binding.pushNotificationsRow.foreground)

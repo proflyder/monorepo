@@ -22,8 +22,6 @@ data class PushPermissionStatus(
 data class PushRegistration(
     val token: String? = null,
     val registeredAtMillis: Long = 0,
-    val deviceName: String = "",
-    val registeredName: String = "",
     val appVersion: String = "",
     val server: String = "",
 ) {
@@ -42,7 +40,6 @@ data class PushSyncStatus(
 data class PushRegistrationRecord(
     val token: String,
     val registeredAtMillis: Long,
-    val deviceName: String,
     val appVersion: String,
     val server: String,
 )
@@ -53,8 +50,6 @@ interface PushRegistrationStore {
     suspend fun load()
 
     suspend fun saved(record: PushRegistrationRecord)
-
-    suspend fun savedName(name: String)
 }
 
 interface PushTokenSource {
@@ -81,8 +76,6 @@ interface PushRegistrar {
     val status: StateFlow<PushSyncStatus>
 
     suspend fun registerNow(): PushRegistrationResult
-
-    suspend fun saveDeviceName(name: String): PushRegistrationResult
 }
 
 interface PushPermissionProbe {

@@ -1,6 +1,5 @@
 package dev.proflyder.home.feature.push.presentation
 
-import dev.proflyder.home.core.presentation.bindText
 import android.os.Bundle
 import com.google.android.material.button.MaterialButton
 import dev.proflyder.home.core.designsystem.ListRow
@@ -28,11 +27,9 @@ internal class PushSettingsFragment :
         bindRow(binding.pushDndRow, binding.pushDndAction, PushSettingsScreen.DND)
         bindRow(binding.pushFullScreenRow, binding.pushFullScreenAction, PushSettingsScreen.FULL_SCREEN)
         binding.pushRegister.setOnClickListener { dispatch(PushSettingsIntent.Register) }
-        binding.pushDeviceNameSave.setOnClickListener { dispatch(PushSettingsIntent.SaveName) }
-        val nameBinder = bindText(binding.pushDeviceName, PushSettingsIntent::EditName)
         render(PushSettingsUiState::permissions, ::renderPermissions)
         render({ it.registration to it.sync.busy }) { (registration, busy) -> renderRegistration(registration, busy) }
-        render(PushSettingsUiState::deviceName, nameBinder::render)
+        render(PushSettingsUiState::deviceName, ::renderDeviceName)
     }
 
     private fun renderPermissions(permissions: PushPermissionStatus) = with(binding) {
@@ -45,14 +42,16 @@ internal class PushSettingsFragment :
     private fun renderRegistration(registration: PushRegistration, busy: Boolean) = with(binding) {
         pushRegistration.text = registrationText(registration, busy)
         pushRegister.isEnabled = !busy
-        pushDeviceNameSave.isEnabled = !busy
         pushProgress.setVisible(busy)
+    }
+
+    private fun renderDeviceName(name: String) {
+        binding.pushDeviceName.text = name.ifBlank { getString(R.string.push_device_name_unknown) }
     }
 
     override fun onEvent(event: PushSettingsEvent) {
         when (event) {
             PushSettingsEvent.Registered -> showMessage(R.string.push_registered)
-            PushSettingsEvent.NameSaved -> showMessage(R.string.push_device_name_saved)
             is PushSettingsEvent.Failed -> showError(registrationError(event.result))
             is PushSettingsEvent.OpenSettings -> open(event.screen)
         }

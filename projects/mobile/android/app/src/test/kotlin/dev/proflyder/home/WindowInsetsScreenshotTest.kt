@@ -224,7 +224,6 @@ class WindowInsetsScreenshotTest {
         val name = root.findViewById<TextView>(PushR.id.push_device_name)
         name.text = SAMPLE_DEVICE_NAME
         applyInsets(activity, 0)
-        assertHomeStyle(name.parentField())
         assertTitleFits(root.findViewById(R.id.toolbar_title))
         assertCardsAndButtons(root.findViewById<View>(PushR.id.push_intro).parent as View)
         shoot(activity, "insets-${theme.key}-${mode(root)}-push-settings.png", 0)
@@ -456,10 +455,6 @@ private fun mode(view: View): String = when (view.resources.configuration.uiMode
     Configuration.UI_MODE_NIGHT_YES -> "dark"
     else -> "light"
 }
-
-private fun View.parentField(): TextInputLayout = generateSequence(parent) { it.parent }
-    .filterIsInstance<TextInputLayout>()
-    .first()
 
 private fun View.measureAlone(width: Int) {
     measure(exactly(width), unspecified())
