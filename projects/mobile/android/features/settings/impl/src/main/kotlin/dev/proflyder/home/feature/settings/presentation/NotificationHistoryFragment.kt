@@ -1,8 +1,10 @@
 package dev.proflyder.home.feature.settings.presentation
 
 import android.os.Bundle
+import androidx.recyclerview.widget.ConcatAdapter
 import androidx.recyclerview.widget.ItemTouchHelper
 import dev.proflyder.home.core.model.NotificationHistory
+import dev.proflyder.home.core.designsystem.list.ListHeaderSpacer
 import dev.proflyder.home.core.presentation.IntentAdapterCallback
 import dev.proflyder.home.core.presentation.ListItemIntent
 import dev.proflyder.home.core.presentation.PagingBinder
@@ -45,7 +47,7 @@ internal class NotificationHistoryFragment :
                 content = binding.historyList,
                 errorText = binding.historyErrorText,
             ),
-            content = adapter,
+            content = ConcatAdapter(ListHeaderSpacer.leading(binding.historyList, binding.historyListHeader), adapter),
             failureText = { it.userMessage(requireContext()) },
             dispatch = viewModel::dispatch,
         )

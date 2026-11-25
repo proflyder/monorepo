@@ -3,18 +3,23 @@ package dev.proflyder.home.core.designsystem.glass
 import android.content.Context
 import android.graphics.Canvas
 import android.util.AttributeSet
+import android.view.View
 import android.view.ViewTreeObserver
 import android.widget.LinearLayout
 import androidx.core.content.withStyledAttributes
+import androidx.core.graphics.withClip
+import androidx.core.graphics.withTranslation
 import dev.proflyder.home.core.designsystem.R
 
 class GlassChromeLayout @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
-) : LinearLayout(context, attrs), GlassEdgeOwner {
+) : LinearLayout(context, attrs), GlassBlockHost {
     private val surface = GlassSurface(context)
-    private val covers = EdgeCovers(::invalidate)
     private val redraw = ViewTreeObserver.OnScrollChangedListener(::invalidate)
+    private val blocks = mutableListOf<View>()
+    private val origin = IntArray(2)
+    private val target = IntArray(2)
     private var source: GlassSource? = null
     private var edgeAtTop = false
 
@@ -26,12 +31,27 @@ class GlassChromeLayout @JvmOverloads constructor(
         }
     }
 
-    fun bindBackdrop(content: android.view.View) {
-        source = backdropOf(content)
+    val glassBottom: Int get() = blocks.filter(View::isShown).maxOfOrNull(::bottomOf)?.coerceAtLeast(height) ?: height
+
+    fun bindBackdrop(content: View) {
+        source = ContentBackdrop(this, content)
         invalidate()
     }
 
-    override fun coverEdge(cover: Any, covered: Boolean) = covers.coverEdge(cover, covered)
+    override fun attachBlock(block: View) {
+        if (block in blocks) return
+        blocks.add(block)
+        block.alpha = 0f
+        invalidate()
+    }
+
+    override fun detachBlock(block: View) {
+        if (!blocks.remove(block)) return
+        block.alpha = 1f
+        invalidate()
+    }
+
+    override fun blockMoved() = invalidate()
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
@@ -44,10 +64,27 @@ class GlassChromeLayout @JvmOverloads constructor(
     }
 
     override fun draw(canvas: Canvas) {
-        source?.let { surface.draw(canvas, width, height, it) }
+        val bottom = glassBottom
+        source?.let { surface.draw(canvas, width, bottom, it) }
         super.draw(canvas)
-        if (covers.covered) return
-        if (edgeAtTop) surface.style.drawTopEdge(canvas, width, 0) else surface.style.drawBottomEdge(canvas, width, height)
+        canvas.withClip(0, height, width, bottom) { blocks.filter(View::isShown).forEach { drawBlock(this, it) } }
+        drawEdge(canvas, bottom)
+    }
+
+    private fun drawBlock(canvas: Canvas, block: View) {
+        windowOrigin(origin)
+        block.windowOrigin(target)
+        canvas.withTranslation((target[0] - origin[0]).toFloat(), (target[1] - origin[1]).toFloat()) { block.draw(this) }
+    }
+
+    private fun drawEdge(canvas: Canvas, bottom: Int) {
+        if (edgeAtTop) surface.style.drawTopEdge(canvas, width, 0) else surface.style.drawBottomEdge(canvas, width, bottom)
+    }
+
+    private fun bottomOf(block: View): Int {
+        windowOrigin(origin)
+        block.windowOrigin(target)
+        return target[1] - origin[1] + block.height
     }
 
     private companion object {

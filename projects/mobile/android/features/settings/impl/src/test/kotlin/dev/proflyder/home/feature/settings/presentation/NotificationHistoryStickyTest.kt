@@ -6,13 +6,17 @@ import android.graphics.Canvas
 import android.os.Looper
 import android.view.LayoutInflater
 import android.view.View
+import android.view.ViewGroup
 import androidx.appcompat.view.ContextThemeWrapper
 import androidx.core.graphics.Insets
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.recyclerview.widget.ConcatAdapter
+import androidx.recyclerview.widget.RecyclerView
 import dev.proflyder.home.core.access.AppAccessState
+import dev.proflyder.home.core.designsystem.list.ListHeaderSpacer
 import dev.proflyder.home.core.designsystem.list.StickyHeadersLayoutManager
+import dev.proflyder.home.core.designsystem.list.sections
 import dev.proflyder.home.core.model.NotificationHistory
 import dev.proflyder.home.core.model.NotificationHistoryType
 import dev.proflyder.home.core.navigation.routeWhenAllowed
@@ -24,6 +28,7 @@ import java.time.LocalDate
 import java.time.ZoneId
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
@@ -48,30 +53,35 @@ class NotificationHistoryStickyTest {
         val (activity, binding) = open()
         val list = binding.historyList
         val manager = list.layoutManager as StickyHeadersLayoutManager
-        val header = binding.historyGlassHeader
-        assertEquals("count row sits under the chrome", BAR, header.paddingTop)
-        assertEquals("content starts under the screen header", header.height, list.paddingTop)
-        assertEquals("first day at the top", header.height, list.getChildAt(0).top)
+        val header = binding.historyListHeader
+        val days = days(list)
+        assertEquals("count row is the first item, under the chrome", BAR.toFloat(), header.translationY)
+        assertEquals("content starts under the chrome", BAR, list.paddingTop)
+        assertEquals("first day follows the count row", BAR + header.height, checkNotNull(manager.findViewByPosition(days[0])).top)
         assertEquals("list clears the bottom chrome", NAV, list.paddingBottom - initialBottom(binding))
         assertNull(manager.stickyHeaderView)
         shoot(binding.root, "history-sticky-$mode-rest.png")
 
-        scrollTo(activity, list) { manager.findViewByPosition(0)?.let { it.top - list.paddingTop + it.height * 2 } ?: 0 }
+        scrollTo(activity, list) { manager.findViewByPosition(days[0])?.let { it.top - BAR + it.height * 2 } ?: 0 }
         val pinned = checkNotNull(manager.stickyHeaderView) { "a day header is pinned" }
-        assertEquals("pinned day sits flush under the screen header", header.height, pinned.top)
-        assertEquals(0, manager.stickyHeaderPosition)
+        assertTrue("count row scrolled under the chrome", header.translationY + header.height <= BAR)
+        assertEquals("pinned day sits flush under the chrome", BAR, pinned.top)
+        assertEquals(days[0], manager.stickyHeaderPosition)
         shoot(binding.root, "history-sticky-$mode-pinned.png")
 
-        val next = nextDayPosition(list)
-        scrollTo(activity, list) { manager.findViewByPosition(next)?.let { it.top - header.height - pinned.height / 2 } ?: pinned.height }
+        val next = days[1]
+        scrollTo(activity, list) { manager.findViewByPosition(next)?.let { it.top - BAR - pinned.height / 2 } ?: pinned.height }
         assertEquals("next day pushes the pinned one", checkNotNull(manager.findViewByPosition(next)).top, checkNotNull(manager.stickyHeaderView).bottom)
         shoot(binding.root, "history-sticky-$mode-push.png")
     }
 
-    private fun nextDayPosition(list: androidx.recyclerview.widget.RecyclerView): Int =
-        (1 until checkNotNull(list.adapter).itemCount).first { list.adapter?.getItemViewType(it) == list.adapter?.getItemViewType(0) }
+    private fun days(list: RecyclerView): List<Int> {
+        val adapter = checkNotNull(list.adapter)
+        val sections = checkNotNull(adapter.sections())
+        return (0 until adapter.itemCount).filter(sections::isStickyHeader)
+    }
 
-    private fun scrollTo(activity: Activity, list: androidx.recyclerview.widget.RecyclerView, delta: () -> Int) = repeat(PASSES) {
+    private fun scrollTo(activity: Activity, list: RecyclerView, delta: () -> Int) = repeat(PASSES) {
         list.scrollBy(0, delta())
         settle(activity)
     }
@@ -81,7 +91,8 @@ class NotificationHistoryStickyTest {
         val themed = ContextThemeWrapper(activity, DesignR.style.Base_Theme_Home)
         val binding = FragmentNotificationHistoryBinding.inflate(LayoutInflater.from(themed))
         val adapter = NotificationHistoryAdapter(Callback()).apply { submitList(rows()) }
-        binding.historyList.adapter = ConcatAdapter(adapter)
+        val spacer = ListHeaderSpacer.leading(binding.historyList, binding.historyListHeader)
+        binding.historyList.adapter = ConcatAdapter(ConcatAdapter(spacer, adapter), PagingTail())
         binding.historyList.addHistoryDecorations()
         binding.historyList.applyContentInsets()
         binding.historyProgress.visibility = View.GONE
@@ -136,6 +147,15 @@ class NotificationHistoryStickyTest {
         deepLink = "home://alarms",
         createdUnix = at,
     )
+
+    private class PagingTail : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
+        override fun getItemCount(): Int = 1
+
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) =
+            object : RecyclerView.ViewHolder(View(parent.context)) {}
+
+        override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) = Unit
+    }
 
     private class Callback : BaseAdapterCallback<HistoryRow>(), NotificationHistoryAdapterCallback
 

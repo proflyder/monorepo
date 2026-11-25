@@ -1,7 +1,9 @@
 package dev.proflyder.home.feature.control.presentation
 
+import androidx.recyclerview.widget.ConcatAdapter
 import androidx.recyclerview.widget.GridLayoutManager
 import dev.proflyder.home.core.designsystem.RevealBinder
+import dev.proflyder.home.core.designsystem.list.ListHeaderSpacer
 import dev.proflyder.home.core.designsystem.list.StickyHeadersLayoutManager
 import dev.proflyder.home.core.ui.ListStateViews
 import dev.proflyder.home.core.ui.isAtTop
@@ -36,7 +38,7 @@ internal class ControlListRenderer(
         binding.controlList.layoutManager = StickyHeadersLayoutManager(context, spanCount).apply {
             spanSizeLookup = ControlSpans(adapter, spanCount, deviceSpan)
         }
-        binding.controlList.adapter = adapter
+        binding.controlList.adapter = ConcatAdapter(ListHeaderSpacer.leading(binding.controlList, binding.controlHeader), adapter)
     }
 
     fun render(state: ControlListInput) {
@@ -94,9 +96,11 @@ private class ControlSpans(
     private val spanCount: Int,
     private val deviceSpan: Int,
 ) : GridLayoutManager.SpanSizeLookup() {
-    override fun getSpanSize(position: Int): Int = when (adapter.currentList.getOrNull(position)) {
+    override fun getSpanSize(position: Int): Int = when (adapter.currentList.getOrNull(position - LEADING_ITEMS)) {
         is ControlItem.Scenario -> 1
         is ControlItem.Device, is ControlItem.DeviceGroup -> deviceSpan
         else -> spanCount
     }
 }
+
+private const val LEADING_ITEMS = 1

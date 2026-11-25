@@ -7,6 +7,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.ProgressBar
 import androidx.annotation.DimenRes
+import androidx.recyclerview.widget.ConcatAdapter
 import androidx.recyclerview.widget.RecyclerView
 import dev.proflyder.home.core.designsystem.glass.GlassScreenHeader
 import java.io.File
@@ -77,8 +78,12 @@ class ScreenInsetsScreenshotTest(private val screen: InsetScreen) {
     }
 
     private fun seed(list: RecyclerView, activity: MainActivity) {
-        if ((list.adapter?.itemCount ?: 0) > 0) return
-        list.adapter = TestSectionedRows.titled(activity, screen.headerLayout, screen.headerTitle, DAYS)
+        val rows = TestSectionedRows.titled(activity, screen.headerLayout, screen.headerTitle, DAYS)
+        when (val current = list.adapter) {
+            is ConcatAdapter -> current.addAdapter(rows)
+            null -> list.adapter = rows
+            else -> if (current.itemCount == 0) list.adapter = rows
+        }
         var view: View = list
         while (view !== activity.window.decorView) {
             view.visibility = View.VISIBLE

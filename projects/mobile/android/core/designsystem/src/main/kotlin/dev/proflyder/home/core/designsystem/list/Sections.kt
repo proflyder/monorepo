@@ -29,7 +29,7 @@ internal fun RecyclerView.sectionedAdapter(): Pair<RecyclerView.Adapter<*>, Sect
 
 fun RecyclerView.Adapter<*>.sections(): SectionedAdapter? = when (this) {
     is SectionedAdapter -> this
-    is ConcatAdapter -> ConcatSections(this).takeIf { adapters.any { it is SectionedAdapter } }
+    is ConcatAdapter -> ConcatSections(this).takeIf { adapters.any { it.sections() != null } }
     else -> null
 }
 
@@ -41,7 +41,7 @@ private class ConcatSections(private val concat: ConcatAdapter) : SectionedAdapt
     private fun resolve(position: Int, outside: Boolean, check: SectionedAdapter.(Int) -> Boolean): Boolean {
         if (position !in 0 until concat.itemCount) return outside
         val wrapped = concat.getWrappedAdapterAndPosition(position)
-        val sections = wrapped.first as? SectionedAdapter ?: return outside
+        val sections = wrapped.first.sections() ?: return outside
         return sections.check(wrapped.second)
     }
 }

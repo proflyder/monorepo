@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<dev.proflyder.home.core.designsystem.glass.GlassHeaderLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
@@ -84,45 +84,40 @@
             android:textAppearance="?attr/textAppearanceBodyMedium"
             android:textColor="?attr/colorOnSurfaceVariant" />
     </LinearLayout>
-    <dev.proflyder.home.core.designsystem.glass.GlassScreenHeader
-        android:id="@+id/history_glass_header"
+
+    <LinearLayout
+        android:id="@+id/history_list_header"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content">
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="@dimen/ds_space_l"
+        android:paddingTop="@dimen/ds_space_s"
+        android:paddingEnd="@dimen/ds_space_s"
+        android:paddingBottom="@dimen/ds_space_m">
 
-        <LinearLayout
-            android:id="@+id/history_header"
-            android:layout_width="match_parent"
+        <TextView
+            android:id="@+id/history_count"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:gravity="center_vertical"
-            android:orientation="horizontal"
-            android:paddingStart="@dimen/ds_space_l"
-            android:paddingTop="@dimen/ds_space_s"
-            android:paddingEnd="@dimen/ds_space_s"
-            android:paddingBottom="@dimen/ds_space_m">
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textAppearance="?attr/textAppearanceLabelLarge"
+            android:textColor="?attr/colorOnSurfaceVariant"
+            tools:text="12 saved" />
 
-            <TextView
-                android:id="@+id/history_count"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:ellipsize="end"
-                android:maxLines="1"
-                android:textAppearance="?attr/textAppearanceLabelLarge"
-                android:textColor="?attr/colorOnSurfaceVariant"
-                tools:text="12 saved" />
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/history_read_all"
+            style="@style/Widget.Home.Button.Text.M"
+            android:layout_width="wrap_content"
+            android:text="@string/history_read_all"
+            android:visibility="gone" />
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/history_read_all"
-                style="@style/Widget.Home.Button.Text.M"
-                android:layout_width="wrap_content"
-                android:text="@string/history_read_all"
-                android:visibility="gone" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/history_clear"
-                style="@style/Widget.Home.Button.Destructive.M"
-                android:layout_width="wrap_content"
-                android:text="@string/history_clear" />
-        </LinearLayout>
-    </dev.proflyder.home.core.designsystem.glass.GlassScreenHeader>
-</dev.proflyder.home.core.designsystem.glass.GlassHeaderLayout>
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/history_clear"
+            style="@style/Widget.Home.Button.Destructive.M"
+            android:layout_width="wrap_content"
+            android:text="@string/history_clear" />
+    </LinearLayout>
+</FrameLayout>

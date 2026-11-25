@@ -73,7 +73,7 @@ window background first, so the sharp content under the bar is fully covered,
 then the content; then a surface tint of about 66 %. Below API 31 a translucent
 tint of about 91 %. Redraws follow scroll events of the content. Each block
 draws one `colorOutlineVariant` 0.5 dp hairline and a fade on its content side
-unless a glass block below covers that edge (`GlassEdgeOwner`).
+at the bottom of the combined glass rect.
 
 The chrome publishes its size as WindowInsets (`MainInsets`): the container
 receives `statusBars.top` = toolbar block height and `navigationBars.bottom` =
@@ -86,15 +86,25 @@ the top stays at the top when the inset changes. Screens only override
 `contentInsets()` (FAB clearance, or `bottom = false` where a panel follows
 the keyboard).
 
-A screen with a fixed header (Home alarms slot, history counters, secrets
-search, Time tabs) wraps it in `GlassScreenHeader` inside a `GlassHeaderLayout`:
-the header takes the chrome inset as its top padding and glass background, and
-the layout dispatches `top = header height` to the rest of the screen, so the
-content and pinned section headers start under it. Pinned section headers
-(`StickyHeadersLayoutManager`) pin at the content top inset, get a glass
-background while pinned (`StickyGlass`) and cover the edge above them.
-Geometry is covered by `ChromeInsetsTest`, `ScreenInsetsScreenshotTest` and,
-on the real history adapter behind `ConcatAdapter`, `NotificationHistoryStickyTest`.
+Screen header content that should scroll away (Home alarms slot, history
+counters, secrets search) is the first list item: `ListHeaderSpacer` is the
+leading adapter of a `ConcatAdapter`, its item is a spacer of the header's
+height, and the header view (which may host a child fragment) follows the
+spacer's position, so it scrolls under the glass like any row. Only
+persistent controls (Time tabs) stay fixed: `GlassScreenHeader` inside a
+`GlassHeaderLayout`, which dispatches `top = header height` to the rest of the
+screen.
+
+Pinned glass blocks (the pinned section header, the Time tabs) have no own
+surface: they register with the activity (`GlassBlockHost`), become invisible
+in place (alpha 0, touches still reach them), and `top_chrome` draws one blur
+and one tint from the top down to the lowest block, the blocks themselves on
+top of it, and one hairline under the combined rect. Sections pin at the
+content top inset (`StickyHeadersLayoutManager`).
+Geometry is covered by `ChromeInsetsTest`, `ScreenInsetsScreenshotTest`,
+`NotificationHistoryStickyTest` (real history adapter behind `ConcatAdapter`)
+and `HomeScrolledGlassTest` (real Home renderer and adapter: the alarm slot
+scrolls under the bar, the pinned room and the bar share one glass rect).
 
 ## Build and test
 

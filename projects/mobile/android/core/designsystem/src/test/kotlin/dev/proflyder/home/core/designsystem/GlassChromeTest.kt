@@ -13,7 +13,9 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.recyclerview.widget.ConcatAdapter
 import androidx.recyclerview.widget.RecyclerView
 import dev.proflyder.home.core.designsystem.R
+import dev.proflyder.home.core.designsystem.list.ListHeaderSpacer
 import dev.proflyder.home.core.designsystem.list.SectionedAdapter
+import dev.proflyder.home.core.designsystem.list.StickyHeadersLayoutManager
 import dev.proflyder.home.core.designsystem.list.sections
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -74,27 +76,43 @@ class GlassChromeTest {
     }
 
     @Test
-    fun coveredEdgeIsReleasedOnlyByItsLastCover() {
-        var changes = 0
-        val covers = EdgeCovers { changes++ }
-        covers.coverEdge("a", true)
-        covers.coverEdge("b", true)
-        covers.coverEdge("a", false)
-        assertTrue(covers.covered)
-        covers.coverEdge("b", false)
-        assertFalse(covers.covered)
-        assertEquals(4, changes)
+    fun chromeGlassExtendsOverAttachedBlocksAndDrawsThemItself() {
+        val chrome = GlassChromeLayout(context)
+        val block = View(context)
+        val root = FrameLayout(context).apply {
+            addView(chrome, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, BAR))
+            addView(block, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, HEADER).apply { topMargin = BAR })
+        }
+        show(root)
+        assertEquals(BAR, chrome.glassBottom)
+        chrome.attachBlock(block)
+        assertEquals(0f, block.alpha)
+        assertEquals(BAR + HEADER, chrome.glassBottom)
+        chrome.detachBlock(block)
+        assertEquals(1f, block.alpha)
+        assertEquals(BAR, chrome.glassBottom)
     }
 
     @Test
-    fun edgeOwnerAboveAListIsItsScreenHeader() {
-        val list = RecyclerView(context)
-        val header = GlassScreenHeader(context)
-        GlassHeaderLayout(context).apply {
+    fun listHeaderFollowsItsSpacerAndScrollsAway() {
+        val list = RecyclerView(context).apply { layoutManager = StickyHeadersLayoutManager(context) }
+        val header = View(context)
+        list.adapter = ConcatAdapter(ListHeaderSpacer.leading(list, header), Rows())
+        val root = FrameLayout(context).apply {
             addView(list)
-            addView(header)
+            addView(header, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, HEADER))
         }
-        assertEquals(header, list.glassEdgeAbove())
+        list.setPadding(0, BAR, 0, 0)
+        list.clipToPadding = false
+        show(root)
+        assertEquals(BAR.toFloat(), header.translationY)
+        assertEquals(BAR + HEADER, list.getChildAt(1).top)
+        list.scrollBy(0, HEADER / 2)
+        settle()
+        assertEquals((BAR - HEADER / 2).toFloat(), header.translationY)
+        list.scrollBy(0, HEIGHT)
+        settle()
+        assertTrue(header.translationY + HEADER <= 0f)
     }
 
     @Test
@@ -156,7 +174,8 @@ class GlassChromeTest {
 
         override fun getItemCount(): Int = SECTION * 2
 
-        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) = object : RecyclerView.ViewHolder(View(parent.context)) {}
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) =
+            object : RecyclerView.ViewHolder(View(parent.context).apply { layoutParams = RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ROW) }) {}
 
         override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) = Unit
     }
@@ -176,6 +195,7 @@ class GlassChromeTest {
         const val NAV = 90
         const val HEADER = 80
         const val SECTION = 4
+        const val ROW = 100
         const val OPAQUE = 255f
         const val FROSTED_MIN = 0.6f
         const val FROSTED_MAX = 0.75f

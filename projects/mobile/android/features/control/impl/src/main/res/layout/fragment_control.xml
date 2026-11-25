@@ -16,7 +16,7 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent">
 
-            <dev.proflyder.home.core.designsystem.glass.GlassHeaderLayout
+            <FrameLayout
                 android:id="@+id/control_content"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent">
@@ -30,10 +30,11 @@
                     android:paddingEnd="@dimen/ds_space_l"
                     android:paddingBottom="@dimen/ds_space_xl" />
 
-                <dev.proflyder.home.core.designsystem.glass.GlassScreenHeader
+                <LinearLayout
                     android:id="@+id/control_header"
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content">
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
 
                     <androidx.fragment.app.FragmentContainerView
                         android:id="@+id/control_alarms_slot"
@@ -42,8 +43,8 @@
                         android:paddingStart="@dimen/ds_space_l"
                         android:paddingTop="@dimen/ds_space_s"
                         android:paddingEnd="@dimen/ds_space_l" />
-                </dev.proflyder.home.core.designsystem.glass.GlassScreenHeader>
-            </dev.proflyder.home.core.designsystem.glass.GlassHeaderLayout>
+                </LinearLayout>
+            </FrameLayout>
 
             <ProgressBar
                 android:id="@+id/control_progress"

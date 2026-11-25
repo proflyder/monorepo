@@ -39,8 +39,8 @@ class ChromeInsetsTest {
         assertEquals(dp(activity, NAV_DP), bottom.paddingBottom)
         val header = activity.findViewById<View>(ControlR.id.control_header)
         val list = activity.findViewById<RecyclerView>(ControlR.id.control_list)
-        assertEquals("home header sits under the toolbar", top.height, header.paddingTop)
-        assertEquals("home list starts under the header", header.height, list.paddingTop)
+        assertEquals("home list starts under the toolbar", top.height, list.paddingTop)
+        assertEquals("alarm slot is the first list item", top.height.toFloat(), header.translationY)
         val fab = activity.resources.getDimensionPixelSize(UiR.dimen.ui_fab_clearance)
         assertTrue("home list clears the bottom chrome", list.paddingBottom >= bottom.height + fab)
     }
@@ -50,6 +50,7 @@ class ChromeInsetsTest {
         settle(activity)
         activity.router.selectTab("control")
         settle(activity)
+        activity.findViewById<View>(ControlR.id.control_content).visibility = View.VISIBLE
         val insets = WindowInsetsCompat.Builder()
             .setInsets(WindowInsetsCompat.Type.statusBars(), Insets.of(0, dp(activity, STATUS_DP), 0, 0))
             .setInsets(WindowInsetsCompat.Type.navigationBars(), Insets.of(0, 0, 0, dp(activity, NAV_DP)))
