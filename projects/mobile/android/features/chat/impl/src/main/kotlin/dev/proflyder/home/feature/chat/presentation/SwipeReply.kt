@@ -86,7 +86,19 @@ internal class SwipeReply(
         downY = e.y
         swiping = false
         armed = false
+        row?.let(::settleNow)
         row = list.findChildViewUnder(e.x, e.y)?.takeIf { quotable(list.getChildAdapterPosition(it)) }
+        row?.let(::settleNow)
+    }
+
+    private fun settleNow(view: View) {
+        view.animate().cancel()
+        view.translationX = 0f
+    }
+
+    private fun forget(view: View) {
+        if (row === view) row = null
+        list.invalidate()
     }
 
     private fun shouldSwipe(e: MotionEvent): Boolean = row != null && math.startsSwipe(e.x - downX, e.y - downY, slop)
@@ -111,7 +123,7 @@ internal class SwipeReply(
             .setDuration(HomeMotion.exitDuration(view.context).toLong())
             .setInterpolator(HomeMotion.enterInterpolator(view.context))
             .setUpdateListener { list.invalidate() }
-            .withEndAction { row = null.also { list.invalidate() } }
+            .withEndAction { forget(view) }
             .start()
     }
 
