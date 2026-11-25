@@ -9,6 +9,8 @@
     <string name="system_card_access_subtitle">Токены приложений и их модули</string>
     <string name="system_card_secrets">Секреты</string>
     <string name="system_card_secrets_subtitle">Пути OpenBao, версии и значения только для владельца</string>
+    <string name="system_card_hermes">Hermes</string>
+    <string name="system_card_hermes_subtitle">Агенты, ответы /report и голосовые запросы</string>
     <string name="system_status_ok">Всё в порядке</string>
     <string name="system_status_warning">Требует внимания</string>
     <string name="system_status_critical">Есть проблемы</string>

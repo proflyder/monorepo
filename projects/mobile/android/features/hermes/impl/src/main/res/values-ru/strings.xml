@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="DuplicateStrings">
+    <string name="hermes_title">Hermes</string>
+    <string name="hermes_separator">\u0020·\u0020</string>
+    <string name="hermes_agents_title">Агенты</string>
+    <string name="hermes_agents_subtitle">Треды bb личного профиля</string>
+    <string name="hermes_reports_title">Отчёты</string>
+    <string name="hermes_reports_subtitle">Ответы на /report из Telegram</string>
+    <string name="hermes_voice_title">Голос</string>
+    <string name="hermes_voice_subtitle">Состояние голосового прокси и последние запросы колонки</string>
+    <string name="hermes_report_title">Отчёт</string>
+    <string name="hermes_report_missing">Отчёта уже нет в списке последних.</string>
+    <string name="hermes_report_empty">Hermes не вернул текст.</string>
+    <string name="hermes_report_failed">Hermes не смог закончить отчёт</string>
+    <string name="hermes_report_requested">Запрошен %1$s</string>
+    <string name="hermes_report_completed">ответ в %1$s</string>
+    <string name="hermes_agents_unavailable">Сервер агентов недоступен.</string>
+    <string name="hermes_agents_empty">Нет работающих и недавних агентов.</string>
+    <string name="hermes_reports_unavailable">История Hermes недоступна.</string>
+    <string name="hermes_reports_empty">Запусков /report ещё не было.</string>
+    <string name="hermes_voice_health">Состояние</string>
+    <string name="hermes_voice_recent">Последние запросы</string>
+    <string name="hermes_voice_proxy">Голосовой прокси</string>
+    <string name="hermes_voice_hermes">Hermes</string>
+    <string name="hermes_voice_agent_mode">Режим агента</string>
+    <string name="hermes_voice_unavailable">История запросов недоступна.</string>
+    <string name="hermes_voice_empty">Голосовых запросов ещё не было.</string>
+    <string name="hermes_voice_no_reply">Нет ответа</string>
+    <string name="hermes_version">Версия %1$s</string>
+    <string name="hermes_state_up">Работает</string>
+    <string name="hermes_state_down">Недоступен</string>
+    <string name="hermes_mode_on">Вкл.</string>
+    <string name="hermes_mode_off">Выкл.</string>
+    <string name="hermes_latency">%1$.1f с</string>
+    <string name="hermes_agent_running">Работает</string>
+    <string name="hermes_agent_idle">Ожидает</string>
+    <string name="hermes_agent_failed">Ошибка</string>
+    <string name="hermes_agent_other">Неизвестно</string>
+    <string name="hermes_runtime_hours">%1$d ч %2$d мин</string>
+    <string name="hermes_runtime_minutes">%1$d мин</string>
+</resources>

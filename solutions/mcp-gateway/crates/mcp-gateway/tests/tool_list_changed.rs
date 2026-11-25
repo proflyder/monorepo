@@ -66,6 +66,7 @@ fn app() -> Router {
         system: None,
         access: None,
         chat: None,
+        hermes: None,
         chat_alerts_token: None,
         auth_token: TOKEN.to_owned(),
         voice_token: None,

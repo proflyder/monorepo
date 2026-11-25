@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="DuplicateStrings">
+    <string name="hermes_title">Hermes</string>
+    <string name="hermes_separator">\u0020·\u0020</string>
+    <string name="hermes_agents_title">Agents</string>
+    <string name="hermes_agents_subtitle">bb threads of the personal profile</string>
+    <string name="hermes_reports_title">Reports</string>
+    <string name="hermes_reports_subtitle">/report answers from Telegram</string>
+    <string name="hermes_voice_title">Voice</string>
+    <string name="hermes_voice_subtitle">Voice proxy health and recent speaker requests</string>
+    <string name="hermes_report_title">Report</string>
+    <string name="hermes_report_missing">The report is no longer in the recent list.</string>
+    <string name="hermes_report_empty">Hermes returned no text.</string>
+    <string name="hermes_report_failed">Hermes failed to finish the report</string>
+    <string name="hermes_report_requested">Requested %1$s</string>
+    <string name="hermes_report_completed">answered at %1$s</string>
+    <string name="hermes_agents_unavailable">The agent server is unavailable.</string>
+    <string name="hermes_agents_empty">No running or recent agents.</string>
+    <string name="hermes_reports_unavailable">Hermes history is unavailable.</string>
+    <string name="hermes_reports_empty">No /report runs yet.</string>
+    <string name="hermes_voice_health">Health</string>
+    <string name="hermes_voice_recent">Recent requests</string>
+    <string name="hermes_voice_proxy">Voice proxy</string>
+    <string name="hermes_voice_hermes">Hermes</string>
+    <string name="hermes_voice_agent_mode">Agent mode</string>
+    <string name="hermes_voice_unavailable">Request history is unavailable.</string>
+    <string name="hermes_voice_empty">No voice requests yet.</string>
+    <string name="hermes_voice_no_reply">No reply</string>
+    <string name="hermes_version">Version %1$s</string>
+    <string name="hermes_state_up">Up</string>
+    <string name="hermes_state_down">Down</string>
+    <string name="hermes_mode_on">On</string>
+    <string name="hermes_mode_off">Off</string>
+    <string name="hermes_latency">%1$.1f s</string>
+    <string name="hermes_agent_running">Running</string>
+    <string name="hermes_agent_idle">Idle</string>
+    <string name="hermes_agent_failed">Error</string>
+    <string name="hermes_agent_other">Unknown</string>
+    <string name="hermes_runtime_hours">%1$d h %2$d min</string>
+    <string name="hermes_runtime_minutes">%1$d min</string>
+</resources>

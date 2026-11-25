@@ -3,6 +3,7 @@ package dev.proflyder.home.feature.system.presentation
 import org.robolectric.RuntimeEnvironment
 import dev.proflyder.home.core.model.HealthLevel
 import dev.proflyder.home.core.navigation.Route
+import dev.proflyder.home.feature.hermes.HermesRoutes
 import dev.proflyder.home.feature.secrets.SecretsRoutes
 import dev.proflyder.home.feature.system.SystemFixtures
 import org.junit.Assert.assertEquals
@@ -22,17 +23,22 @@ class SystemRowsTest {
         val withoutAccess = rows.overview(SystemFixtures.snapshot)
         assertTrue(withoutAccess.none { it.key == "access" })
 
-        val withAccess = rows.overview(SystemFixtures.snapshot, administrator = true)
+        val withAccess = rows.overview(SystemFixtures.snapshot, SystemLinks(access = true))
         val link = withAccess.last() as SystemRow.Link
         assertEquals("access", link.key)
         assertEquals("Access", link.title)
         assertEquals("Application tokens and their modules", link.subtitle)
 
-        val withSecrets = rows.overview(SystemFixtures.snapshot, administrator = true, secrets = true)
+        val withSecrets = rows.overview(SystemFixtures.snapshot, SystemLinks(access = true, secrets = true))
         val secrets = withSecrets.last() as SystemRow.Link
         assertEquals("secrets", secrets.key)
         assertEquals("Secrets", secrets.title)
         assertEquals(Route.Link(SecretsRoutes.CATALOG), secrets.route)
+
+        val withHermes = rows.overview(SystemFixtures.snapshot, SystemLinks(hermes = true))
+        val hermes = withHermes.last() as SystemRow.Link
+        assertEquals("Hermes", hermes.title)
+        assertEquals(Route.Link(HermesRoutes.OVERVIEW), hermes.route)
     }
 
     @Test

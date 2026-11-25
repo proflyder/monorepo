@@ -27,3 +27,6 @@ val AppAccessState.owner: Boolean
 
 val AppAccessState.secretsAllowed: Boolean
     get() = owner && allows(AppModule.SECRETS)
+
+val AppAccessState.hermesAllowed: Boolean
+    get() = owner && allows(AppModule.CHAT)

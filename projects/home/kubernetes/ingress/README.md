@@ -11,8 +11,8 @@ Let's Encrypt. Прямые LAN-адреса и NodePort остаются ава
 | `routes/` | `platform-routes` | ClusterIssuers `letsencrypt-staging`/`-prod`, Certificate `home-wildcard`, Middleware `home-allowlist`, IngressRoutes, EndpointSlice HAOS, NetworkPolicy `intercom-ingress`, ExternalSecret `cloudflare-api-token` |
 
 Маршруты (`routes/routes.yaml`): `ha` → HAOS, `grafana`, `alarms` → scheduler,
-`currency` → currency-bot, `control` → ha-control (`/v1/system/` и
-`/v1/chat/` → mcp-gateway), `secrets` → secrets-gateway (owner-only API
+`currency` → currency-bot, `control` → ha-control (`/v1/system/`,
+`/v1/chat/` и `/v1/hermes/` → mcp-gateway), `secrets` → secrets-gateway (owner-only API
 секретов), `intercom`. `vault` обслуживает
 `openbao/deploy.sh`, `passwords` — `vaultwarden/`, `nexus` — `nexus/`.
 

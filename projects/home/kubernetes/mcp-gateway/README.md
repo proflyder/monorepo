@@ -48,8 +48,9 @@ manifest under `projects/home/kubernetes`.
 - Ingress `8080`: node address (Hermes is `hostNetwork`, kubelet probes), LAN
   CIDR, pod CIDR `10.42.0.0/16` (Traefik, voice proxy), `monitoring` (scrape).
   `/mcp` and `/v1/voice/*` need their bearer tokens and are not routed by
-  Traefik; only `Host(control.${HOME_DOMAIN}) && PathPrefix(/v1/system/)` is
-  (`ingress/routes`, app-токены проверяются модулями `system`/`chat`).
+  Traefik; only `Host(control.${HOME_DOMAIN})` with `PathPrefix` `/v1/system/`,
+  `/v1/chat/` or `/v1/hermes/` is (`ingress/routes`, app-токены проверяются
+  модулями `system`/`chat`; `/v1/hermes/*` — модуль `chat`).
 - Egress: kube-API 6443, monitoring 9090/9093/3100, catalog checks on
   `${LAN_CIDR}`, bb host exactly `${BB_CT_IP}:22`, DNS, and 443 to any
   destination for Telegram (no stable ranges).

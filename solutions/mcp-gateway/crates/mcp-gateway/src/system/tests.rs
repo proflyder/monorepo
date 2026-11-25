@@ -447,6 +447,7 @@ async fn server_requires_the_app_bearer() {
         }),
         system: Some(dashboard(prom, Duration::from_secs(60))),
         chat: None,
+        hermes: None,
         chat_alerts_token: None,
         groups: Vec::new(),
         deps: Arc::new(empty_deps()),
@@ -473,7 +474,7 @@ async fn server_requires_the_app_bearer() {
     assert_eq!(status("owner").await, StatusCode::OK);
 }
 
-fn empty_deps() -> crate::tools::Deps {
+pub fn empty_deps() -> crate::tools::Deps {
     use crate::domain::clock::SystemClock;
     use crate::domain::state::{AgentMode, KeyedStore, PendingStore};
     let clock = Arc::new(SystemClock);

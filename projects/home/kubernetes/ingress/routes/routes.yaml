@@ -114,6 +114,14 @@ spec:
           port: 8080
           responseForwarding:
             flushInterval: 100ms
+    - match: Host(`control.${HOME_DOMAIN}`) && PathPrefix(`/v1/hermes/`)
+      kind: Rule
+      middlewares:
+        - name: home-allowlist
+      services:
+        - name: mcp-gateway
+          namespace: home-assistant
+          port: 8080
   tls:
     secretName: home-wildcard-tls
 

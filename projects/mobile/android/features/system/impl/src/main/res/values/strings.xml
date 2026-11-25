@@ -9,6 +9,8 @@
     <string name="system_card_access_subtitle">Application tokens and their modules</string>
     <string name="system_card_secrets">Secrets</string>
     <string name="system_card_secrets_subtitle">Owner-only OpenBao paths, versions and values</string>
+    <string name="system_card_hermes">Hermes</string>
+    <string name="system_card_hermes_subtitle">Agents, /report answers and voice requests</string>
     <string name="system_status_ok">All systems normal</string>
     <string name="system_status_warning">Needs attention</string>
     <string name="system_status_critical">Problems detected</string>
