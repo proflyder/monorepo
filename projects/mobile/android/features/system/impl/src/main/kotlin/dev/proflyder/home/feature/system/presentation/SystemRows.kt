@@ -14,10 +14,12 @@ import dev.proflyder.home.core.model.SystemAlert
 import dev.proflyder.home.core.model.SystemDevices
 import dev.proflyder.home.core.model.SystemHosts
 import dev.proflyder.home.core.model.SystemSnapshot
+import dev.proflyder.home.core.model.SystemSummary
 import dev.proflyder.home.core.model.Usage
 import dev.proflyder.home.core.navigation.Route
 import dev.proflyder.home.feature.access.AccessRoutes
 import dev.proflyder.home.feature.secrets.SecretsRoutes
+import dev.proflyder.home.feature.system.SystemHealthDestination
 import dev.proflyder.home.feature.system.impl.R
 import java.util.Date
 import kotlin.math.roundToInt
@@ -30,15 +32,27 @@ internal class SystemRows(private val context: Context) {
         administrator: Boolean = false,
         secrets: Boolean = false,
     ): List<SystemRow> = buildList {
+        add(healthEntry(snapshot))
+        if (administrator) add(accessCard())
+        if (secrets) add(secretsCard())
+    }
+
+    fun health(snapshot: SystemSnapshot): List<SystemRow> = buildList {
         add(status(snapshot))
         addAll(alerts(snapshot))
         add(hostCard(snapshot.hosts))
         add(guestsCard(snapshot.hosts))
         add(clusterCard(snapshot.cluster))
         add(devicesCard(snapshot.devices))
-        if (administrator) add(accessCard())
-        if (secrets) add(secretsCard())
     }
+
+    private fun healthEntry(snapshot: SystemSnapshot): SystemRow.Link = SystemRow.Link(
+        key = "health",
+        title = context.getString(R.string.system_health_title),
+        subtitle = join(context.getString(statusTitle(snapshot.summary.status)), alertsText(snapshot.summary)),
+        route = Route.Screen(SystemHealthDestination),
+        level = snapshot.summary.status,
+    )
 
     private fun accessCard(): SystemRow.Link = SystemRow.Link(
         key = "access",
@@ -63,23 +77,21 @@ internal class SystemRows(private val context: Context) {
 
     private fun status(snapshot: SystemSnapshot): SystemRow.Status {
         val summary = snapshot.summary
-        val title = when (summary.status) {
-            HealthLevel.OK -> R.string.system_status_ok
-            HealthLevel.WARNING -> R.string.system_status_warning
-            HealthLevel.CRITICAL -> R.string.system_status_critical
-            HealthLevel.UNKNOWN -> R.string.system_status_unknown
-        }
         val time = DateFormat.getTimeFormat(context).format(Date(summary.generatedAtUnix * MILLIS))
-        val alerts = when {
-            !summary.alertsAvailable -> context.getString(R.string.system_alerts_unavailable)
-            else -> context.resources.getQuantityString(
-                R.plurals.system_alert_count,
-                summary.alerts.size,
-                summary.alerts.size,
-            )
-        }
-        val subtitle = join(alerts, context.getString(R.string.system_updated_at, time))
-        return SystemRow.Status(summary.status, context.getString(title), subtitle)
+        val subtitle = join(alertsText(summary), context.getString(R.string.system_updated_at, time))
+        return SystemRow.Status(summary.status, context.getString(statusTitle(summary.status)), subtitle)
+    }
+
+    private fun statusTitle(level: HealthLevel): Int = when (level) {
+        HealthLevel.OK -> R.string.system_status_ok
+        HealthLevel.WARNING -> R.string.system_status_warning
+        HealthLevel.CRITICAL -> R.string.system_status_critical
+        HealthLevel.UNKNOWN -> R.string.system_status_unknown
+    }
+
+    private fun alertsText(summary: SystemSummary): String = when {
+        !summary.alertsAvailable -> context.getString(R.string.system_alerts_unavailable)
+        else -> context.resources.getQuantityString(R.plurals.system_alert_count, summary.alerts.size, summary.alerts.size)
     }
 
     private fun alerts(snapshot: SystemSnapshot): List<SystemRow> =

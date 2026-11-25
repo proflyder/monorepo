@@ -35,6 +35,7 @@ abstract class BaseFragment<VB : ViewBinding>(
         super.onViewCreated(view, savedInstanceState)
         onBindingCreated(binding, savedInstanceState)
         view.contentInsetTarget()?.applyContentInsets(contentInsets())
+        view.liftScreenFabs()
     }
 
     final override fun onDestroyView() {

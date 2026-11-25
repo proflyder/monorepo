@@ -27,6 +27,7 @@ class GlassPillLayout @JvmOverloads constructor(
         }
         outlineProvider = PillOutline()
         clipToOutline = true
+        receiveBorderlessRipples()
     }
 
     private val radius: Float get() = if (cornerRadius < 0) height / 2f else cornerRadius

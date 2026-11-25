@@ -7,7 +7,6 @@ import dev.proflyder.home.core.presentation.ScreenFragment
 import dev.proflyder.home.core.ui.ListStateViews
 import dev.proflyder.home.core.ui.Notices
 import dev.proflyder.home.core.presentation.tabViewModels
-import dev.proflyder.home.core.ui.liftAboveBottomInsets
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.core.ui.setupPullToRefresh
 import dev.proflyder.home.core.ui.userMessage
@@ -27,7 +26,6 @@ internal class ScenariosFragment :
     override fun contentInsets(): ContentInsets = fabContentInsets()
 
     override fun onViewReady(binding: FragmentScenariosBinding, savedInstanceState: Bundle?) = with(binding) {
-        scenariosAdd.liftAboveBottomInsets()
         scenariosList.adapter = adapter
         val states = ListStateViews(
             progress = scenariosProgress,

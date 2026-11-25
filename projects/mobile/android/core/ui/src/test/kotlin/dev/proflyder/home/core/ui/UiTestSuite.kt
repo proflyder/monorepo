@@ -6,6 +6,7 @@ import org.junit.runners.Suite
 @RunWith(Suite::class)
 @Suite.SuiteClasses(
     BarMotionTest::class,
+    ScreenFabsTest::class,
     ForegroundGraceNoticePolicyTest::class,
     SensitiveClipboardLifecycleTest::class,
     SensitiveClipboardTest::class,
