@@ -1,6 +1,7 @@
 package dev.proflyder.home.core.ui
 
 import android.view.View
+import androidx.core.view.ViewCompat
 import androidx.recyclerview.widget.RecyclerView
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.google.android.material.color.MaterialColors
@@ -17,6 +18,16 @@ fun SwipeRefreshLayout.setupPullToRefresh(scrolling: View, vararg alsoScrolling:
     val tracked = listOf(scrolling) + alsoScrolling
     setOnChildScrollUpCallback { _, _ -> tracked.any(View::isAwayFromTop) }
     setOnRefreshListener(onRefresh)
+    ViewCompat.setOnApplyWindowInsetsListener(this) { view, insets ->
+        (view as SwipeRefreshLayout).placeSpinnerBelow(insets.topInset())
+        insets
+    }
+    requestInsetsWhenAttached()
+}
+
+private fun SwipeRefreshLayout.placeSpinnerBelow(top: Int) {
+    val travel = resources.getDimensionPixelSize(R.dimen.ui_refresh_travel)
+    setProgressViewOffset(false, top - progressCircleDiameter, top + travel)
 }
 
 fun RecyclerView.isAtTop(): Boolean {

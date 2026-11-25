@@ -5,6 +5,7 @@ import androidx.core.graphics.Insets
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.recyclerview.widget.RecyclerView
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -14,7 +15,9 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import dev.proflyder.home.core.ui.R as UiR
+import dev.proflyder.home.feature.alarms.impl.R as AlarmsR
 import dev.proflyder.home.feature.control.impl.R as ControlR
+import dev.proflyder.home.feature.time.impl.R as TimeR
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], qualifiers = "w411dp-h891dp-night-xxhdpi")
@@ -43,6 +46,28 @@ class ChromeInsetsTest {
         assertEquals("alarm slot is the first list item", top.height.toFloat(), header.translationY)
         val fab = activity.resources.getDimensionPixelSize(UiR.dimen.ui_fab_clearance)
         assertTrue("home list clears the bottom chrome", list.paddingBottom >= bottom.height + fab)
+    }
+
+    @Test
+    fun pullToRefreshSpinnerStartsUnderTheChromeOnHome() {
+        val activity = open()
+        val top = activity.findViewById<View>(R.id.top_chrome).height
+        assertSpinnerBelow(activity.findViewById(ControlR.id.control_refresh), top)
+    }
+
+    @Test
+    fun pullToRefreshSpinnerStartsUnderTheTimeTabs() {
+        val activity = open()
+        activity.router.selectTab("time")
+        settle(activity)
+        val tabs = activity.findViewById<View>(TimeR.id.time_header)
+        assertSpinnerBelow(activity.findViewById(AlarmsR.id.alarms_refresh), tabs.height)
+    }
+
+    private fun assertSpinnerBelow(refresh: SwipeRefreshLayout, top: Int) {
+        val travel = refresh.resources.getDimensionPixelSize(UiR.dimen.ui_refresh_travel)
+        assertEquals("spinner hides right under the glass", top - refresh.progressCircleDiameter, refresh.progressViewStartOffset)
+        assertEquals("spinner stops below the glass", top + travel, refresh.progressViewEndOffset)
     }
 
     private fun open(): MainActivity {

@@ -203,6 +203,7 @@ home_android_local_test(
         "@maven//:com_google_android_material_material",
         "@maven//:junit_junit",
         "@maven//:org_robolectric_robolectric",
+        "@maven//:androidx_swiperefreshlayout_swiperefreshlayout",
         "//projects/mobile/android/core/runtime",
         "@maven//:androidx_lifecycle_lifecycle_viewmodel_ktx",
         "//projects/mobile/android/core/designsystem",

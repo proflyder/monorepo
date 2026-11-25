@@ -772,7 +772,9 @@ navigate by route string, not by an impl destination.
 - **Insets.** Everything is edge-to-edge through one mechanism in
   `core/ui/WindowInsets.kt`; no layout hard-codes bar sizes. The bottom
   navigation hides while the keyboard is open; pinned panels use
-  `pinAboveKeyboard`, scrolling content `applyContentInsets` (via `BaseFragment`).
+  `pinAboveKeyboard`, scrolling content `applyContentInsets` (via `BaseFragment`);
+  `setupPullToRefresh` keeps the spinner under the glass from the same top
+  inset (`setProgressViewOffset`, re-applied on every inset change).
 - **Themes** are `ThemeOverlay`s applied in `onActivityPreCreated` before
   inflation (Material You: dynamic colours over Emerald). Stored keys are
   `emerald`, `system`, `neon`; a retired key stays in `AppTheme.legacyKeys`
