@@ -47,7 +47,6 @@ internal class AlarmsFragment :
     override fun contentInsets(): ContentInsets = fabContentInsets()
 
     override fun onViewReady(binding: FragmentAlarmsBinding, savedInstanceState: Bundle?) {
-        binding.alarmsAdd.liftAboveBottomInsets()
         binding.alarmsActionBar.liftAboveBottomInsets()
         binding.alarmsList.adapter = adapter
         val states = ListStateViews(

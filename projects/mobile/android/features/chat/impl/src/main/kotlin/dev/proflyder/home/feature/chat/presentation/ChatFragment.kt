@@ -35,6 +35,7 @@ import dev.proflyder.home.feature.chat.presentation.sessions.displayTitle
 import android.view.Gravity
 import dev.proflyder.home.core.ui.ContentInsets
 import dev.proflyder.home.core.ui.pinAboveKeyboard
+import dev.proflyder.home.core.ui.setShown
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.core.ui.userMessage
 import dev.proflyder.home.feature.chat.ChatFocus
@@ -319,7 +320,7 @@ internal class ChatFragment : ScreenFragment<FragmentChatBinding, ChatUiState, C
 
     private inner class ScrollWatcher : RecyclerView.OnScrollListener() {
         override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
-            binding.chatScrollDown.setVisible(!isAtEnd())
+            binding.chatScrollDown.setShown(!isAtEnd())
             val first = layoutManager.findFirstVisibleItemPosition()
             if (first in 0..OLDER_THRESHOLD) dispatch(ChatIntent.LoadOlder)
         }

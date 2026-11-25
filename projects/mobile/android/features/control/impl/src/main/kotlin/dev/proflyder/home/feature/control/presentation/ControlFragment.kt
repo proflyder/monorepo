@@ -34,7 +34,6 @@ internal class ControlFragment :
     override fun contentInsets(): ContentInsets = fabContentInsets()
 
     override fun onViewReady(binding: FragmentControlBinding, savedInstanceState: Bundle?) {
-        binding.controlQuickFab.liftAboveBottomInsets()
         binding.controlStatesBanner.liftAboveBottomInsets()
         val list = ControlListRenderer(binding, ::dispatch)
         val dial = SpeedDialOverlay(binding.controlRoot, binding.controlQuickFab, ::dispatch).also { speedDial = it }

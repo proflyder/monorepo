@@ -231,7 +231,8 @@ internal class ChatViewModel(
     }
 
     private fun report(outcome: Outcome<Unit>) {
-        if (outcome is Outcome.Failure) emit(ChatEvent.Failure(outcome.failure))
+        val failure = (outcome as? Outcome.Failure)?.failure ?: return
+        if (currentState.loaded || currentState.items.isNotEmpty()) emit(ChatEvent.Failure(failure))
     }
 
     override fun onCleared() {

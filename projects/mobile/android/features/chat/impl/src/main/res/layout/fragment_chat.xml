@@ -149,12 +149,11 @@
         </dev.proflyder.home.core.designsystem.glass.GlassPillLayout>
     </dev.proflyder.home.core.designsystem.glass.FloatingGlassHeader>
 
-    <LinearLayout
+    <dev.proflyder.home.core.designsystem.glass.FloatingGlassFooter
         android:id="@+id/chat_panel"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom"
-        android:orientation="vertical"
         android:paddingStart="@dimen/chat_floating_margin"
         android:paddingEnd="@dimen/chat_floating_margin"
         android:paddingBottom="@dimen/chat_floating_margin">
@@ -369,5 +368,5 @@
                     app:icon="@drawable/chat_ic_mic" />
             </FrameLayout>
         </LinearLayout>
-    </LinearLayout>
+    </dev.proflyder.home.core.designsystem.glass.FloatingGlassFooter>
 </dev.proflyder.home.core.designsystem.glass.GlassHeaderLayout>

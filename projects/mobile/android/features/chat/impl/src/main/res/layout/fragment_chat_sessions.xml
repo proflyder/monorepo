@@ -73,26 +73,32 @@
         android:layout_height="wrap_content"
         android:orientation="vertical">
 
-        <com.google.android.material.textfield.TextInputLayout
-            android:id="@+id/chat_sessions_search_layout"
-            style="@style/Widget.Home.TextInput"
+        <dev.proflyder.home.core.designsystem.search.PullRevealSearch
+            android:id="@+id/chat_sessions_search_reveal"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="@dimen/ds_space_l"
-            android:layout_marginTop="@dimen/chat_session_search_margin"
-            android:layout_marginEnd="@dimen/ds_space_l"
-            android:layout_marginBottom="@dimen/chat_session_search_margin"
-            android:hint="@string/chat_session_search"
-            app:startIconDrawable="@drawable/chat_ic_search">
+            android:layout_height="wrap_content">
 
-            <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/chat_sessions_search"
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/chat_sessions_search_layout"
+                style="@style/Widget.Home.TextInput"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:imeOptions="actionSearch"
-                android:inputType="text"
-                android:maxLines="1" />
-        </com.google.android.material.textfield.TextInputLayout>
+                android:layout_marginStart="@dimen/ds_space_l"
+                android:layout_marginTop="@dimen/chat_session_search_margin"
+                android:layout_marginEnd="@dimen/ds_space_l"
+                android:layout_marginBottom="@dimen/chat_session_search_margin"
+                android:hint="@string/chat_session_search"
+                app:startIconDrawable="@drawable/chat_ic_search">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/chat_sessions_search"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:imeOptions="actionSearch"
+                    android:inputType="text"
+                    android:maxLines="1" />
+            </com.google.android.material.textfield.TextInputLayout>
+        </dev.proflyder.home.core.designsystem.search.PullRevealSearch>
     </LinearLayout>
 
     <com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton

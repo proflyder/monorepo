@@ -35,7 +35,8 @@ internal class ChatSessionsFragment :
     override fun onViewReady(binding: FragmentChatSessionsBinding, savedInstanceState: Bundle?) = with(binding) {
         chatSessionsList.adapter = ConcatAdapter(ListHeaderSpacer.leading(chatSessionsList, chatSessionsHeader), adapter)
         chatSessionsList.addGroupedRows(resources.getDimensionPixelSize(R.dimen.chat_session_divider_inset))
-        chatSessionsRefresh.setupPullToRefresh(chatSessionsList) { dispatch(ChatSessionsIntent.Refresh) }
+        chatSessionsSearchReveal.attach(chatSessionsList, chatSessionsSearch)
+        chatSessionsRefresh.setupPullToRefresh(chatSessionsList, chatSessionsSearchReveal) { dispatch(ChatSessionsIntent.Refresh) }
         chatSessionsRetry.setOnClickListener { dispatch(ChatSessionsIntent.Refresh) }
         chatSessionsNew.setOnClickListener { dispatch(ChatSessionsIntent.Create) }
         chatSessionsNew.setVisible(!viewModel.state.value.archived)

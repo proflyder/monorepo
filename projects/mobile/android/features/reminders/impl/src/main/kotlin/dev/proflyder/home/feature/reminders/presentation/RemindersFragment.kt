@@ -8,7 +8,6 @@ import dev.proflyder.home.core.presentation.ScreenFragment
 import dev.proflyder.home.core.presentation.render
 import dev.proflyder.home.core.ui.ListStateViews
 import dev.proflyder.home.core.presentation.tabViewModels
-import dev.proflyder.home.core.ui.liftAboveBottomInsets
 import dev.proflyder.home.core.ui.setupPullToRefresh
 import dev.proflyder.home.core.ui.userMessage
 import dev.proflyder.home.feature.reminders.impl.R
@@ -26,7 +25,6 @@ internal class RemindersFragment :
     override fun contentInsets(): ContentInsets = fabContentInsets()
 
     override fun onViewReady(binding: FragmentRemindersBinding, savedInstanceState: Bundle?) {
-        binding.remindersAdd.liftAboveBottomInsets()
         binding.remindersList.adapter = adapter
         val states = ListStateViews(
             progress = binding.remindersProgress,
