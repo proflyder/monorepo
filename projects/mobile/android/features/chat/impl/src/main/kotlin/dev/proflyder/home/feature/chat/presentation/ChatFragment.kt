@@ -17,7 +17,6 @@ import androidx.core.net.toUri
 import androidx.core.view.updatePadding
 import androidx.core.widget.doAfterTextChanged
 import androidx.lifecycle.lifecycleScope
-import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.chip.Chip
@@ -73,7 +72,7 @@ internal class ChatFragment : ScreenFragment<FragmentChatBinding, ChatUiState, C
     override fun onViewReady(binding: FragmentChatBinding, savedInstanceState: Bundle?) = with(binding) {
         chatList.adapter = adapter
         chatList.addOnScrollListener(ScrollWatcher())
-        ItemTouchHelper(SwipeToReply(::onSwipeReply)).attachToRecyclerView(chatList)
+        SwipeReply(chatList, ::isQuotable, ::onSwipeReply).attach()
         chatPanel.pinAboveKeyboard(chatList)
         chatHeader.bindGlassBackdrop(chatList)
         chatPanel.bindGlassBackdrop(chatList)
@@ -239,6 +238,8 @@ internal class ChatFragment : ScreenFragment<FragmentChatBinding, ChatUiState, C
         if (smooth) binding.chatList.smoothScrollToPosition(target) else binding.chatList.scrollToPosition(target)
     }
 
+    private fun isQuotable(position: Int): Boolean = adapter.bubbleAt(position)?.quotable == true
+
     private fun onSwipeReply(position: Int) {
         adapter.bubbleAt(position)?.takeIf { it.quotable }?.let(::replyTo)
         adapter.notifyItemChanged(position)
@@ -352,29 +353,5 @@ internal class StatesFollowList(private val states: View) : View.OnLayoutChangeL
         oldBottom: Int,
     ) {
         if (states.paddingBottom != list.paddingBottom) states.post { states.updatePadding(bottom = list.paddingBottom) }
-    }
-}
-
-internal class SwipeToReply(
-    private val onSwipe: (Int) -> Unit,
-) : ItemTouchHelper.SimpleCallback(0, ItemTouchHelper.LEFT) {
-    override fun onMove(
-        recyclerView: RecyclerView,
-        viewHolder: RecyclerView.ViewHolder,
-        target: RecyclerView.ViewHolder,
-    ): Boolean = false
-
-    override fun getSwipeDirs(recyclerView: RecyclerView, viewHolder: RecyclerView.ViewHolder): Int {
-        val adapter = recyclerView.adapter as? ChatAdapter
-        val bubble = adapter?.bubbleAt(viewHolder.bindingAdapterPosition)
-        return if (bubble?.quotable == true) ItemTouchHelper.LEFT else 0
-    }
-
-    override fun getSwipeThreshold(viewHolder: RecyclerView.ViewHolder): Float = SWIPE_THRESHOLD
-
-    override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) = onSwipe(viewHolder.bindingAdapterPosition)
-
-    private companion object {
-        const val SWIPE_THRESHOLD = 0.25f
     }
 }

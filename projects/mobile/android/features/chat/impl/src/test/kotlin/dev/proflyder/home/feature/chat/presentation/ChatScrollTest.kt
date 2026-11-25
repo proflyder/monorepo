@@ -12,7 +12,6 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import dev.proflyder.home.core.designsystem.glass.bindGlassBackdrop
 import dev.proflyder.home.core.designsystem.list.ListHeaderSpacer
-import dev.proflyder.home.core.designsystem.list.addGroupedRows
 import dev.proflyder.home.core.theme.AppTheme
 import dev.proflyder.home.core.ui.ContentInsets
 import dev.proflyder.home.core.ui.applyContentInsets
@@ -28,6 +27,7 @@ import dev.proflyder.home.feature.chat.presentation.sessions.ChatSessionsAdapter
 import dev.proflyder.home.feature.chat.presentation.sessions.ChatSessionsUiState
 import dev.proflyder.home.feature.chat.presentation.sessions.SessionRow
 import dev.proflyder.home.feature.chat.presentation.sessions.SessionRowListener
+import dev.proflyder.home.feature.chat.presentation.sessions.SessionDividers
 import dev.proflyder.home.feature.chat.presentation.sessions.SessionRows
 import java.time.ZoneOffset
 import org.junit.Assert.assertEquals
@@ -58,7 +58,7 @@ class ChatScrollTest {
         val adapter = ChatSessionsAdapter(NoRows)
         val list = binding.chatSessionsList
         list.adapter = ConcatAdapter(ListHeaderSpacer.leading(list, binding.chatSessionsHeader), adapter)
-        list.addGroupedRows(context.resources.getDimensionPixelSize(R.dimen.chat_session_divider_inset))
+        list.addItemDecoration(SessionDividers(list))
         binding.chatSessionsSearchReveal.attach(list, binding.chatSessionsSearch)
         binding.chatSessionsRefresh.setupPullToRefresh(list, binding.chatSessionsSearchReveal) { refreshes++ }
         val active = ChatFixtures.sessions.filterNot { it.archived }.take(count)

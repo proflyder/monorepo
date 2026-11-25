@@ -41,6 +41,16 @@ class GlassChromeTest {
     }
 
     @Test
+    fun glassContainersReceiveBorderlessRipplesOfTheirButtons() {
+        val containers = listOf(
+            dev.proflyder.home.core.designsystem.glass.GlassPillLayout(context),
+            dev.proflyder.home.core.designsystem.glass.GlassChromeLayout(context),
+            GlassScreenHeader(context),
+        )
+        containers.forEach { assertTrue("${it.javaClass.simpleName} is a ripple projection receiver", it.background != null) }
+    }
+
+    @Test
     fun screenHeaderTakesTheChromeInsetAndContentStartsBelowIt() {
         val content = InsetProbe(context)
         val header = GlassScreenHeader(context).apply { addView(View(context), ViewGroup.LayoutParams(WIDTH, HEADER)) }

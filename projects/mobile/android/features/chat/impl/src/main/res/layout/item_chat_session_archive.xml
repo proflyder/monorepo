@@ -5,11 +5,15 @@
     android:id="@+id/chat_archive_row"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
+    android:foreground="?attr/selectableItemBackground"
     android:clickable="true"
     android:focusable="true"
     android:gravity="center_vertical"
     android:orientation="horizontal"
-    android:padding="@dimen/chat_session_row_padding"
+    android:paddingStart="@dimen/chat_session_row_padding_horizontal"
+    android:paddingTop="@dimen/chat_session_row_padding_vertical"
+    android:paddingEnd="@dimen/chat_session_row_padding_horizontal"
+    android:paddingBottom="@dimen/chat_session_row_padding_vertical"
     tools:ignore="SelectableText">
 
     <ImageView

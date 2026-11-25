@@ -8,7 +8,6 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import com.google.android.material.color.MaterialColors
 import dev.proflyder.home.core.designsystem.glass.bindGlassBackdrop
 import dev.proflyder.home.core.designsystem.list.ListHeaderSpacer
-import dev.proflyder.home.core.designsystem.list.addGroupedRows
 import dev.proflyder.home.core.model.ChatQuote
 import dev.proflyder.home.core.model.ChatRole
 import dev.proflyder.home.core.model.ChatStatus
@@ -25,6 +24,7 @@ import dev.proflyder.home.feature.chat.presentation.sessions.ChatSessionsAdapter
 import dev.proflyder.home.feature.chat.presentation.sessions.ChatSessionsUiState
 import dev.proflyder.home.feature.chat.presentation.sessions.SessionRow
 import dev.proflyder.home.feature.chat.presentation.sessions.SessionRowListener
+import dev.proflyder.home.feature.chat.presentation.sessions.SessionDividers
 import dev.proflyder.home.feature.chat.presentation.sessions.SessionRows
 import java.time.ZoneOffset
 import org.junit.Assert.assertEquals
@@ -56,7 +56,7 @@ class ChatSessionsScreenshotTest {
         val adapter = ChatSessionsAdapter(NoRows)
         val list = binding.chatSessionsList
         list.adapter = ConcatAdapter(ListHeaderSpacer.leading(list, binding.chatSessionsHeader), adapter)
-        list.addGroupedRows(context.resources.getDimensionPixelSize(R.dimen.chat_session_divider_inset))
+        list.addItemDecoration(SessionDividers(list))
         binding.chatSessionsSearchReveal.attach(list, binding.chatSessionsSearch)
         if (search) binding.chatSessionsSearchReveal.expand(animate = false)
         val sessions = ChatFixtures.sessions
@@ -78,7 +78,7 @@ class ChatSessionsScreenshotTest {
     fun sessionListLight() {
         val binding = sessionList("chat-sessions-light")
         val active = ChatFixtures.sessions.count { !it.archived }
-        assertEquals(HEADER_ARCHIVE_AND_GAP + active, binding.chatSessionsList.adapter?.itemCount)
+        assertEquals(HEADER_AND_ARCHIVE + active, binding.chatSessionsList.adapter?.itemCount)
     }
 
     @Test
@@ -202,6 +202,6 @@ class ChatSessionsScreenshotTest {
     }
 }
 
-private const val HEADER_ARCHIVE_AND_GAP = 3
+private const val HEADER_AND_ARCHIVE = 2
 private const val LIGHT = "ru-w411dp-h891dp-xxhdpi"
 private const val DARK = "ru-w411dp-h891dp-night-xxhdpi"
