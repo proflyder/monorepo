@@ -10,18 +10,10 @@ import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.google.android.material.color.MaterialColors
 import dev.proflyder.home.core.access.AppAccessState
-import dev.proflyder.home.core.data.Page
-import dev.proflyder.home.core.data.PageRequest
-import dev.proflyder.home.core.data.PagedList
-import dev.proflyder.home.core.data.PagedSource
-import dev.proflyder.home.core.data.PagingAction
-import dev.proflyder.home.core.data.RefreshMode
-import dev.proflyder.home.core.data.ListEdit
 import dev.proflyder.home.core.model.AppAccess
 import dev.proflyder.home.core.model.AppModule
 import dev.proflyder.home.core.model.NotificationHistory
 import dev.proflyder.home.core.model.NotificationHistoryType
-import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.navigation.Route
 import dev.proflyder.home.core.presentation.ListItemIntent
 import dev.proflyder.home.core.testing.FakeClock
@@ -42,8 +34,6 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
@@ -82,7 +72,7 @@ class HistorySwipeTest {
 
     @Test
     fun deletingKeepsTheEntryForUndoAndUndoPutsItBack() {
-        val repository = FakeRepository(entries)
+        val repository = FakeHistoryRepository(entries)
         val model = model(repository)
         idle()
         assertEquals(listOf("a", "b", "c"), model.state.value.pages.items.map { it.key })
@@ -100,7 +90,7 @@ class HistorySwipeTest {
 
     @Test
     fun swipingRightTogglesReadBothWays() {
-        val repository = FakeRepository(entries)
+        val repository = FakeHistoryRepository(entries)
         val model = model(repository)
         idle()
 
@@ -114,7 +104,7 @@ class HistorySwipeTest {
 
     @Test
     fun readingAllMarksEveryEntry() {
-        val repository = FakeRepository(entries)
+        val repository = FakeHistoryRepository(entries)
         val model = model(repository)
         idle()
 
@@ -129,7 +119,7 @@ class HistorySwipeTest {
     @Test
     fun anEntryWithATargetOpensItsRouteAndMarksItRead() {
         val entry = entry("a", now, read = false, deepLink = "home://time/timers")
-        val repository = FakeRepository(listOf(entry))
+        val repository = FakeHistoryRepository(listOf(entry))
         val model = model(repository, FakeAccessSource(accessState(AppModule.ALARMS_TIMERS)))
         idle()
 
@@ -144,7 +134,7 @@ class HistorySwipeTest {
     @Test
     fun anEntryWithoutATargetIsNeitherOpenedNorMarkedRead() {
         val entry = entry("a", now, read = false)
-        val repository = FakeRepository(listOf(entry))
+        val repository = FakeHistoryRepository(listOf(entry))
         val model = model(repository)
         idle()
 
@@ -160,7 +150,7 @@ class HistorySwipeTest {
     @Test
     fun aTargetOfAModuleTheTokenLacksHasNoRoute() {
         val entry = entry("a", now, read = false, deepLink = "home://chat/message/m_1")
-        val repository = FakeRepository(listOf(entry))
+        val repository = FakeHistoryRepository(listOf(entry))
         val model = model(repository, FakeAccessSource(accessState(AppModule.ALARMS_TIMERS)))
         idle()
 
@@ -177,7 +167,7 @@ class HistorySwipeTest {
     fun accessChangesRerenderTheRowTargets() {
         val entry = entry("a", now, read = false, deepLink = "home://chat/message/m_1")
         val access = FakeAccessSource(accessState())
-        val model = model(FakeRepository(listOf(entry)), access)
+        val model = model(FakeHistoryRepository(listOf(entry)), access)
         idle()
         assertNull(model.state.value.rows.filterIsInstance<HistoryRow.Item>().single().target)
 
@@ -292,51 +282,6 @@ class HistorySwipeTest {
 
     private fun accessState(vararg modules: AppModule): AppAccessState =
         AppAccessState.Ready(AppAccess(name = "test", modules = modules.toSet(), owner = false))
-
-    private class FakeRepository(initial: List<NotificationHistory>) : NotificationHistoryRepository {
-        private var all = initial
-        private val scope = CoroutineScope(Dispatchers.Main)
-        private val mutableUnread = MutableStateFlow(initial.count { !it.read })
-
-        override val paged: PagedList<NotificationHistory> = PagedList(scope, object : PagedSource<NotificationHistory> {
-            override suspend fun load(request: PageRequest): Outcome<Page<NotificationHistory>> =
-                Outcome.Success(Page(all, null))
-        })
-
-        override suspend fun load(request: PageRequest): Outcome<Page<NotificationHistory>> =
-            Outcome.Success(Page(all, null))
-
-        override val unread: StateFlow<Int> = mutableUnread
-
-        init {
-            paged.dispatch(PagingAction.Refresh(RefreshMode.HARD))
-        }
-
-        override suspend fun setRead(entry: NotificationHistory, read: Boolean): Outcome<Unit> {
-            all = all.map { if (it.key == entry.key) it.copy(read = read) else it }
-            mutableUnread.value = all.count { !it.read }
-            return paged.commit(ListEdit.Update(entry.key) { it.copy(read = read) }) { Outcome.Success(Unit) }
-        }
-
-        override suspend fun remove(entry: NotificationHistory): Outcome<Unit> {
-            all = all.filterNot { it.key == entry.key }
-            mutableUnread.value = all.count { !it.read }
-            return paged.commit(ListEdit.Remove(entry.key)) { Outcome.Success(Unit) }
-        }
-
-        override suspend fun readAll(): Outcome<Unit> {
-            all = all.map { it.copy(read = true) }
-            mutableUnread.value = 0
-            return paged.commit(ListEdit.UpdateAll { it.copy(read = true) }) { Outcome.Success(Unit) }
-        }
-
-        override suspend fun clear(): Outcome<Unit> {
-            all = emptyList()
-            mutableUnread.value = 0
-            paged.dispatch(PagingAction.Refresh(RefreshMode.HARD))
-            return Outcome.Success(Unit)
-        }
-    }
 
     private class NoopCallback : BaseAdapterCallback<HistoryRow>(), NotificationHistoryAdapterCallback
 

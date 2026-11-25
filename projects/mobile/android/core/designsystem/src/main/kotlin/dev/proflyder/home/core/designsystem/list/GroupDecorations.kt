@@ -18,7 +18,8 @@ class GroupDividers(@Px private val insetStart: Int = 0) : RecyclerView.ItemDeco
         val thickness = parent.resources.displayMetrics.density.coerceAtLeast(1f)
         parent.children().filter { parent.slotOfChild(it)?.last == false }.forEach { child ->
             val bottom = child.bottom + child.translationY
-            canvas.drawRect(child.left + insetStart.toFloat(), bottom - thickness, child.right.toFloat(), bottom, paint)
+            val shift = child.translationX
+            canvas.drawRect(child.left + shift + insetStart, bottom - thickness, child.right + shift, bottom, paint)
         }
     }
 }
@@ -41,8 +42,9 @@ class GroupCards(
     private fun drawBackground(canvas: Canvas, child: View, slot: GroupSlot, color: Int) {
         val background = backgrounds.getOrPut(slot) { MaterialShapeDrawable(slot.shape(radius)) }
         background.fillColor = ColorStateList.valueOf(color)
-        val shift = child.translationY.toInt()
-        background.setBounds(child.left, child.top + shift, child.right, child.bottom + shift)
+        val dx = child.translationX.toInt()
+        val dy = child.translationY.toInt()
+        background.setBounds(child.left + dx, child.top + dy, child.right + dx, child.bottom + dy)
         background.alpha = (child.alpha * OPAQUE).toInt()
         background.draw(canvas)
     }
