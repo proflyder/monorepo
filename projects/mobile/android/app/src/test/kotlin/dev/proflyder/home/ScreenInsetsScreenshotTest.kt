@@ -11,6 +11,7 @@ import androidx.recyclerview.widget.RecyclerView
 import dev.proflyder.home.core.designsystem.glass.GlassScreenHeader
 import java.io.File
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.ParameterizedRobolectricTestRunner
@@ -36,17 +37,26 @@ class ScreenInsetsScreenshotTest(private val screen: InsetScreen) {
     private fun checkAtRest(mode: String) {
         val activity = open()
         val root = activity.window.decorView
-        val bar = root.findViewById<View>(R.id.appbar).height
+        val bar = root.findViewById<View>(R.id.top_chrome).height
         val spacing = screen.spacing?.let(root.resources::getDimensionPixelSize) ?: 0
         shoot(root, "inset-${screen.name}-$mode-rest.png")
         val content = screenView(activity)
-        val header = content.screenHeaders().sumOf { it.height }
-        assertEquals("${screen.name}: first item top", bar + header + spacing, contentTop(content))
+        val header = content.screenHeaders().maxOfOrNull { it.height } ?: bar
+        assertEquals("${screen.name}: content is full-bleed", 0, content.windowTop())
+        assertEquals("${screen.name}: first item top", header + spacing, contentTop(content))
+        assertListClearsTheBottomChrome(activity, content)
         assertScreenHeaderContentKeepsItsPadding(content, bar)
     }
 
+    private fun assertListClearsTheBottomChrome(activity: MainActivity, content: View) {
+        val list = content.verticalList() ?: return
+        val bottom = activity.findViewById<View>(R.id.bottom_chrome).height
+        val padding = generateSequence<View>(list) { (it.parent as? View)?.takeIf { _ -> it !== content } }.sumOf { it.paddingBottom }
+        assertTrue("${screen.name}: content bottom padding $padding < $bottom", padding >= bottom)
+    }
+
     private fun assertScreenHeaderContentKeepsItsPadding(content: View, bar: Int) {
-        val padded = content.screenHeaders().flatMap { it.descendants() }.filter { it.paddingTop >= bar }
+        val padded = content.screenHeaders().flatMap { header -> header.descendants().drop(1) }.filter { it.paddingTop >= bar }
         assertEquals("${screen.name}: screen header content padded by the bar", emptyList<View>(), padded)
     }
 

@@ -13,8 +13,6 @@ import dev.proflyder.home.core.presentation.UndoNotice
 import dev.proflyder.home.core.presentation.flowViewModel
 import dev.proflyder.home.core.presentation.render
 import dev.proflyder.home.core.ui.ListStateViews
-import dev.proflyder.home.core.ui.applyScrollBottomInset
-import dev.proflyder.home.core.ui.fabClearance
 import dev.proflyder.home.core.presentation.tabViewModels
 import dev.proflyder.home.core.ui.liftAboveBottomInsets
 import dev.proflyder.home.core.ui.setVisible
@@ -22,6 +20,8 @@ import dev.proflyder.home.core.ui.setupPullToRefresh
 import dev.proflyder.home.core.ui.userMessage
 import dev.proflyder.home.feature.alarms.impl.R
 import dev.proflyder.home.feature.alarms.impl.databinding.FragmentAlarmsBinding
+import dev.proflyder.home.core.ui.ContentInsets
+import dev.proflyder.home.core.ui.fabContentInsets
 
 internal class AlarmsFragment :
     ScreenFragment<FragmentAlarmsBinding, AlarmsUiState, AlarmsIntent, AlarmsEvent>(FragmentAlarmsBinding.Companion::inflate),
@@ -44,8 +44,9 @@ internal class AlarmsFragment :
         override fun handleOnBackPressed() = dispatch(AlarmsIntent.ClearSelection)
     }
 
+    override fun contentInsets(): ContentInsets = fabContentInsets()
+
     override fun onViewReady(binding: FragmentAlarmsBinding, savedInstanceState: Bundle?) {
-        binding.alarmsList.applyScrollBottomInset(binding.alarmsList.fabClearance())
         binding.alarmsAdd.liftAboveBottomInsets()
         binding.alarmsActionBar.liftAboveBottomInsets()
         binding.alarmsList.adapter = adapter

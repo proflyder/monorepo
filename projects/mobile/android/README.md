@@ -64,38 +64,37 @@ a typed router. Device acceptance and open work: [STATE](../../../docs/STATE.md)
 
 ## App chrome
 
-`MainActivity` hosts one glass app bar for every screen
-(`core/designsystem/glass`); its state is one `GlassChrome` (bar height,
-screen header height and hidden part, pinned section bottom) exposed through
-`AppBarHost`. Every glass block uses `GlassSurface`: on API 31+ with hardware
-rendering it records the content behind it into a `RenderNode` with a blur
-`RenderEffect` (window background first, then the content), then a surface
-tint of about 72 %; elsewhere a translucent tint of about 91 %. The node is
-recorded with its position set on every draw, so the blur always follows the
-current content. Only `GlassBarView` draws the `colorOutlineVariant` 0.5 dp
-hairline and the fade, once, at `GlassChrome.edgeBottom`: the bottom of the
-lowest glass block.
+`MainActivity` owns the global chrome. The fragment container is full-bleed
+(under the status bar, the toolbar and the bottom navigation); the toolbar
+(`top_chrome`) and the bottom navigation (`bottom_chrome`) are
+`GlassChromeLayout` overlays. Each records only the fragment container into a
+`RenderNode` with a blur `RenderEffect` (API 31+, hardware rendering): the
+window background first, so the sharp content under the bar is fully covered,
+then the content; then a surface tint of about 66 %. Below API 31 a translucent
+tint of about 91 %. Redraws follow scroll events of the content. Each block
+draws one `colorOutlineVariant` 0.5 dp hairline and a fade on its content side
+unless a glass block below covers that edge (`GlassEdgeOwner`).
 
-Glass blocks, top to bottom:
-- the bar (status band included, same look on every screen);
-- an optional screen header (`GlassScreenHeader`: history counters, secrets
-  search, Time tabs, the Home alarms slot). It overlays the content right
-  under the bar, blurs the views below it and slides under the bar while the
-  list scrolls down (`GlassChrome.contentScrolled`), returning on scroll up or
-  at the top;
-- the pinned section header: a real list item placed by
-  `StickyHeadersLayoutManager`, whose background is swapped for the glass
-  (`StickyGlass`) while it is pinned.
+The chrome publishes its size as WindowInsets (`MainInsets`): the container
+receives `statusBars.top` = toolbar block height and `navigationBars.bottom` =
+bottom block height (`underChrome`), re-dispatched when a chrome block changes
+size. Screens consume insets one way: `BaseFragment` calls
+`applyContentInsets(contentInsets())` on the primary vertical scroller (or the
+screen root when fixed views sit above the scroller or there is none):
+top/bottom padding, `clipToPadding=false`, consumed for the subtree, a list at
+the top stays at the top when the inset changes. Screens only override
+`contentInsets()` (FAB clearance, or `bottom = false` where a panel follows
+the keyboard).
 
-`BaseFragment` calls `applyGlassChrome()` for every screen, nested ones
-included. The target is the primary vertical scroller (`clipToPadding=false`),
-else the root unless the screen has a `GlassScreenHeader`; views inside a
-screen header or a vertical scroller are skipped. Its top padding is the
-design spacing plus the part of `GlassChrome.contentTop` that overlaps the
-view, so pager pages under a screen header get it and views placed lower do
-not. A list at the top stays at the top when the header height changes.
-Geometry at rest is covered by `ScreenInsetsScreenshotTest`; the pinned and
-pushed states on Home, history and secrets by `GlassScreensScreenshotTest`.
+A screen with a fixed header (Home alarms slot, history counters, secrets
+search, Time tabs) wraps it in `GlassScreenHeader` inside a `GlassHeaderLayout`:
+the header takes the chrome inset as its top padding and glass background, and
+the layout dispatches `top = header height` to the rest of the screen, so the
+content and pinned section headers start under it. Pinned section headers
+(`StickyHeadersLayoutManager`) pin at the content top inset, get a glass
+background while pinned (`StickyGlass`) and cover the edge above them.
+Geometry is covered by `ChromeInsetsTest`, `ScreenInsetsScreenshotTest` and,
+on the real history adapter behind `ConcatAdapter`, `NotificationHistoryStickyTest`.
 
 ## Build and test
 
@@ -549,10 +548,10 @@ badges are selectors in `render`.
   home screen) makes its offset estimate positive at the very top.
 - Sticky section headers: `StickyHeadersLayoutManager` (a `GridLayoutManager`,
   span count 1 for plain lists). The current header (`SectionedAdapter.isStickyHeader`,
-  defaults to `isSectionHeader`) is its own item view, detached around every
+  defaults to `isSectionHeader`; adapters wrapped in a `ConcatAdapter` are
+  resolved through `sections()`) is its own item view, detached around every
   base layout and scroll call, ignored by the recycler and laid out last at the
-  pin edge (`StickyPinEdge`: `paddingTop`, or the glass bottom under the app
-  chrome), so it draws above the rows, takes taps and is pushed out by the next
+  pin edge (`StickyPinEdge`: `paddingTop`, or the content top inset), so it draws above the rows, takes taps and is pushed out by the next
   header. Adapter changes rebind it on the next layout; `scrollToPosition`
   keeps the target below it.
 - Results between screens and sheets are typed: `object X : ResultKey<T>(T.serializer())`
@@ -758,7 +757,7 @@ navigate by route string, not by an impl destination.
 - **Insets.** Everything is edge-to-edge through one mechanism in
   `core/ui/WindowInsets.kt`; no layout hard-codes bar sizes. The bottom
   navigation hides while the keyboard is open; pinned panels use
-  `pinAboveKeyboard`, lists `applyScrollBottomInset`.
+  `pinAboveKeyboard`, scrolling content `applyContentInsets` (via `BaseFragment`).
 - **Themes** are `ThemeOverlay`s applied in `onActivityPreCreated` before
   inflation (Material You: dynamic colours over Emerald). Stored keys are
   `emerald`, `system`, `neon`; a retired key stays in `AppTheme.legacyKeys`

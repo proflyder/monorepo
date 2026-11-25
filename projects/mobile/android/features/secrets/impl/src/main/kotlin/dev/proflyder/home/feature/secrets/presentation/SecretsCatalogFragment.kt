@@ -12,7 +12,6 @@ import dev.proflyder.home.core.navigation.ScreenActionSink
 import dev.proflyder.home.core.navigation.ToolbarAction
 import dev.proflyder.home.core.presentation.bindText
 import dev.proflyder.home.core.presentation.screenViewModel
-import dev.proflyder.home.core.ui.applyScrollBottomInset
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.core.ui.setupPullToRefresh
 import dev.proflyder.home.core.ui.userMessage
@@ -58,7 +57,6 @@ internal class SecretsCatalogFragment :
     override fun onViewReady(binding: FragmentSecretsCatalogBinding, savedInstanceState: Bundle?) {
         binding.secretsCatalogList.adapter = adapter
         binding.secretsCatalogList.addGroupedRows()
-        binding.secretsCatalogList.applyScrollBottomInset()
         binding.secretsCatalogRefresh.setupPullToRefresh(binding.secretsCatalogList) {
             dispatch(SecretsCatalogIntent.Refresh)
         }

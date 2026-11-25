@@ -15,6 +15,7 @@ import androidx.core.view.marginBottom
 import androidx.core.view.updateLayoutParams
 import androidx.core.view.updatePadding
 import androidx.core.widget.NestedScrollView
+import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.textfield.TextInputLayout
 
 data class InitialPadding(val left: Int, val top: Int, val right: Int, val bottom: Int)
@@ -45,26 +46,14 @@ fun WindowInsetsCompat.horizontalInsets(): Insets = getInsets(Type.systemBars() 
 
 fun WindowInsetsCompat.keyboardVisible(): Boolean = isVisible(Type.ime())
 
-fun WindowInsetsCompat.forContentBetweenBars(bottomCovered: Boolean): WindowInsetsCompat {
+fun WindowInsetsCompat.underChrome(top: Int, bottom: Int): WindowInsetsCompat {
+    val status = getInsets(Type.statusBars())
     val nav = getInsets(Type.navigationBars())
-    val builder = WindowInsetsCompat.Builder(this)
-        .setInsets(Type.statusBars(), Insets.NONE)
+    return WindowInsetsCompat.Builder(this)
+        .setInsets(Type.statusBars(), Insets.of(status.left, top, status.right, 0))
         .setInsets(Type.captionBar(), Insets.NONE)
-    return when {
-        bottomCovered -> builder
-            .setInsets(Type.navigationBars(), Insets.of(nav.left, 0, nav.right, 0))
-            .setInsets(Type.ime(), Insets.NONE)
-            .build()
-        else -> builder.build()
-    }
-}
-
-fun View.applyTopInset() = doOnApplyInsets { view, insets, initial ->
-    view.updatePadding(top = initial.top + insets.topInset())
-}
-
-fun View.applyNavigationInset() = doOnApplyInsets { view, insets, initial ->
-    view.updatePadding(bottom = initial.bottom + insets.navigationInset())
+        .setInsets(Type.navigationBars(), Insets.of(nav.left, 0, nav.right, bottom))
+        .build()
 }
 
 fun View.applySystemBarsPadding() = doOnApplyInsets { view, insets, initial ->
@@ -77,14 +66,13 @@ fun View.applySystemBarsPadding() = doOnApplyInsets { view, insets, initial ->
     )
 }
 
-fun View.applyScrollBottomInset(extra: Int = 0) {
+fun View.applyContentInsets(spec: ContentInsets = ContentInsets()) {
     (this as? ViewGroup)?.clipToPadding = false
-    doOnApplyInsets { view, insets, initial ->
-        view.updatePadding(bottom = initial.bottom + insets.bottomObstruction() + extra)
-    }
+    val insets = ContentInsetsListener(this, spec)
+    (this as? RecyclerView)?.let(insets::bindSticky)
+    ViewCompat.setOnApplyWindowInsetsListener(this, insets)
+    requestInsetsWhenAttached()
 }
-
-fun View.fabClearance(): Int = resources.getDimensionPixelSize(R.dimen.ui_fab_clearance)
 
 fun View.pinAboveKeyboard(content: View) {
     val baseMargin = marginBottom

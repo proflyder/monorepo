@@ -6,8 +6,6 @@ import dev.proflyder.home.core.data.RefreshMode
 import dev.proflyder.home.core.presentation.ScreenFragment
 import dev.proflyder.home.core.ui.ListStateViews
 import dev.proflyder.home.core.ui.Notices
-import dev.proflyder.home.core.ui.applyScrollBottomInset
-import dev.proflyder.home.core.ui.fabClearance
 import dev.proflyder.home.core.presentation.tabViewModels
 import dev.proflyder.home.core.ui.liftAboveBottomInsets
 import dev.proflyder.home.core.ui.setVisible
@@ -15,6 +13,8 @@ import dev.proflyder.home.core.ui.setupPullToRefresh
 import dev.proflyder.home.core.ui.userMessage
 import dev.proflyder.home.feature.scenarios.impl.R
 import dev.proflyder.home.feature.scenarios.impl.databinding.FragmentScenariosBinding
+import dev.proflyder.home.core.ui.ContentInsets
+import dev.proflyder.home.core.ui.fabContentInsets
 
 internal class ScenariosFragment :
     ScreenFragment<FragmentScenariosBinding, ScenariosUiState, ScenariosIntent, ScenariosEvent>(
@@ -24,8 +24,9 @@ internal class ScenariosFragment :
 
     private val adapter = ScenarioAdapter(ScenarioAdapterIntents(::dispatch))
 
+    override fun contentInsets(): ContentInsets = fabContentInsets()
+
     override fun onViewReady(binding: FragmentScenariosBinding, savedInstanceState: Bundle?) = with(binding) {
-        scenariosList.applyScrollBottomInset(scenariosList.fabClearance())
         scenariosAdd.liftAboveBottomInsets()
         scenariosList.adapter = adapter
         val states = ListStateViews(

@@ -12,8 +12,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import dev.proflyder.home.core.access.AppAccessSession
 import dev.proflyder.home.core.access.AppAccessState
 import dev.proflyder.home.core.access.allows
-import dev.proflyder.home.core.designsystem.glass.AppBarHost
-import dev.proflyder.home.core.designsystem.glass.GlassChrome
+import dev.proflyder.home.core.designsystem.glass.GlassEdgeOwner
 import dev.proflyder.home.core.model.AppLogger
 import dev.proflyder.home.core.navigation.AppActivityContribution
 import dev.proflyder.home.core.navigation.AppChromeState
@@ -36,8 +35,7 @@ class MainActivity :
     AppCompatActivity(),
     NavigatorHost,
     FailureNoticePolicyProvider,
-    AppBarHost {
-    override val glassChrome = GlassChrome()
+    GlassEdgeOwner {
 
     internal lateinit var router: FragmentRouter
     internal lateinit var actionsMenu: ToolbarChrome
@@ -76,8 +74,8 @@ class MainActivity :
         enableEdgeToEdge()
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
-        binding.glassBar.bind(binding.fragmentContainer, glassChrome)
-        binding.appbar.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> glassChrome.updateBar(binding.appbar.height) }
+        binding.topChrome.bindBackdrop(binding.fragmentContainer)
+        binding.bottomChrome.bindBackdrop(binding.fragmentContainer)
         router = FragmentRouter(
             fragmentManager = supportFragmentManager,
             containerId = R.id.fragment_container,
@@ -115,6 +113,8 @@ class MainActivity :
         if (withoutSections) return
         if (visibleTabs.none { it.id == chrome.tabId }) router.selectTab(visibleTabs.first().id)
     }
+
+    override fun coverEdge(cover: Any, covered: Boolean) = binding.topChrome.coverEdge(cover, covered)
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)

@@ -16,7 +16,6 @@ import dev.proflyder.home.core.presentation.StateViewModel
 import dev.proflyder.home.core.presentation.screenViewModel
 import dev.proflyder.home.core.ui.ViewBinding
 import dev.proflyder.home.core.ui.ViewModelSource
-import dev.proflyder.home.core.ui.applyScrollBottomInset
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ClassKey
 import dev.zacsweers.metro.ContributesIntoMap
@@ -52,7 +51,6 @@ internal class DesignCatalogFragment :
     override val viewModel: DesignCatalogViewModel by screenViewModel()
 
     override fun onViewReady(binding: DesignCatalogBinding, savedInstanceState: Bundle?) {
-        binding.root.applyScrollBottomInset()
         val segments = binding.root.findViewById<PillSegments>(DesignR.id.ds_catalog_pills)
         val pills = bindPills(segments, segments.indices(), DesignCatalogIntent::SelectPill)
         val row = binding.root.findViewById<ListRow>(DesignR.id.ds_catalog_row_switch)

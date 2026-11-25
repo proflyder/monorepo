@@ -144,7 +144,7 @@ open class StickyHeadersLayoutManager : GridLayoutManager {
         if (adapter === observed) return
         observed?.unregisterAdapterDataObserver(changes)
         observed = adapter
-        sections = adapter as? SectionedAdapter
+        sections = adapter?.sections()
         adapter?.registerAdapterDataObserver(changes)
         markStale()
     }

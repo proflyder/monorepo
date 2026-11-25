@@ -5,7 +5,6 @@ import android.view.View
 import androidx.core.view.isVisible
 import dev.proflyder.home.core.presentation.ScreenFragment
 import dev.proflyder.home.core.presentation.screenViewModel
-import dev.proflyder.home.core.ui.applyScrollBottomInset
 import dev.proflyder.home.feature.settings.impl.R
 import dev.proflyder.home.feature.settings.impl.databinding.FragmentSettingsBinding
 
@@ -16,7 +15,6 @@ internal class SettingsFragment :
     override val viewModel: SettingsViewModel by screenViewModel()
 
     override fun onViewReady(binding: FragmentSettingsBinding, savedInstanceState: Bundle?) {
-        binding.root.applyScrollBottomInset()
         link(binding.settingsConnection, SettingsLink.CONNECTION)
         link(binding.settingsVpn, SettingsLink.VPN)
         link(binding.settingsNotifications, SettingsLink.NOTIFICATIONS)

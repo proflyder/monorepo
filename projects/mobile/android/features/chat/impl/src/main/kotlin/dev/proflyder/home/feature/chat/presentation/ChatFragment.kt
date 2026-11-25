@@ -27,6 +27,7 @@ import dev.proflyder.home.core.designsystem.HomePopupMenu
 import dev.proflyder.home.core.model.ChatAttachmentKind
 import dev.proflyder.home.core.presentation.ScreenFragment
 import dev.proflyder.home.core.presentation.tabViewModels
+import dev.proflyder.home.core.ui.ContentInsets
 import dev.proflyder.home.core.ui.pinAboveKeyboard
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.core.ui.userMessage
@@ -59,6 +60,8 @@ internal class ChatFragment : ScreenFragment<FragmentChatBinding, ChatUiState, C
     private val askMicrophone = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (!granted) showError(R.string.chat_record_permission)
     }
+
+    override fun contentInsets(): ContentInsets = ContentInsets(bottom = false)
 
     override fun onViewReady(binding: FragmentChatBinding, savedInstanceState: Bundle?) = with(binding) {
         chatList.adapter = adapter

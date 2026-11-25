@@ -16,7 +16,7 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent">
 
-            <FrameLayout
+            <dev.proflyder.home.core.designsystem.glass.GlassHeaderLayout
                 android:id="@+id/control_content"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent">
@@ -43,7 +43,7 @@
                         android:paddingTop="@dimen/ds_space_s"
                         android:paddingEnd="@dimen/ds_space_l" />
                 </dev.proflyder.home.core.designsystem.glass.GlassScreenHeader>
-            </FrameLayout>
+            </dev.proflyder.home.core.designsystem.glass.GlassHeaderLayout>
 
             <ProgressBar
                 android:id="@+id/control_progress"

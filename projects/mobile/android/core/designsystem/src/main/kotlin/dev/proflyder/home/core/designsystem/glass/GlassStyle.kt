@@ -7,6 +7,7 @@ import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Shader
 import androidx.core.graphics.ColorUtils
+import androidx.core.graphics.withScale
 import androidx.core.graphics.withTranslation
 import com.google.android.material.color.MaterialColors
 import dev.proflyder.home.core.designsystem.R
@@ -43,10 +44,17 @@ class GlassStyle(context: Context) {
         canvas.drawRect(0f, top.toFloat(), width.toFloat(), bottom.toFloat(), paint)
     }
 
-    fun drawEdge(canvas: Canvas, width: Int, bottom: Int) {
+    fun drawBottomEdge(canvas: Canvas, width: Int, bottom: Int) {
         canvas.withTranslation(0f, bottom.toFloat()) {
             drawRect(0f, 0f, width.toFloat(), fadeHeight.toFloat(), fade)
             drawRect(0f, -hairlineHeight, width.toFloat(), 0f, hairline)
+        }
+    }
+
+    fun drawTopEdge(canvas: Canvas, width: Int, top: Int) {
+        canvas.withTranslation(0f, top.toFloat()) {
+            withScale(1f, -1f) { drawRect(0f, 0f, width.toFloat(), fadeHeight.toFloat(), fade) }
+            drawRect(0f, 0f, width.toFloat(), hairlineHeight, hairline)
         }
     }
 }

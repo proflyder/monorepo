@@ -36,4 +36,11 @@
     <declare-styleable name="TileGrid">
         <attr name="tileColumns" format="integer" />
     </declare-styleable>
+
+    <declare-styleable name="GlassChromeLayout">
+        <attr name="glassEdge" format="enum">
+            <enum name="top" value="0" />
+            <enum name="bottom" value="1" />
+        </attr>
+    </declare-styleable>
 </resources>

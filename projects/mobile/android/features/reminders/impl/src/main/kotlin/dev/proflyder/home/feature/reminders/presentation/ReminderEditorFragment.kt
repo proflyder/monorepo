@@ -6,7 +6,6 @@ import dev.proflyder.home.core.designsystem.R as DesignR
 import android.os.Bundle
 import dev.proflyder.home.core.presentation.ScreenFragment
 import dev.proflyder.home.core.presentation.EditorStatus
-import dev.proflyder.home.core.ui.applyScrollBottomInset
 import dev.proflyder.home.core.ui.injectedViewModels
 import dev.proflyder.home.core.ui.keepFocusedVisible
 import dev.proflyder.home.core.ui.setVisible
@@ -25,7 +24,6 @@ internal class ReminderEditorFragment :
     override val viewModel: ReminderEditorViewModel by injectedViewModels()
 
     override fun onViewReady(binding: FragmentReminderEditorBinding, savedInstanceState: Bundle?) {
-        binding.root.applyScrollBottomInset()
         binding.root.keepFocusedVisible()
         val label = bindText(binding.reminderEditorLabel, ReminderEditorIntent::SetLabel)
         val enabled = bindSwitch(binding.reminderEditorEnabled, ReminderEditorIntent::SetEnabled)

@@ -44,6 +44,7 @@ home_android_local_test(
     test_classes = [
         "dev.proflyder.home.feature.settings.presentation.HistorySwipeTest",
         "dev.proflyder.home.feature.settings.presentation.NotificationHistoryRowTest",
+        "dev.proflyder.home.feature.settings.presentation.NotificationHistoryStickyTest",
         "dev.proflyder.home.feature.settings.presentation.SettingsScreensScreenshotTest",
         "dev.proflyder.home.feature.settings.presentation.SettingsViewModelTest",
     ],
@@ -53,7 +54,9 @@ home_android_local_test(
         "//projects/mobile/android/core/model",
         "//projects/mobile/android/core/navigation",
         "//projects/mobile/android/core/runtime",
+        "//projects/mobile/android/core/designsystem",
         "//projects/mobile/android/core/testing",
+        "//projects/mobile/android/core/ui",
         "//projects/mobile/android/features/push/api",
         "//projects/mobile/android/features/update/api",
         "@maven//:androidx_appcompat_appcompat",

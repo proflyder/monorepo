@@ -14,7 +14,6 @@ import dev.proflyder.home.core.ui.AdapterCallback
 import dev.proflyder.home.core.ui.ListStateViews
 import dev.proflyder.home.core.ui.SwipeActions
 import dev.proflyder.home.core.ui.SwipeStyle
-import dev.proflyder.home.core.ui.applyScrollBottomInset
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.core.ui.swipeAction
 import dev.proflyder.home.core.ui.userMessage
@@ -37,7 +36,6 @@ internal class NotificationHistoryFragment :
     }
 
     override fun onViewReady(binding: FragmentNotificationHistoryBinding, savedInstanceState: Bundle?) {
-        binding.historyList.applyScrollBottomInset()
         val binder = PagingBinder<NotificationHistory>(
             recyclerView = binding.historyList,
             states = ListStateViews(

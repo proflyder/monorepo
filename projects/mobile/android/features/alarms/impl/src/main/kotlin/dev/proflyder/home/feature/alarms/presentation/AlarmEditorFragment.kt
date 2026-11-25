@@ -14,6 +14,7 @@ import dev.proflyder.home.feature.alarms.AlarmEditorDestination
 import dev.proflyder.home.core.presentation.showNotice
 import dev.proflyder.home.core.presentation.EditorStatus
 import dev.proflyder.home.core.ui.injectedViewModels
+import dev.proflyder.home.core.ui.ContentInsets
 import dev.proflyder.home.core.ui.pinAboveKeyboard
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.core.ui.showDatePicker
@@ -42,6 +43,8 @@ internal class AlarmEditorFragment :
         onResult(AlarmRepeatChosen) { AlarmEditorIntent.SetRepeat(it.repeat, it.days) }
         attach(actions, AlarmPrompts(this, actions::dispatch)::show)
     }
+
+    override fun contentInsets(): ContentInsets = ContentInsets(bottom = false)
 
     override fun onViewReady(binding: FragmentAlarmEditorBinding, savedInstanceState: Bundle?) {
         binding.alarmEditorSaveBar.pinAboveKeyboard(binding.alarmEditorScroll)

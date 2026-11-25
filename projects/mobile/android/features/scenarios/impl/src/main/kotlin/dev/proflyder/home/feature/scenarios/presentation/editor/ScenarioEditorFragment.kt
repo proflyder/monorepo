@@ -11,7 +11,6 @@ import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.presentation.ScreenFragment
 import dev.proflyder.home.core.presentation.screenViewModel
 import dev.proflyder.home.core.presentation.showNotice
-import dev.proflyder.home.core.ui.applyScrollBottomInset
 import dev.proflyder.home.core.ui.keepFocusedVisible
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.core.ui.userMessage
@@ -44,7 +43,6 @@ internal class ScenarioEditorFragment : ScreenFragment<
     }
 
     override fun onViewReady(binding: FragmentScenarioEditorBinding, savedInstanceState: Bundle?) = with(binding) {
-        root.applyScrollBottomInset()
         root.keepFocusedVisible()
         val sections = ScenarioDraftSections(binding, ::dispatch)
         scenarioEditorLabel.doAfterTextChanged { dispatch(ScenarioEditorIntent.SetLabel(it?.toString().orEmpty())) }

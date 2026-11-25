@@ -5,7 +5,6 @@ import android.os.Bundle
 import dev.proflyder.home.core.data.ListLoadState
 import dev.proflyder.home.core.data.RefreshMode
 import dev.proflyder.home.core.presentation.ScreenFragment
-import dev.proflyder.home.core.ui.applyScrollBottomInset
 import dev.proflyder.home.core.presentation.tabViewModels
 import dev.proflyder.home.core.ui.keepFocusedVisible
 import dev.proflyder.home.core.ui.setVisible
@@ -21,7 +20,6 @@ internal class TimersFragment :
 
     private val adapter = TimerAdapter(TimerAdapterCallback(::dispatch))
     override fun onViewReady(binding: FragmentTimersBinding, savedInstanceState: Bundle?) {
-        binding.timersContent.applyScrollBottomInset()
         binding.timersContent.keepFocusedVisible()
         binding.timersList.adapter = adapter
         val label = bindText(binding.timersLabelInput, TimersIntent::SetLabel)
