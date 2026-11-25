@@ -31,21 +31,31 @@ class RowRippleTest {
 
     @Test
     fun theRippleMaskFollowsTheGroupedRowCorners() {
-        val context = themed(AppTheme.EMERALD)
-        val view = View(context)
+        val view = View(themed(AppTheme.EMERALD)).apply { isClickable = true }
         val ripple = GroupedRowRipple(view, RADIUS)
 
-        ripple.bind(GroupSlot(first = true, last = false), enabled = true)
+        ripple.bind(GroupSlot(first = true, last = false))
         assertTrue(view.foreground is RippleDrawable)
-        assertTrue(view.isClickable)
-        assertEquals(RADIUS, ripple.topRadius, 0f)
-        assertEquals(0f, ripple.bottomRadius, 0f)
         assertCorners(ripple, top = RADIUS, bottom = 0f)
 
-        ripple.bind(GroupSlot(first = false, last = true), enabled = true)
-        assertEquals(0f, ripple.topRadius, 0f)
-        assertEquals(RADIUS, ripple.bottomRadius, 0f)
+        ripple.bind(GroupSlot(first = false, last = false))
+        assertCorners(ripple, top = 0f, bottom = 0f)
+
+        ripple.bind(GroupSlot(first = false, last = true))
         assertCorners(ripple, top = 0f, bottom = RADIUS)
+    }
+
+    @Test
+    fun aSlotChangeSwapsTheRippleShape() {
+        val view = View(themed(AppTheme.EMERALD)).apply { isClickable = true }
+        val ripple = GroupedRowRipple(view, RADIUS)
+
+        ripple.bind(GroupSlot(first = true, last = true))
+        val single = view.foreground
+        ripple.bind(GroupSlot(first = false, last = false))
+
+        assertTrue(single !== view.foreground)
+        assertCorners(ripple, top = 0f, bottom = 0f)
     }
 
     private fun assertCorners(ripple: GroupedRowRipple, top: Float, bottom: Float) {
@@ -58,11 +68,11 @@ class RowRippleTest {
     }
 
     @Test
-    fun aRowWithoutATargetHasNoRippleAndIsNotClickable() {
+    fun aRowThatIsNotClickableHasNoRipple() {
         val view = View(themed(AppTheme.EMERALD))
         val ripple = GroupedRowRipple(view, RADIUS)
 
-        ripple.bind(GroupSlot(first = true, last = true), enabled = false)
+        ripple.bind(GroupSlot(first = true, last = true))
 
         assertNull(view.foreground)
         assertFalse(view.isClickable)

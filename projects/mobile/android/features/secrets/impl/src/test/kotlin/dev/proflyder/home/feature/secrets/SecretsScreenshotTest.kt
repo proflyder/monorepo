@@ -5,9 +5,11 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.view.LayoutInflater
 import android.view.View
+import android.graphics.drawable.RippleDrawable
 import android.widget.FrameLayout
 import androidx.appcompat.view.ContextThemeWrapper
 import com.google.android.material.color.MaterialColors
+import dev.proflyder.home.core.designsystem.list.addGroupedRows
 import dev.proflyder.home.core.model.SecretVersion
 import dev.proflyder.home.feature.secrets.impl.databinding.DialogSecretStepupBinding
 import dev.proflyder.home.feature.secrets.impl.databinding.FragmentSecretPathBinding
@@ -48,6 +50,7 @@ class SecretsScreenshotTest {
         val binding = FragmentSecretsCatalogBinding.inflate(LayoutInflater.from(context))
         val adapter = SecretsCatalogAdapter({})
         binding.secretsCatalogList.adapter = adapter
+        binding.secretsCatalogList.addGroupedRows()
         adapter.submitList(
             catalogRows(
                 listOf(
@@ -105,6 +108,7 @@ class SecretsScreenshotTest {
         val binding = FragmentSecretsCatalogBinding.inflate(LayoutInflater.from(context))
         val adapter = SecretsCatalogAdapter({}, {})
         binding.secretsCatalogList.adapter = adapter
+        binding.secretsCatalogList.addGroupedRows()
         adapter.submitList(rows)
         binding.secretsCatalogProgress.visibility = View.GONE
         shadowOf(android.os.Looper.getMainLooper()).idle()
@@ -118,6 +122,7 @@ class SecretsScreenshotTest {
 
         val bitmap = render(surface(context, binding.root), 411, 891)
         save(bitmap, name)
+        assertEntryRowsRipple(binding, rows)
         assertTrue(bitmap.width > 0)
     }
 
@@ -209,6 +214,13 @@ class SecretsScreenshotTest {
         val bitmap = render(wrapper, 411, 260)
         save(bitmap, "secrets-stepup.png")
         assertTrue(bitmap.width > 0)
+    }
+
+    private fun assertEntryRowsRipple(binding: FragmentSecretsCatalogBinding, rows: List<SecretsCatalogRow>) {
+        rows.indices.filter { rows[it] is SecretsCatalogRow.EntryRow }.forEach { position ->
+            val row = checkNotNull(binding.secretsCatalogList.findViewHolderForAdapterPosition(position)).itemView
+            assertTrue(row.foreground is RippleDrawable)
+        }
     }
 
     private fun surface(context: Context, view: View): View = FrameLayout(context).apply {

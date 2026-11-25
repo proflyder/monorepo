@@ -21,42 +21,32 @@ class GroupedRowRipple(
         checkNotNull(ContextCompat.getColorStateList(view.context, R.color.ds_row_item_ripple)),
     )
 
-    private val ripples = mutableMapOf<GroupSlot, RippleMask>()
+    private val ripples = mutableMapOf<GroupSlot, RippleDrawable>()
 
-    var topRadius: Float = 0f
+    var slot: GroupSlot? = null
         private set
 
-    var bottomRadius: Float = 0f
-        private set
+    val mask: MaterialShapeDrawable?
+        get() = slot?.let { ripples[it] }?.findDrawableByLayerId(android.R.id.mask) as? MaterialShapeDrawable
 
-    var mask: MaterialShapeDrawable? = null
-        private set
-
-    fun bind(slot: GroupSlot?, enabled: Boolean) {
-        topRadius = if (slot?.first == true) radius else 0f
-        bottomRadius = if (slot?.last == true) radius else 0f
-        val shape = slot ?: NO_SLOT
-        val current = ripples.getOrPut(shape) { RippleMask(shape) }
-        mask = current.mask
-        view.foreground = current.drawable.takeIf { enabled }
-        view.isClickable = enabled
-        view.isFocusable = enabled
+    fun bind(slot: GroupSlot) {
+        this.slot = slot
+        view.foreground = ripples.getOrPut(slot) { rippleFor(slot) }.takeIf { view.isClickable }
     }
 
-    private inner class RippleMask(slot: GroupSlot) {
-        val mask: MaterialShapeDrawable = MaterialShapeDrawable(
-            ShapeAppearanceModel.builder()
-                .setTopLeftCornerSize(if (slot.first) radius else 0f)
-                .setTopRightCornerSize(if (slot.first) radius else 0f)
-                .setBottomLeftCornerSize(if (slot.last) radius else 0f)
-                .setBottomRightCornerSize(if (slot.last) radius else 0f)
-                .build(),
-        ).apply { fillColor = ColorStateList.valueOf(Color.WHITE) }
-
-        val drawable = RippleDrawable(color, null, mask)
+    private fun rippleFor(slot: GroupSlot): RippleDrawable {
+        val mask = MaterialShapeDrawable(slot.shape(radius)).apply { fillColor = ColorStateList.valueOf(Color.WHITE) }
+        return RippleDrawable(color, null, mask)
     }
+}
 
-    private companion object {
-        val NO_SLOT = GroupSlot(first = false, last = false)
-    }
+fun GroupSlot.shape(@Px radius: Float): ShapeAppearanceModel {
+    val top = if (first) radius else 0f
+    val bottom = if (last) radius else 0f
+    return ShapeAppearanceModel.builder()
+        .setTopLeftCornerSize(top)
+        .setTopRightCornerSize(top)
+        .setBottomLeftCornerSize(bottom)
+        .setBottomRightCornerSize(bottom)
+        .build()
 }

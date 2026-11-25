@@ -23,7 +23,7 @@ the colour roles.
 | Stroke `ds_stroke_*` | thin 1, thick 2 dp |
 | Typography | Material 3 roles through the theme (`?attr/textAppearanceTitleMedium`, `…BodyLarge`, `…LabelLarge`, …) plus `TextAppearance.Home.{Time,Countdown,ToolbarTitle,Pill,PillTab,ChatMeta,PopupMenuItem}` |
 | Popup `homePopup*` | surface `colorSurfaceContainerHighest` (lighter than card surfaces in dark themes, darker in light), stroke `colorPrimary` at 50% alpha, stroke width 1 dp, radius `ds_radius_xl` 28 dp, elevation `ds_popup_elevation` 8 dp; item text `colorOnSurface`, item icons `colorPrimary`, pressed/hover ripple `colorPrimary` at 20%/8% |
-| Row ripple `homeRowItemRippleColor` | `colorPrimary` at 20% pressed, 8% hovered; `GroupedRowRipple` clips it to the row's card corners |
+| Row ripple `homeRowItemRippleColor` | `colorPrimary` at 20% pressed, 8% hovered; `addGroupedRows` clips it to each row's card shape |
 | Motion | `HomeMotion` (enter/exit/selection durations and easings from the theme) |
 
 ## Components
@@ -149,9 +149,19 @@ the new theme automatically.
   `ds_bg_popup_menu` paints the inset card from `homePopupSurface` with a 1dp
   `homePopupStroke`; `PopupStylesTest` checks both tokens in every theme, dark
   and light.
-- `GroupedRowRipple` (`list`) binds the design-system row ripple to a row inside
-  `GroupCards`: a `RippleDrawable` whose colour is `homeRowItemRippleColor` and
-  whose `MaterialShapeDrawable` mask takes the row's `GroupSlot` top or bottom
-  radius, so the pressed state never paints square corners over a rounded first
-  or last row. A row without a target clears the foreground and is not
-  clickable.
+- `addGroupedRows()` (`list`) is the one entry point for grouped lists: it adds
+  `GroupCards`, `GroupDividers` and `GroupRowRipples`. `GroupRowRipples`
+  resolves each row's `GroupSlot` in `getItemOffsets`, which RecyclerView calls
+  after every bind and after every adapter change, so a row that moves from the
+  middle to the edge of a group gets the new shape without a rebind. The
+  per-view `GroupedRowRipple` (kept in the `ds_grouped_row_ripple` tag) is a
+  `RippleDrawable` in `homeRowItemRippleColor` whose mask is the same
+  `GroupSlot.shape(radius)` the card uses: rounded top for the first row,
+  rounded bottom for the last, the plain row rectangle in between. Only
+  clickable rows get the ripple, so the adapter sets `isClickable`; rows must
+  not declare `selectableItemBackground` themselves.
+- `GroupedRowsScreenshotTest` renders first, middle and last pressed rows over
+  the theme window background in dark and light. Robolectric does not paint the
+  patterned API 35 ripple on a software canvas, so the test paints the row's
+  real ripple mask (shape and bounds taken from its `foreground`) in the
+  pressed colour and checks that corners outside the shape stay untouched.

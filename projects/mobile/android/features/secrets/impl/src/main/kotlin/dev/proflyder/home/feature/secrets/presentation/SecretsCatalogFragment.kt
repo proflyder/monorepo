@@ -1,11 +1,10 @@
-@file:Suppress("NoTry")
-
 package dev.proflyder.home.feature.secrets.presentation
 
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
+import dev.proflyder.home.core.designsystem.list.addGroupedRows
 import dev.proflyder.home.core.navigation.Navigator
 import dev.proflyder.home.core.navigation.NavigatorHost
 import dev.proflyder.home.core.navigation.Route
@@ -58,6 +57,7 @@ internal class SecretsCatalogFragment :
 
     override fun onViewReady(binding: FragmentSecretsCatalogBinding, savedInstanceState: Bundle?) {
         binding.secretsCatalogList.adapter = adapter
+        binding.secretsCatalogList.addGroupedRows()
         binding.secretsCatalogList.applyScrollBottomInset()
         binding.secretsCatalogRefresh.setupPullToRefresh(binding.secretsCatalogList) {
             dispatch(SecretsCatalogIntent.Refresh)
