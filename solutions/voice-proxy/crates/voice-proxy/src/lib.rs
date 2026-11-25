@@ -12,3 +12,5 @@ pub mod services;
 
 #[cfg(test)]
 mod contract_tests;
+#[cfg(test)]
+mod voice_session_tests;
