@@ -35,5 +35,6 @@ internal sealed interface SystemRow {
         val title: String,
         val subtitle: String,
         val route: Route,
+        val level: HealthLevel? = null,
     ) : SystemRow
 }

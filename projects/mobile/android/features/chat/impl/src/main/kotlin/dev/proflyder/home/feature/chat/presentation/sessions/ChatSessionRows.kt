@@ -15,10 +15,6 @@ internal sealed interface SessionRow {
         override val key: String = "archive"
     }
 
-    data object Gap : SessionRow {
-        override val key: String = "gap"
-    }
-
     data class Item(val session: ChatSession) : SessionRow {
         override val key: String = session.id
     }
@@ -30,7 +26,7 @@ internal object SessionRows {
         val archive = state.archivedCount.takeIf { !state.archived && it > 0 && state.query.isBlank() }
         return when (archive) {
             null -> items
-            else -> listOf(SessionRow.Archive(archive), SessionRow.Gap) + items
+            else -> listOf(SessionRow.Archive(archive)) + items
         }
     }
 }

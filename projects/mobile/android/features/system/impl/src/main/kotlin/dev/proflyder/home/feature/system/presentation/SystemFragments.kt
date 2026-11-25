@@ -64,6 +64,11 @@ internal class SystemFragment : SystemScreenFragment() {
         SystemRows(requireContext()).overview(snapshot, administrator, secrets)
 }
 
+internal class SystemHealthFragment : SystemScreenFragment() {
+    override fun rows(snapshot: SystemSnapshot, administrator: Boolean, secrets: Boolean): List<SystemRow> =
+        SystemRows(requireContext()).health(snapshot)
+}
+
 internal class SystemDetailFragment : SystemScreenFragment() {
     private val destination by destination(SystemDetailDestination)
 

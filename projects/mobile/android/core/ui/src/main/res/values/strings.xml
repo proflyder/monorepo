@@ -8,6 +8,10 @@
     <string name="ui_error_tls">TLS verification failed. Use the server’s HTTPS address and a trusted certificate.</string>
     <string name="ui_error_server">Server error (%1$s): %2$s</string>
     <string name="ui_error_server_generic">The server reported an error (%1$s).</string>
+    <string name="ui_error_not_found">The server has no such data or function (%1$s).</string>
+    <string name="ui_error_unsupported">The server does not support this yet (%1$s).</string>
+    <string name="ui_error_too_many">Too many requests. Try again later (%1$s).</string>
+    <string name="ui_error_server_failed">The server could not process the request (%1$s).</string>
     <string name="server_scheduler_error_not_found">The requested item was not found.</string>
     <string name="server_scheduler_error_invalid_argument">The server rejected the request.</string>
     <string name="server_scheduler_error_revision_conflict">Someone else changed this item. Reload and try again.</string>

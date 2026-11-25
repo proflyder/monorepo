@@ -8,6 +8,10 @@
     <string name="ui_error_tls">Не удалось проверить TLS. Используйте HTTPS-адрес сервера с доверенным сертификатом.</string>
     <string name="ui_error_server">Ошибка сервера (%1$s): %2$s</string>
     <string name="ui_error_server_generic">Сервер сообщил об ошибке (%1$s).</string>
+    <string name="ui_error_not_found">На сервере нет таких данных или функции (%1$s).</string>
+    <string name="ui_error_unsupported">Сервер пока это не поддерживает (%1$s).</string>
+    <string name="ui_error_too_many">Слишком много запросов. Повторите позже (%1$s).</string>
+    <string name="ui_error_server_failed">Сервер не смог обработать запрос (%1$s).</string>
     <string name="server_scheduler_error_not_found">Запрошенный объект не найден.</string>
     <string name="server_scheduler_error_invalid_argument">Сервер отклонил запрос.</string>
     <string name="server_scheduler_error_revision_conflict">Кто-то уже изменил этот объект. Обновите и повторите.</string>

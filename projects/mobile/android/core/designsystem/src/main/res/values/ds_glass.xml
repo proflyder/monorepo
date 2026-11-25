@@ -6,4 +6,5 @@
     <dimen name="ds_glass_blur_radius">16dp</dimen>
     <dimen name="ds_glass_fade_height">8dp</dimen>
     <dimen name="ds_glass_divider_height">0.5dp</dimen>
+    <dimen name="ds_scrim_fade_height">24dp</dimen>
 </resources>
