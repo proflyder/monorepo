@@ -140,6 +140,8 @@ def home_android_binary(
         manifest,
         deps,
         application_id = "dev.proflyder.home",
+        custom_package = None,
+        app_label = "@string/app_name",
         version_code = "$(home_version_code)",
         version_name = "$(home_version_name)",
         **kwargs):
@@ -147,9 +149,10 @@ def home_android_binary(
         kwargs["debug_key"] = "//platform/android:home_debug_keystore"
     android_binary(
         name = name,
-        custom_package = application_id,
+        custom_package = custom_package or application_id,
         manifest = manifest,
         manifest_values = {
+            "appLabel": app_label,
             "applicationId": application_id,
             "versionCode": version_code,
             "versionName": version_name,

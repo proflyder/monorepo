@@ -16,18 +16,24 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent">
 
-            <androidx.coordinatorlayout.widget.CoordinatorLayout
+            <FrameLayout
                 android:id="@+id/control_content"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent">
 
-                <com.google.android.material.appbar.AppBarLayout
-                    android:id="@+id/control_appbar"
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/control_list"
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:background="@android:color/transparent"
-                    app:liftOnScroll="false"
-                    app:elevation="0dp">
+                    android:layout_height="match_parent"
+                    android:clipToPadding="false"
+                    android:paddingStart="@dimen/ds_space_l"
+                    android:paddingEnd="@dimen/ds_space_l"
+                    android:paddingBottom="@dimen/ds_space_xl" />
+
+                <dev.proflyder.home.core.designsystem.glass.GlassScreenHeader
+                    android:id="@+id/control_header"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content">
 
                     <androidx.fragment.app.FragmentContainerView
                         android:id="@+id/control_alarms_slot"
@@ -35,20 +41,9 @@
                         android:layout_height="wrap_content"
                         android:paddingStart="@dimen/ds_space_l"
                         android:paddingTop="@dimen/ds_space_s"
-                        android:paddingEnd="@dimen/ds_space_l"
-                        app:layout_scrollFlags="scroll|enterAlways" />
-                </com.google.android.material.appbar.AppBarLayout>
-
-                <androidx.recyclerview.widget.RecyclerView
-                    android:id="@+id/control_list"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    app:layout_behavior="@string/appbar_scrolling_view_behavior"
-                    android:clipToPadding="false"
-                    android:paddingStart="@dimen/ds_space_l"
-                    android:paddingEnd="@dimen/ds_space_l"
-                    android:paddingBottom="@dimen/ds_space_xl" />
-            </androidx.coordinatorlayout.widget.CoordinatorLayout>
+                        android:paddingEnd="@dimen/ds_space_l" />
+                </dev.proflyder.home.core.designsystem.glass.GlassScreenHeader>
+            </FrameLayout>
 
             <ProgressBar
                 android:id="@+id/control_progress"

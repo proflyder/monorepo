@@ -65,31 +65,37 @@ a typed router. Device acceptance and open work: [STATE](../../../docs/STATE.md)
 ## App chrome
 
 `MainActivity` hosts one glass app bar for every screen
-(`core/designsystem/glass`). The fragment container draws edge to edge under
-it: the bar renders a blurred `RenderNode` snapshot of the content on API 31+
-and a near-opaque surface tint on older devices and in software rendering (`GlassPainter` draws tint, hairline and fade for both the bar and pinned section headers). Screens without a vertical scroller get the bar height as root padding, with an `colorOutlineVariant` hairline and a
-12 dp fade into the content. `BaseFragment` of a top-level screen applies the
-live `AppBarHost.appBarHeight` once, to exactly one view (`appBarInsetTarget`):
-the screen's own `AppBarLayout` if it has one, else the primary vertical
-scroller, else the screen root. Nested fragments (pager pages, sections) never
-pad themselves, and a scroller below fixed views in a vertical stack falls back
-to the root, so there is never a double gap or content hidden under the bar.
-Screens with a fixed header (history counters, secrets search, Time tabs) put
-it in their own `AppBarLayout` with `scroll|enterAlways`, like Home. A
-scrolled-away inner app bar is clipped at the bar edge (`HideUnderBar`), so it
-is never drawn or jittering under the glass. The padding binding follows the
-view's attach state, so re-attached views pick up the current height.
+(`core/designsystem/glass`); its state is one `GlassChrome` (bar height,
+screen header height and hidden part, pinned section bottom) exposed through
+`AppBarHost`. Every glass block uses `GlassSurface`: on API 31+ with hardware
+rendering it records the content behind it into a `RenderNode` with a blur
+`RenderEffect` (window background first, then the content), then a surface
+tint of about 72 %; elsewhere a translucent tint of about 91 %. The node is
+recorded with its position set on every draw, so the blur always follows the
+current content. Only `GlassBarView` draws the `colorOutlineVariant` 0.5 dp
+hairline and the fade, once, at `GlassChrome.edgeBottom`: the bottom of the
+lowest glass block.
 
-The blur snapshot is re-recorded when the backdrop changes: scroll events and
-every redraw of a screen's vertical list (`trackGlassBackdrop`), skipping the
-bar's own recording pass. The tint over blur is about 70 % opaque.
+Glass blocks, top to bottom:
+- the bar (status band included, same look on every screen);
+- an optional screen header (`GlassScreenHeader`: history counters, secrets
+  search, Time tabs, the Home alarms slot). It overlays the content right
+  under the bar, blurs the views below it and slides under the bar while the
+  list scrolls down (`GlassChrome.contentScrolled`), returning on scroll up or
+  at the top;
+- the pinned section header: a real list item placed by
+  `StickyHeadersLayoutManager`, whose background is swapped for the glass
+  (`StickyGlass`) while it is pinned.
 
-A sticky section header pinned at the bar edge is handed to the bar
-(`AppBarHost.pinUnderBar`): `GlassBarView` extends its surface over the header
-(same blur and tint), draws the header content and puts the single hairline
-and fade under the combined block. Elsewhere (below an expanded inner header)
-the header draws its own opaque surface. Every screen's resting geometry and
-the pinned history header are covered by `ScreenInsetsScreenshotTest`.
+`BaseFragment` calls `applyGlassChrome()` for every screen, nested ones
+included. The target is the primary vertical scroller (`clipToPadding=false`),
+else the root unless the screen has a `GlassScreenHeader`; views inside a
+screen header or a vertical scroller are skipped. Its top padding is the
+design spacing plus the part of `GlassChrome.contentTop` that overlaps the
+view, so pager pages under a screen header get it and views placed lower do
+not. A list at the top stays at the top when the header height changes.
+Geometry at rest is covered by `ScreenInsetsScreenshotTest`; the pinned and
+pushed states on Home, history and secrets by `GlassScreensScreenshotTest`.
 
 ## Build and test
 
@@ -184,6 +190,9 @@ targets, and Gradle sync is not used here.
 5. Run/Debug: Bazel run configuration for `//projects/mobile/android/app:app`
    (`android_binary`, ABI `arm64-v8a`); unit tests via the gutter icon or a
    Bazel test configuration for a `kt_android_local_test`/`kt_jvm_test` target.
+6. Side-by-side build: `//projects/mobile/android/app:app_preview` is the same
+   app as `dev.proflyder.home.preview` labelled "Home Preview" (debug key), so
+   it installs next to the release app for checking UI on a device.
 
 Known limitations: no Gradle-style Build Variants, Compose preview or Layout
 Inspector live updates; generated code appears only after *Build
@@ -538,10 +547,14 @@ badges are selectors in `render`.
   position 0 and starts at `paddingTop` (`isAtTop()`); `canScrollVertically`
   is not used for lists because a zero-height first row (the empty hub on the
   home screen) makes its offset estimate positive at the very top.
-- Sticky section headers (`StickySectionHeaders`) pin to the visible top of
-  the list (`paddingTop` with `clipToPadding`, otherwise the list edge), fill
-  the whole width with the window background and are pushed out by the next
-  header.
+- Sticky section headers: `StickyHeadersLayoutManager` (a `GridLayoutManager`,
+  span count 1 for plain lists). The current header (`SectionedAdapter.isStickyHeader`,
+  defaults to `isSectionHeader`) is its own item view, detached around every
+  base layout and scroll call, ignored by the recycler and laid out last at the
+  pin edge (`StickyPinEdge`: `paddingTop`, or the glass bottom under the app
+  chrome), so it draws above the rows, takes taps and is pushed out by the next
+  header. Adapter changes rebind it on the next layout; `scrollToPosition`
+  keeps the target below it.
 - Results between screens and sheets are typed: `object X : ResultKey<T>(T.serializer())`
   with a `@Serializable` value; the sender calls `setResult(X, value)`, the
   host registers `onResult(X) { value -> Intent }` in `onScreenCreate`
@@ -623,9 +636,9 @@ badges are selectors in `render`.
   (same model as `ScreenFragment`, `by screenViewModel()`). Plain choices use
   `OptionsSheet` and `WheelSheet` from `core/presentation`; results come back
   through typed `ResultKey`s.
-- Sectioned lists: the adapter implements `SectionedAdapter`; decorations
-  `StickySectionHeaders().attachTo(list)` (a tap on the pinned header goes to
-  the header) and `addGroupedRows()` (cards, dividers and a row ripple clipped
+- Sectioned lists: the adapter implements `SectionedAdapter`, the list uses
+  `StickyHeadersLayoutManager` (XML `app:layoutManager` or code) and
+  `addGroupedRows()` (cards, dividers and a row ripple clipped
   to each row's card shape).
 - A notice with an action is a `RouteNotice(message, route)` shown by
   `showNotice`: a snackbar with "Open" that opens the typed `Route`.

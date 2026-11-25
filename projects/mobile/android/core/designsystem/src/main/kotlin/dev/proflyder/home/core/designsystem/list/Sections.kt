@@ -4,6 +4,8 @@ import androidx.recyclerview.widget.RecyclerView
 
 interface SectionedAdapter {
     fun isSectionHeader(position: Int): Boolean
+
+    fun isStickyHeader(position: Int): Boolean = isSectionHeader(position)
 }
 
 data class GroupSlot(val first: Boolean, val last: Boolean)
@@ -16,8 +18,8 @@ fun SectionedAdapter.slotOf(position: Int, count: Int): GroupSlot? {
     )
 }
 
-fun SectionedAdapter.headerAtOrBefore(position: Int): Int? =
-    (position downTo 0).firstOrNull(::isSectionHeader)
+fun SectionedAdapter.stickyHeaderAtOrBefore(position: Int): Int? =
+    (position downTo 0).firstOrNull(::isStickyHeader)
 
 internal fun RecyclerView.sectionedAdapter(): Pair<RecyclerView.Adapter<*>, SectionedAdapter>? {
     val current = adapter ?: return null

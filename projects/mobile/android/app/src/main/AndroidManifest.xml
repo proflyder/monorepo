@@ -37,7 +37,7 @@
         android:enableOnBackInvokedCallback="true"
         android:fullBackupContent="@xml/backup_rules"
         android:icon="@drawable/app_ic_launcher_emerald"
-        android:label="@string/app_name"
+        android:label="${appLabel}"
         android:networkSecurityConfig="@xml/network_security_config"
         android:roundIcon="@drawable/app_ic_launcher_emerald"
         android:supportsRtl="true"
@@ -51,7 +51,7 @@
             android:enabled="true"
             android:exported="true"
             android:icon="@drawable/app_ic_launcher_emerald"
-            android:label="@string/app_name"
+            android:label="${appLabel}"
             android:roundIcon="@drawable/app_ic_launcher_emerald"
             android:targetActivity=".MainActivity">
             <intent-filter>
@@ -64,7 +64,7 @@
             android:enabled="false"
             android:exported="true"
             android:icon="@drawable/app_ic_launcher_system"
-            android:label="@string/app_name"
+            android:label="${appLabel}"
             android:roundIcon="@drawable/app_ic_launcher_system"
             android:targetActivity=".MainActivity">
             <intent-filter>
@@ -77,7 +77,7 @@
             android:enabled="false"
             android:exported="true"
             android:icon="@drawable/app_ic_launcher_neon"
-            android:label="@string/app_name"
+            android:label="${appLabel}"
             android:roundIcon="@drawable/app_ic_launcher_neon"
             android:targetActivity=".MainActivity">
             <intent-filter>

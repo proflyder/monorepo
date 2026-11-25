@@ -12,8 +12,8 @@ import androidx.lifecycle.repeatOnLifecycle
 import dev.proflyder.home.core.access.AppAccessSession
 import dev.proflyder.home.core.access.AppAccessState
 import dev.proflyder.home.core.access.allows
-import dev.proflyder.home.core.designsystem.glass.AppBarHeightTracker
 import dev.proflyder.home.core.designsystem.glass.AppBarHost
+import dev.proflyder.home.core.designsystem.glass.GlassChrome
 import dev.proflyder.home.core.model.AppLogger
 import dev.proflyder.home.core.navigation.AppActivityContribution
 import dev.proflyder.home.core.navigation.AppChromeState
@@ -32,13 +32,12 @@ import dev.zacsweers.metro.Inject
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
-class MainActivity private constructor(
-    private val barHeights: AppBarHeightTracker,
-) : AppCompatActivity(),
+class MainActivity :
+    AppCompatActivity(),
     NavigatorHost,
     FailureNoticePolicyProvider,
-    AppBarHost by barHeights {
-    constructor() : this(AppBarHeightTracker())
+    AppBarHost {
+    override val glassChrome = GlassChrome()
 
     internal lateinit var router: FragmentRouter
     internal lateinit var actionsMenu: ToolbarChrome
@@ -77,11 +76,8 @@ class MainActivity private constructor(
         enableEdgeToEdge()
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
-        binding.glassBar.bindBackdrop(binding.fragmentContainer)
-        barHeights.pinnedHeaderListener = binding.glassBar::setPinnedHeader
-        barHeights.backdropListener = binding.glassBar::requestSnapshot
-        binding.appbar.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> syncGlassBarHeight() }
-        syncGlassBarHeight()
+        binding.glassBar.bind(binding.fragmentContainer, glassChrome)
+        binding.appbar.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> glassChrome.updateBar(binding.appbar.height) }
         router = FragmentRouter(
             fragmentManager = supportFragmentManager,
             containerId = R.id.fragment_container,
@@ -109,14 +105,7 @@ class MainActivity private constructor(
         activityContributions.sortedBy { it.order }.forEach { it.attach(this) }
     }
 
-    private fun syncGlassBarHeight() {
-        val height = binding.appbar.height
-        binding.glassBar.setBarHeight(height, binding.appbar.paddingTop)
-        barHeights.update(height)
-    }
-
     private fun render(chrome: AppChromeState, accessState: AppAccessState) {
-        binding.glassBar.requestSnapshot()
         val visibleTabs = features.tabs().filter { accessState.allows(it.module) }
         val withoutSections = accessState is AppAccessState.Ready && visibleTabs.isEmpty()
         binding.fragmentContainer.isVisible = !withoutSections

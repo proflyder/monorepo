@@ -12,7 +12,6 @@ metro_android_library(
     deps = [
         "//projects/mobile/android/core/access",
         "//projects/mobile/android/core/data",
-        "@maven//:androidx_coordinatorlayout_coordinatorlayout",
         "//packages/kotlin/core",
         "//projects/mobile/android/core/config",
         "//projects/mobile/android/core/model",
@@ -77,7 +76,6 @@ home_android_local_test(
         "//projects/mobile/android/core/testing",
         "@maven//:androidx_recyclerview_recyclerview",
         "@maven//:androidx_swiperefreshlayout_swiperefreshlayout",
-        "@maven//:androidx_coordinatorlayout_coordinatorlayout",
         "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_core",
         "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_test",
     ],
