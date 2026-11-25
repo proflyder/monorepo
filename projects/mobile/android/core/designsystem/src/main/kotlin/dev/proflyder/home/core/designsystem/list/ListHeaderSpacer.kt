@@ -41,7 +41,7 @@ class ListHeaderSpacer private constructor(
         val view = spacer ?: return
         if (view.layoutParams.height == header.height) return
         view.layoutParams.height = header.height
-        list.post(view::requestLayout)
+        if (list.isComputingLayout) list.post(view::requestLayout) else view.requestLayout()
     }
 
     private inner class Follower : RecyclerView.OnScrollListener(), View.OnLayoutChangeListener {

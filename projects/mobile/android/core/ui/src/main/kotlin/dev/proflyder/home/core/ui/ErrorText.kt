@@ -1,6 +1,7 @@
 package dev.proflyder.home.core.ui
 
 import android.content.Context
+import dev.proflyder.home.core.model.ConnectCode
 import dev.proflyder.home.core.model.Field
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.model.StorageReason
@@ -12,10 +13,7 @@ fun RemoteFailure.userMessage(context: Context): String = when (this) {
     RemoteFailure.Timeout -> context.getString(R.string.ui_error_timeout)
     is RemoteFailure.Offline -> context.getString(R.string.ui_error_offline)
     is RemoteFailure.Tls -> context.getString(R.string.ui_error_tls)
-    is RemoteFailure.Server -> serverText(context, textKey, textArgs) ?: when {
-        message.isNotBlank() -> context.getString(R.string.ui_error_server, serverCode(context), message)
-        else -> context.getString(R.string.ui_error_server_generic, serverCode(context))
-    }
+    is RemoteFailure.Server -> serverText(context, textKey, textArgs) ?: statusMessage(context)
     is RemoteFailure.ProtocolFailure -> context.getString(R.string.ui_error_protocol)
     is RemoteFailure.Storage -> context.getString(reason.textRes())
     RemoteFailure.RemoteConfig -> context.getString(R.string.ui_error_remote_config)
@@ -42,6 +40,28 @@ fun RemoteFailure.userMessage(context: Context): String = when (this) {
         Field.UNSUPPORTED -> context.getString(R.string.ui_validation_unsupported)
     }
 }
+
+private fun RemoteFailure.Server.statusMessage(context: Context): String {
+    val known = statusText()
+    return when {
+        known != null -> context.getString(known, serverCode(context))
+        message.isNotBlank() -> context.getString(R.string.ui_error_server, serverCode(context), message)
+        else -> context.getString(R.string.ui_error_server_generic, serverCode(context))
+    }
+}
+
+private fun RemoteFailure.Server.statusText(): Int? = when {
+    code == ConnectCode.NOT_FOUND || httpStatus == HTTP_NOT_FOUND -> R.string.ui_error_not_found
+    code == ConnectCode.UNIMPLEMENTED || httpStatus == HTTP_NOT_IMPLEMENTED -> R.string.ui_error_unsupported
+    code == ConnectCode.RESOURCE_EXHAUSTED || httpStatus == HTTP_TOO_MANY_REQUESTS -> R.string.ui_error_too_many
+    httpStatus >= HTTP_SERVER_ERROR -> R.string.ui_error_server_failed
+    else -> null
+}
+
+private const val HTTP_NOT_FOUND = 404
+private const val HTTP_TOO_MANY_REQUESTS = 429
+private const val HTTP_SERVER_ERROR = 500
+private const val HTTP_NOT_IMPLEMENTED = 501
 
 private fun RemoteFailure.Server.serverCode(context: Context): String =
     reason.ifBlank { context.getString(R.string.ui_error_http_status, httpStatus) }

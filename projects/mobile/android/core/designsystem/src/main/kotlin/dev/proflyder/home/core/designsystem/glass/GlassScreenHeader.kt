@@ -21,6 +21,7 @@ class GlassScreenHeader @JvmOverloads constructor(
     init {
         orientation = VERTICAL
         setWillNotDraw(false)
+        receiveBorderlessRipples()
         ViewCompat.setOnApplyWindowInsetsListener(this) { view, insets ->
             view.updatePadding(top = baseTop + insets.getInsets(WindowInsetsCompat.Type.systemBars()).top)
             WindowInsetsCompat.CONSUMED

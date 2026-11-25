@@ -99,7 +99,7 @@ internal fun parseConnectFailure(
         else -> RemoteFailure.Server(
             httpStatus = httpCode,
             code = code,
-            message = message.ifBlank { "server returned HTTP $httpCode" },
+            message = message,
             reason = reason,
             textKey = localized?.first.orEmpty(),
             textArgs = localized?.second.orEmpty() + errorArguments(detailed, plain, retryAfterHeader),

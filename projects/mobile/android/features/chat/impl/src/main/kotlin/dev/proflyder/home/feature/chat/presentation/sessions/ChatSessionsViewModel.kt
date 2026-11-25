@@ -96,7 +96,8 @@ internal class ChatSessionsViewModel(
     }
 
     private fun report(outcome: Outcome<Unit>) {
-        if (outcome is Outcome.Failure) emit(ChatSessionsEvent.Failure(outcome.failure))
+        val failure = (outcome as? Outcome.Failure)?.failure ?: return
+        if (currentState.sessions.isNotEmpty()) emit(ChatSessionsEvent.Failure(failure))
     }
 }
 
