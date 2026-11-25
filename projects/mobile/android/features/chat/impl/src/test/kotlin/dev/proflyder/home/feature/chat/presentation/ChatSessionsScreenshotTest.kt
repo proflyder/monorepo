@@ -90,7 +90,7 @@ class ChatSessionsScreenshotTest {
     @Test
     fun searchCollapsedByDefault() {
         val binding = sessionList("chat-sessions-collapsed-light")
-        assertEquals(0, binding.chatSessionsHeader.height)
+        assertEquals(binding.chatSessionsHeader.paddingTop, binding.chatSessionsHeader.height)
         assertTrue(binding.chatSessionsSearchReveal.canScrollVertically(-1))
     }
 
@@ -103,7 +103,7 @@ class ChatSessionsScreenshotTest {
 
     private fun assertRevealed(binding: FragmentChatSessionsBinding) {
         val reveal = binding.chatSessionsSearchReveal
-        assertEquals(reveal.fullHeight, binding.chatSessionsHeader.height)
+        assertEquals(binding.chatSessionsHeader.paddingTop + reveal.fullHeight, binding.chatSessionsHeader.height)
         assertTrue(reveal.fullHeight > 0)
         assertTrue("refresh is reachable once the search is open", !reveal.canScrollVertically(-1))
     }

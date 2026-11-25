@@ -11,6 +11,7 @@ import androidx.core.graphics.Insets
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.children
+import com.google.android.material.floatingactionbutton.FloatingActionButton
 import androidx.core.view.isVisible
 
 interface GlassHeader
@@ -24,11 +25,7 @@ class GlassHeaderLayout @JvmOverloads constructor(
     private val scrims = ImmersiveScrims(this)
     private var scrimsDrawn = false
     private var drawnFooterTop = Float.NaN
-    private val footerWatcher = ViewTreeObserver.OnPreDrawListener {
-        val top = footer()?.scrimTop ?: Float.NaN
-        if (top != drawnFooterTop) invalidate()
-        true
-    }
+    private val footerWatcher = ViewTreeObserver.OnPreDrawListener { followFooter() }
 
     init {
         clipChildren = false
@@ -62,6 +59,21 @@ class GlassHeaderLayout @JvmOverloads constructor(
         scrims.drawBottom(canvas, drawnFooterTop)
     }
 
+    private fun followFooter(): Boolean {
+        val top = footer()?.scrimTop ?: Float.NaN
+        if (top != drawnFooterTop) invalidate()
+        anchorFabs(top)
+        return true
+    }
+
+    private fun anchorFabs(footerTop: Float) {
+        if (footerTop.isNaN()) return
+        children.filterIsInstance<FloatingActionButton>().forEach { fab ->
+            val params = fab.layoutParams as LayoutParams
+            fab.translationY = footerTop - params.bottomMargin - fab.height - fab.top
+        }
+    }
+
     private fun View.isImmersiveChrome(): Boolean = this is FloatingGlassHeader || this is FloatingGlassFooter
 
     private fun immersiveHeader(): View? = children.firstOrNull { it is FloatingGlassHeader && it.isVisible }
@@ -84,6 +96,7 @@ class GlassHeaderLayout @JvmOverloads constructor(
 
     override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
         super.onLayout(changed, left, top, right, bottom)
+        anchorFabs(footer()?.scrimTop ?: Float.NaN)
         val height = header()?.height ?: 0
         val last = received ?: return
         if (height != dispatchedHeight) post { dispatchApplyWindowInsets(last) }

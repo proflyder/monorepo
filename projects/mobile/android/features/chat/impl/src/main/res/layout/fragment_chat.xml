@@ -158,17 +158,6 @@
         android:paddingEnd="@dimen/chat_floating_margin"
         android:paddingBottom="@dimen/chat_floating_margin">
 
-        <dev.proflyder.home.core.designsystem.OutlinedFloatingActionButton
-            android:id="@+id/chat_scroll_down"
-            style="@style/Widget.Home.FloatingActionButton.SmallSecondary"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="end"
-            android:layout_marginBottom="@dimen/chat_fab_gap"
-            android:contentDescription="@string/chat_scroll_down"
-            android:visibility="gone"
-            app:srcCompat="@drawable/chat_ic_down" />
-
         <dev.proflyder.home.core.designsystem.glass.GlassPillLayout
             android:id="@+id/chat_extras"
             android:layout_width="match_parent"
@@ -369,4 +358,16 @@
             </FrameLayout>
         </LinearLayout>
     </dev.proflyder.home.core.designsystem.glass.FloatingGlassFooter>
+
+    <dev.proflyder.home.core.designsystem.OutlinedFloatingActionButton
+        android:id="@+id/chat_scroll_down"
+        style="@style/Widget.Home.FloatingActionButton.SmallSecondary"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|end"
+        android:layout_marginEnd="@dimen/chat_floating_margin"
+        android:layout_marginBottom="@dimen/chat_fab_gap"
+        android:contentDescription="@string/chat_scroll_down"
+        android:visibility="invisible"
+        app:srcCompat="@drawable/chat_ic_down" />
 </dev.proflyder.home.core.designsystem.glass.GlassHeaderLayout>

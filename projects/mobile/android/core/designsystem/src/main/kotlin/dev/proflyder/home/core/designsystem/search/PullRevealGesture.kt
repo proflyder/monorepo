@@ -42,9 +42,15 @@ internal class PullRevealGesture(
     }
 
     private fun shouldStart(distance: Float): Boolean {
-        val atTop = !list.canScrollVertically(-1)
+        val atTop = list.isAtStart()
         val pullingDown = distance > slop && search.offset < search.fullHeight
         return active || (atTop && pullingDown)
+    }
+
+    private fun RecyclerView.isAtStart(): Boolean {
+        val first = getChildAt(0) ?: return true
+        val manager = layoutManager ?: return !canScrollVertically(-1)
+        return getChildAdapterPosition(first) == 0 && manager.getDecoratedTop(first) >= paddingTop
     }
 
     private fun finish() {

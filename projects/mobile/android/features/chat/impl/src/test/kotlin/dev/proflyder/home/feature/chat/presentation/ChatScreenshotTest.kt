@@ -199,7 +199,8 @@ class ChatScreenshotTest {
         val gap = binding.root.resources.getDimensionPixelSize(R.dimen.chat_fab_gap)
 
         assertEquals(View.VISIBLE, binding.chatScrollDown.visibility)
-        assertEquals(binding.chatComposeRow.top, binding.chatScrollDown.bottom + gap)
+        val buttonBottom = binding.chatScrollDown.bottom + binding.chatScrollDown.translationY
+        assertEquals((binding.chatPanel.top + binding.chatComposeRow.top).toFloat(), buttonBottom + gap, 1f)
         assertTrue(binding.chatList.paddingBottom >= binding.chatPanel.height)
     }
 
