@@ -891,16 +891,15 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content">
 
-                <LinearLayout
+                <dev.proflyder.home.core.designsystem.list.GroupedRowsLayout
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:paddingStart="@dimen/ds_space_l"
-                    android:paddingEnd="@dimen/ds_space_l">
+                    android:layout_height="wrap_content">
 
                     <dev.proflyder.home.core.designsystem.ListRow
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
+                        android:clickable="true"
+                        android:focusable="true"
                         app:rowChevron="true"
                         app:rowIcon="@drawable/ds_ic_add"
                         app:rowSubtitle="@string/ds_catalog_row_subtitle"
@@ -925,7 +924,7 @@
                         android:layout_height="wrap_content"
                         app:rowSwitch="true"
                         app:rowTitle="@string/ds_catalog_row_title" />
-                </LinearLayout>
+                </dev.proflyder.home.core.designsystem.list.GroupedRowsLayout>
             </com.google.android.material.card.MaterialCardView>
 
         </LinearLayout>

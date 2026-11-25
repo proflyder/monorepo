@@ -40,6 +40,10 @@ class GroupedRowRipple(
     }
 }
 
+internal fun View.groupedRowRipple(@Px radius: Float): GroupedRowRipple =
+    getTag(R.id.ds_grouped_row_ripple) as? GroupedRowRipple
+        ?: GroupedRowRipple(this, radius).also { setTag(R.id.ds_grouped_row_ripple, it) }
+
 fun GroupSlot.shape(@Px radius: Float): ShapeAppearanceModel {
     val top = if (first) radius else 0f
     val bottom = if (last) radius else 0f

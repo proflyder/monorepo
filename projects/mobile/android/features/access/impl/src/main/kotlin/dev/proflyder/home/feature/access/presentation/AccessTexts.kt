@@ -1,6 +1,7 @@
 package dev.proflyder.home.feature.access.presentation
 
 import android.content.Context
+import dev.proflyder.home.core.designsystem.joinMeta
 import dev.proflyder.home.core.model.AccessToken
 import dev.proflyder.home.core.model.AppModule
 import dev.proflyder.home.feature.access.impl.R
@@ -28,10 +29,8 @@ internal fun moduleSummary(context: Context, modules: Set<AppModule>): String {
     val names = AppModule.entries
         .filter { it != AppModule.BASE && it in modules }
         .map { context.getString(moduleTitleRes(it)) }
-    return names.takeIf { it.isNotEmpty() }?.joinToString(MODULE_SEPARATOR)
+    return names.takeIf { it.isNotEmpty() }?.let(context::joinMeta)
         ?: context.getString(R.string.access_modules_base_only)
 }
 
 internal fun AccessToken.summary(context: Context): String = moduleSummary(context, modules)
-
-private const val MODULE_SEPARATOR = " · "

@@ -197,6 +197,15 @@ traversal/percent-encoding и audit-push без значений. Реальны
 - `catalog.rs` и `deny.rs` читают файлы из ConfigMap (`SECRETS_GATEWAY_*_FILE`),
   поэтому solution не вшивает project-пути; `deny.json` — источник и для кода,
   и для сгенерированной `policy.hcl`.
+- `api/` разделён по ответственности: `mod.rs` (состояние и роутер),
+  `catalog.rs` (список, метаданные), `secret.rs` (reveal/update/rollback/delete),
+  `stepup.rs`, `device.rs`, `guard.rs` (аутентификация, нормализация пути,
+  проверка step-up подписи), `reply.rs` (ответы), `validate.rs`, `request.rs`.
+  Хендлеры возвращают `Result<Response, Rejection>`; `Rejection` хранит
+  `Box<Response>`, поэтому `?` работает без `clippy::result_large_err`.
+  `AuditScope` фиксирует action/principal/path/key один раз на запрос, и
+  каждый отказ проходит через `scope.reject(...)`: аудит и ответ не
+  расходятся.
 - `health.rs` проверяет свежесть snapshot и `/v1/sys/health` OpenBao; liveness
   остаётся статической.
 - `openbao::list_all` ограничен 200 записями, 64 каталогами и 5 уровнями;

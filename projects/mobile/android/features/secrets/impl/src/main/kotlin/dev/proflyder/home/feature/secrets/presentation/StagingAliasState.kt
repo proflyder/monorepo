@@ -1,6 +1,7 @@
 package dev.proflyder.home.feature.secrets.presentation
 
 import android.content.Context
+import android.content.SharedPreferences
 import androidx.core.content.edit
 import java.security.MessageDigest
 
@@ -23,15 +24,18 @@ internal class StagingAliasState(private val context: Context) {
         }
     }
 
-    private fun preferences() =
-        context.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
+    private fun preferences() = context.deviceKeyPreferences()
 
     private companion object {
-        const val PREFERENCES = "home_secrets_device"
         const val ALIAS_KEY = "staging_alias"
         const val CHALLENGE_KEY = "staging_challenge"
     }
 }
+
+internal fun Context.deviceKeyPreferences(): SharedPreferences =
+    getSharedPreferences(DEVICE_KEY_PREFERENCES, Context.MODE_PRIVATE)
+
+private const val DEVICE_KEY_PREFERENCES = "home_secrets_device"
 
 internal fun canReuseStagedKey(
     stagedAlias: String?,

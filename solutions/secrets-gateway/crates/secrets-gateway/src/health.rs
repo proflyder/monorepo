@@ -15,15 +15,14 @@ use crate::config::Config;
 const TIMEOUT: Duration = Duration::from_secs(4);
 
 pub fn liveness_router() -> Router {
-    Router::new().route("/healthz", get(health))
+    Router::new().route("/healthz", get(|| std::future::ready(health())))
 }
 
 pub fn router(state: GatewayState) -> Router {
     liveness_router().merge(Router::new().route("/readyz", get(ready)).with_state(state))
 }
 
-#[allow(clippy::unused_async)]
-async fn health() -> Json<Value> {
+fn health() -> Json<Value> {
     Json(json!({
         "status": "ok",
         "service": "secrets-gateway",

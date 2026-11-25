@@ -42,12 +42,18 @@ a typed router. Device acceptance and open work: [STATE](../../../docs/STATE.md)
   screen's toolbar overflow as **Device**; opening
   that screen never rotates an enrolled key, and **Re-bind** asks for
   confirmation. A staged key survives screen recreation and is promoted only
-  after the server accepts it; leftovers are swept on the next open. Step-up needs Android 9 (API 28); on API 26–27 the screen
-  reports that key signing is unavailable. `setInvalidatedByBiometricEnrollment`
+  after the server accepts it; leftovers are swept on the next open. Step-up needs Android 9 (API 28):
+  `deviceSigner()` returns `UnsupportedDeviceSigner` on API 26–27 and the
+  `@RequiresApi(P)` `AndroidDeviceSigner` above it, which composes
+  `DeviceKeyStore` (aliases, key generation, signing key) and
+  `BiometricSigning` (prompt and callback). `setInvalidatedByBiometricEnrollment`
   does not invalidate keys that allow the device credential, so enrolling a new
   biometric may leave the key usable; `setUnlockedDeviceRequired(true)` is set
   and re-bind/revoke are explicit. A tapped value re-masks after 30 s; copying
-  also clears the sensitive clipboard entry after 30 s. Every secrets screen
+  goes through the shared `core/ui` `SensitiveClipboard` (also used for a newly
+  created access token), which marks the clip sensitive and clears it after
+  30 s. `SensitiveClipboard.forProcess` runs the clear on the process
+  lifecycle scope, so leaving or recreating the screen does not cancel it. Every secrets screen
   sets `FLAG_SECURE`, secrets notifications use `VISIBILITY_SECRET` so paths
   stay off the lock screen, the client is excluded from network inspection and
   values are never cached on disk.

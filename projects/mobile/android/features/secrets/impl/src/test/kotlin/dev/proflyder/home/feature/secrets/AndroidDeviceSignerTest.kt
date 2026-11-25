@@ -4,6 +4,9 @@ import android.hardware.biometrics.BiometricPrompt
 import android.os.CancellationSignal
 import dev.proflyder.home.feature.secrets.presentation.AndroidDeviceSigner
 import dev.proflyder.home.feature.secrets.presentation.BiometricLauncher
+import dev.proflyder.home.feature.secrets.presentation.BiometricSigning
+import dev.proflyder.home.feature.secrets.presentation.DeviceSignatureResult
+import dev.proflyder.home.feature.secrets.presentation.SigningRequest
 import java.security.Signature
 import java.util.concurrent.Executor
 import org.junit.Assert.assertSame
@@ -33,18 +36,18 @@ class AndroidDeviceSignerTest {
 
     @Test
     fun aSignatureRequestPassesACryptoObjectAndNotAPlainSignature() {
-        val signer = AndroidDeviceSigner(RuntimeEnvironment.getApplication()) { FakeLauncher() }
         val launcher = FakeLauncher()
         val signature = Signature.getInstance("SHA256withECDSA")
 
-        signer.start(
-            launcher = launcher,
-            signature = signature,
-            payload = "payload",
-            cancellation = CancellationSignal(),
-            executor = Executor { command -> command.run() },
-            onResult = {},
-        )
+        BiometricSigning().start(
+            SigningRequest(
+                launcher = launcher,
+                signature = signature,
+                payload = "payload",
+                cancellation = CancellationSignal(),
+                executor = Executor { command -> command.run() },
+            ),
+        ) {}
 
         assertSame(signature, launcher.crypto?.signature)
     }
@@ -52,7 +55,7 @@ class AndroidDeviceSignerTest {
     @Test
     fun anUnsupportedPlatformDoesNotRequestASignature() {
         val signer = AndroidDeviceSigner(RuntimeEnvironment.getApplication()) { FakeLauncher() }
-        var result: dev.proflyder.home.feature.secrets.presentation.DeviceSignatureResult? = null
+        var result: DeviceSignatureResult? = null
 
         val activity = Robolectric.buildActivity(SecretsTestActivity::class.java).setup().get()
         signer.requestSignature(
@@ -61,6 +64,6 @@ class AndroidDeviceSignerTest {
             onResult = { result = it },
         )
 
-        assertTrue(result is dev.proflyder.home.feature.secrets.presentation.DeviceSignatureResult.Failed)
+        assertTrue(result is DeviceSignatureResult.Failed)
     }
 }

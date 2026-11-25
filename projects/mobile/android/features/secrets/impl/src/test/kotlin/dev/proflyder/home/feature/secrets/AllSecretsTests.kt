@@ -12,7 +12,6 @@ import org.junit.runners.Suite
     SecretPathViewModelTest::class,
     SecretsDeviceViewModelTest::class,
     RemoteSecretsRepositoryTest::class,
-    SecretClipboardTest::class,
     SecretsScreenSecureTest::class,
     SecretsScreenshotTest::class,
 )

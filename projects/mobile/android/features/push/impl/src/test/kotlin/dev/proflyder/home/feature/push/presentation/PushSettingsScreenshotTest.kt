@@ -8,6 +8,7 @@ import androidx.appcompat.view.ContextThemeWrapper
 import dev.proflyder.home.feature.push.impl.R
 import dev.proflyder.home.feature.push.impl.databinding.FragmentPushSettingsBinding
 import java.io.File
+import org.junit.Assert.assertNotNull
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -20,10 +21,16 @@ import org.robolectric.annotation.GraphicsMode
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class PushSettingsScreenshotTest {
     @Test
-    fun missingPermissionsAreVisibleInTheDarkTheme() {
+    fun missingPermissionsAreVisibleInTheDarkTheme() = renderSettings("push-settings-dark.png")
+
+    @Test
+    @Config(qualifiers = "w411dp-h891dp-notnight-xxhdpi")
+    fun missingPermissionsAreVisibleInTheLightTheme() = renderSettings("push-settings-light.png")
+
+    private fun renderSettings(name: String) {
         val themed = ContextThemeWrapper(
             RuntimeEnvironment.getApplication(),
-            com.google.android.material.R.style.Theme_Material3_Dark_NoActionBar,
+            com.google.android.material.R.style.Theme_Material3_DayNight_NoActionBar,
         )
         themed.theme.applyStyle(dev.proflyder.home.core.theme.R.style.ThemeOverlay_Home_Neon, true)
         val binding = FragmentPushSettingsBinding.inflate(LayoutInflater.from(themed))
@@ -35,7 +42,8 @@ class PushSettingsScreenshotTest {
         binding.pushDeviceName.setText(SAMPLE_DEVICE_NAME)
         binding.pushDeviceNameSave.isEnabled = true
         binding.pushRegistration.text = themed.getString(R.string.push_not_registered)
-        savePng(binding.root, "push-settings-dark.png")
+        savePng(binding.root, name)
+        assertNotNull(binding.pushNotificationsRow.foreground)
     }
 
     private fun savePng(root: View, name: String) {

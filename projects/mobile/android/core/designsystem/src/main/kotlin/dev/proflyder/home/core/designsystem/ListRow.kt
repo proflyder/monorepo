@@ -18,7 +18,7 @@ import com.google.android.material.materialswitch.MaterialSwitch
 class ListRow @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
-) : LinearLayout(context, attrs) {
+) : LinearLayout(context, attrs, 0, R.style.Widget_Home_ListRow) {
     private val iconView: ImageView
     private val titleView: TextView
     private val subtitleView: TextView

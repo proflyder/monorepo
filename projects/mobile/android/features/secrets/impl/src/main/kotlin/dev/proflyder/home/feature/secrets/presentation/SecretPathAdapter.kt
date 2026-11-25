@@ -2,6 +2,9 @@ package dev.proflyder.home.feature.secrets.presentation
 
 import android.view.LayoutInflater
 import android.view.ViewGroup
+import dev.proflyder.home.core.designsystem.joinMeta
+import dev.proflyder.home.core.designsystem.list.SectionedAdapter
+import dev.proflyder.home.core.model.SecretVersion
 import dev.proflyder.home.core.presentation.KeyedDiff
 import dev.proflyder.home.core.ui.AdapterCallback
 import dev.proflyder.home.core.ui.BaseAdapterCallback
@@ -35,7 +38,11 @@ private val PathDiff = KeyedDiff<SecretPathRow>(key = { it.key })
 
 internal class SecretPathAdapter(
     private val actions: SecretPathActions,
-) : BaseListAdapter<SecretPathRow, ViewBinding, PathCallback>(BaseAdapterCallback(), PathDiff) {
+) : BaseListAdapter<SecretPathRow, ViewBinding, PathCallback>(BaseAdapterCallback(), PathDiff),
+    SectionedAdapter {
+    override fun isSectionHeader(position: Int): Boolean = getItem(position).let {
+        it !is SecretPathRow.KeyRow && it !is SecretPathRow.VersionRow
+    }
 
     override fun viewTypeOf(item: SecretPathRow): Int = when (item) {
         is SecretPathRow.Header -> TYPE_HEADER
@@ -96,7 +103,8 @@ internal class SecretPathAdapter(
         override fun bind(item: SecretPathRow) {
             val row = item as SecretPathRow.VersionRow
             views.secretVersionRow.title = views.root.context.getString(R.string.secrets_version, row.version.version)
-            views.secretVersionRow.subtitle = listOfNotNull(row.createdLabel, row.unavailableLabel).joinToString(" · ")
+            views.secretVersionRow.subtitle = listOfNotNull(row.createdLabel, row.unavailableLabel)
+                .let(views.root.context::joinMeta)
             views.secretVersionRow.value = if (row.current) views.root.context.getString(R.string.secrets_version_current) else null
             views.secretVersionRollback.text = row.rollbackLabel
             views.secretVersionRollback.setVisible(row.version.available && !row.current)
@@ -138,11 +146,11 @@ internal fun keyRows(
 }
 
 internal fun versionRows(
-    versions: List<dev.proflyder.home.core.model.SecretVersion>,
+    versions: List<SecretVersion>,
     currentVersion: Long,
     createdLabel: (String) -> String,
     rollbackLabel: String,
-    unavailableLabel: (dev.proflyder.home.core.model.SecretVersion) -> String?,
+    unavailableLabel: (SecretVersion) -> String?,
 ): List<SecretPathRow> = versions.sortedByDescending { it.version }.map { version ->
     SecretPathRow.VersionRow(
         key = "version:${version.version}",

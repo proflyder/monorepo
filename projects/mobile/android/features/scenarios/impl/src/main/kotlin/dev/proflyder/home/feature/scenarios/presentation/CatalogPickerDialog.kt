@@ -1,6 +1,5 @@
 package dev.proflyder.home.feature.scenarios.presentation
 
-import dev.proflyder.home.core.presentation.SwitchBinder
 import android.content.Context
 import android.view.LayoutInflater
 import android.view.View
@@ -8,13 +7,16 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.widget.NestedScrollView
 import com.google.android.material.bottomsheet.BottomSheetDialog
+import dev.proflyder.home.core.designsystem.R as DesignR
+import dev.proflyder.home.core.designsystem.joinMeta
+import dev.proflyder.home.core.model.CatalogDeviceGroup
 import dev.proflyder.home.core.model.CatalogGrouping
 import dev.proflyder.home.core.model.CatalogGroupingLabels
-import dev.proflyder.home.core.model.CatalogDeviceGroup
 import dev.proflyder.home.core.model.CatalogRoomGroup
 import dev.proflyder.home.core.model.ControlAction
 import dev.proflyder.home.core.model.ControlEntry
 import dev.proflyder.home.core.model.ControlKind
+import dev.proflyder.home.core.presentation.SwitchBinder
 import dev.proflyder.home.core.ui.serverText
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.feature.scenarios.impl.R
@@ -105,7 +107,7 @@ internal class CatalogPickerDialog(
         if (entry.actions.contains(ControlAction.SET)) {
             parts += context.getString(R.string.scenarios_actions_adjust)
         }
-        return parts.distinct().joinToString(SEPARATOR)
+        return context.joinMeta(parts.distinct())
     }
 
     private fun iconOf(entry: ControlEntry): Int = when (entry.kind) {
@@ -122,20 +124,20 @@ internal class CatalogPickerDialog(
     private fun header(text: String): TextView = TextView(context).apply {
         this.text = text
         setTextAppearance(com.google.android.material.R.style.TextAppearance_Material3_TitleMedium)
-        setPadding(dp(24), dp(16), dp(24), dp(4))
+        setPadding(space(DesignR.dimen.ds_space_xl), space(DesignR.dimen.ds_space_l), space(DesignR.dimen.ds_space_xl), space(DesignR.dimen.ds_space_xs))
     }
 
     private fun subheader(text: String): TextView = TextView(context).apply {
         this.text = text
         setTextAppearance(com.google.android.material.R.style.TextAppearance_Material3_LabelLarge)
-        setPadding(dp(24), dp(8), dp(24), dp(2))
+        setPadding(space(DesignR.dimen.ds_space_xl), space(DesignR.dimen.ds_space_s), space(DesignR.dimen.ds_space_xl), space(DesignR.dimen.ds_space_xs))
     }
 
     private operator fun LinearLayout.plusAssign(view: View) {
         addView(view)
     }
 
-    private fun dp(value: Int): Int = (value * context.resources.displayMetrics.density).toInt()
+    private fun space(dimen: Int): Int = context.resources.getDimensionPixelSize(dimen)
 
     private class ResourceGroupingLabels(private val context: Context) : CatalogGroupingLabels {
         override fun scenariosHa(): String = context.getString(R.string.scenarios_catalog_group_scenarios)
@@ -147,7 +149,4 @@ internal class CatalogPickerDialog(
         override fun device(): String = context.getString(R.string.scenarios_catalog_kind_device)
     }
 
-    private companion object {
-        const val SEPARATOR = " · "
-    }
 }
