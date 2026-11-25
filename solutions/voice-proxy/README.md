@@ -181,7 +181,12 @@ own sessions: `HERMES_CHAT_RELAY_SESSION` (`home-app`) and ids starting with
 | `PATCH` | `/api/sessions/<session>` | body may only contain `title`; `archived` and the rest are refused, Hermes archive triggers retention deletion |
 | `DELETE` | `/api/sessions/<session>` | delete the session |
 | `POST` | `/api/sessions/<session>/chat/stream` | the SSE body is passed through unchanged |
+| `GET` | `/v1/health` | Hermes health, read-only |
+| `GET` | `/api/sessions?source=<telegram\|api_server>` | read-only list; the relay rewrites the query to `source` + `limit=30`, any other source is `403` |
+| `GET` | `/api/sessions/<session>/messages` | read-only; allowed only when Hermes reports the session `source` as `telegram` or `api_server`; the relay asks for `order=latest&limit=40` |
 
+The read-only routes serve the mcp-gateway Hermes panel (`/report` answers,
+recent voice turns); nothing on them can create, change or delete a session.
 Everything else answers `404`; a wrong caller token `401`; another session or
 a refused field `403`. The caller presents `HERMES_CHAT_RELAY_TOKEN_FILE`
 (`k8s/home-assistant/hermes-chat-relay`); upstream calls carry

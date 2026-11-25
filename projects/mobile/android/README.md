@@ -58,6 +58,14 @@ a typed router. Device acceptance and open work: [STATE](../../../docs/STATE.md)
   sets `FLAG_SECURE`, secrets notifications use `VISIBILITY_SECRET` so paths
   stay off the lock screen, the client is excluded from network inspection and
   values are never cached on disk.
+- **System → Hermes** (owner with the `chat` module) is the read-only
+  `features/hermes` screen over mcp-gateway `/v1/hermes/*`: **Agents** (bb
+  threads of the personal profile with status and runtime), **Reports**
+  (`/report` answers from Telegram, a row opens the full text) and **Voice**
+  (voice proxy and Hermes health, agent mode, recent speaker requests with the
+  reply and latency). `HttpHermesRepository` keeps one `StateFlow` with a
+  `Loaded` slot per panel; a failed refresh keeps the last value and shows a
+  snackbar. There is no cancel action: the bb bridge has no such method.
 - Push over FCM: ordinary notifications with a `home://` deep link and the
   loud find-phone ring. Built-in VPN home (WireGuard, OpenConnect hand-off).
 - No offline cache and no generic task UI. `EnqueueTask` is one-shot; the

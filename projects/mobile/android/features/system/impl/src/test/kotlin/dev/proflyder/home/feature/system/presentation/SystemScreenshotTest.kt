@@ -61,7 +61,7 @@ class SystemScreenshotTest {
     private fun health(snapshot: SystemSnapshot): (SystemRows) -> List<SystemRow> = { it.health(snapshot) }
 
     private fun overview(snapshot: SystemSnapshot): (SystemRows) -> List<SystemRow> =
-        { it.overview(snapshot, administrator = true, secrets = true) }
+        { it.overview(snapshot, SystemLinks(access = true, secrets = true)) }
 
     @Test
     fun overviewTab() {

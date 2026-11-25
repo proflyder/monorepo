@@ -17,6 +17,7 @@ import org.junit.runners.Suite
     TokenRefreshAuthenticatorTest::class,
     WireDtosTest::class,
     SystemDashboardClientTest::class,
+    HermesPanelClientTest::class,
     ChatClientTest::class,
     VpnProfileClientTest::class,
     NotificationHistoryClientTest::class,

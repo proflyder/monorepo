@@ -5,6 +5,7 @@ pub mod checks;
 pub mod config;
 pub mod domain;
 pub mod health;
+pub mod hermes;
 pub mod kubernetes;
 pub mod mcp;
 pub mod metrics;

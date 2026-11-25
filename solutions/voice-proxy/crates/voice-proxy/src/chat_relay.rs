@@ -5,7 +5,7 @@ use std::task::{Context, Poll};
 
 use axum::Router;
 use axum::body::{Body, Bytes};
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, HeaderValue, Response, StatusCode, header};
 use axum::routing::{get, post};
 use tokio::sync::mpsc;
@@ -16,6 +16,15 @@ use crate::services::TokenProvider;
 pub const MAX_RELAY_BODY: usize = 12 << 20;
 pub const MAX_SESSION_ID: usize = 96;
 pub const PATCHABLE_FIELDS: [&str; 1] = ["title"];
+pub const READABLE_SOURCES: [&str; 2] = ["telegram", "api_server"];
+pub const SESSION_LIST_LIMIT: usize = 30;
+pub const MESSAGE_PAGE_LIMIT: usize = 40;
+
+#[derive(Debug, serde::Deserialize)]
+struct SourceQuery {
+    #[serde(default)]
+    source: String,
+}
 
 #[derive(Clone, Debug)]
 pub struct SessionPolicy {
@@ -34,16 +43,22 @@ impl SessionPolicy {
 
     #[must_use]
     pub fn allows(&self, id: &str) -> bool {
-        let safe = id.len() <= MAX_SESSION_ID
-            && id
-                .chars()
-                .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-');
+        let safe = safe_session_id(id);
         let owned = id == &*self.exact
             || (!self.prefix.is_empty()
                 && id.len() > self.prefix.len()
                 && id.starts_with(&*self.prefix));
         safe && owned
     }
+}
+
+#[must_use]
+pub fn safe_session_id(id: &str) -> bool {
+    !id.is_empty()
+        && id.len() <= MAX_SESSION_ID
+        && id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
 }
 
 #[derive(Clone)]
@@ -72,7 +87,9 @@ impl ChatRelay {
 
     pub fn router(self) -> Router {
         Router::new()
-            .route("/api/sessions", post(create_session))
+            .route("/v1/health", get(health))
+            .route("/api/sessions", post(create_session).get(list_sessions))
+            .route("/api/sessions/{id}/messages", get(session_messages))
             .route(
                 "/api/sessions/{id}",
                 get(read_session)
@@ -122,6 +139,25 @@ impl ChatRelay {
             return Err(StatusCode::FORBIDDEN);
         }
         Ok(())
+    }
+
+    async fn readable_source(&self, id: &str) -> bool {
+        let Ok(fetch) = self
+            .upstream
+            .buffered(
+                reqwest::Method::GET,
+                &format!("/api/sessions/{id}"),
+                None,
+                self.upstream_authorization(),
+                None,
+                None,
+            )
+            .await
+        else {
+            return false;
+        };
+        fetch.status.is_success()
+            && session_source(&fetch.body).is_some_and(|source| is_readable_source(&source))
     }
 
     fn authorized(&self, headers: &HeaderMap) -> bool {
@@ -206,6 +242,60 @@ async fn delete_session(
             None,
         )
         .await
+}
+
+async fn health(State(relay): State<Arc<ChatRelay>>, headers: HeaderMap) -> Response<Body> {
+    if !relay.authorized(&headers) {
+        return status(StatusCode::UNAUTHORIZED);
+    }
+    relay
+        .forward(reqwest::Method::GET, "/v1/health", None)
+        .await
+}
+
+async fn list_sessions(
+    State(relay): State<Arc<ChatRelay>>,
+    Query(query): Query<SourceQuery>,
+    headers: HeaderMap,
+) -> Response<Body> {
+    if !relay.authorized(&headers) {
+        return status(StatusCode::UNAUTHORIZED);
+    }
+    if !is_readable_source(&query.source) {
+        return status(StatusCode::FORBIDDEN);
+    }
+    let path = format!(
+        "/api/sessions?source={}&limit={SESSION_LIST_LIMIT}",
+        query.source
+    );
+    relay.forward(reqwest::Method::GET, &path, None).await
+}
+
+async fn session_messages(
+    State(relay): State<Arc<ChatRelay>>,
+    Path(id): Path<String>,
+    headers: HeaderMap,
+) -> Response<Body> {
+    if !relay.authorized(&headers) {
+        return status(StatusCode::UNAUTHORIZED);
+    }
+    if !safe_session_id(&id) || !relay.readable_source(&id).await {
+        return status(StatusCode::FORBIDDEN);
+    }
+    let path = format!("/api/sessions/{id}/messages?order=latest&limit={MESSAGE_PAGE_LIMIT}");
+    relay.forward(reqwest::Method::GET, &path, None).await
+}
+
+fn is_readable_source(source: &str) -> bool {
+    READABLE_SOURCES.contains(&source)
+}
+
+fn session_source(body: &[u8]) -> Option<String> {
+    let value: serde_json::Value = serde_json::from_slice(body).ok()?;
+    value
+        .pointer("/session/source")
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_owned)
 }
 
 fn only_patchable_fields(body: &[u8]) -> bool {
@@ -530,6 +620,82 @@ mod tests {
                 "GET  Bearer hermes-key".to_owned(),
                 "PATCH {\"title\":\"Trip\"} Bearer hermes-key".to_owned(),
                 "DELETE  Bearer hermes-key".to_owned(),
+            ]
+        );
+    }
+
+    async fn history_upstream(seen: Seen) -> String {
+        let route = move |headers: HeaderMap, uri: axum::http::Uri| {
+            let seen = seen.clone();
+            async move {
+                let path = uri
+                    .path_and_query()
+                    .map(ToString::to_string)
+                    .unwrap_or_default();
+                record(&seen, &headers, &path);
+                let source = if path.contains("tg_1") {
+                    "telegram"
+                } else {
+                    "cli"
+                };
+                format!("{{\"session\":{{\"id\":\"x\",\"source\":\"{source}\"}}}}")
+            }
+        };
+        serve(Router::new().fallback(route)).await
+    }
+
+    #[tokio::test]
+    async fn history_reads_only_allowlisted_sources_with_fixed_pages() {
+        let seen = Seen::default();
+        let relay = relay_for(&history_upstream(seen.clone()).await).await;
+        let client = reqwest::Client::new();
+        let get = |path: &str| {
+            client
+                .get(format!("{relay}{path}"))
+                .bearer_auth("caller")
+                .send()
+        };
+        assert_eq!(get("/v1/health").await.expect("health").status(), 200);
+        assert_eq!(
+            get("/api/sessions?source=telegram&limit=999")
+                .await
+                .expect("list")
+                .status(),
+            200
+        );
+        assert_eq!(
+            get("/api/sessions?source=cli").await.expect("cli").status(),
+            403
+        );
+        assert_eq!(get("/api/sessions").await.expect("bare").status(), 403);
+        assert_eq!(
+            get("/api/sessions/tg_1/messages")
+                .await
+                .expect("messages")
+                .status(),
+            200
+        );
+        assert_eq!(
+            get("/api/sessions/cli_1/messages")
+                .await
+                .expect("foreign")
+                .status(),
+            403
+        );
+        let unauthorized = client
+            .get(format!("{relay}/api/sessions?source=telegram"))
+            .send()
+            .await
+            .expect("anonymous");
+        assert_eq!(unauthorized.status(), 401);
+        assert_eq!(
+            seen.0.lock().expect("lock").clone(),
+            vec![
+                "/v1/health Bearer hermes-key".to_owned(),
+                "/api/sessions?source=telegram&limit=30 Bearer hermes-key".to_owned(),
+                "/api/sessions/tg_1 Bearer hermes-key".to_owned(),
+                "/api/sessions/tg_1/messages?order=latest&limit=40 Bearer hermes-key".to_owned(),
+                "/api/sessions/cli_1 Bearer hermes-key".to_owned(),
             ]
         );
     }

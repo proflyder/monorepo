@@ -93,6 +93,7 @@ test_suite(
         "//projects/mobile/android/features/reminders/impl:robolectric_test",
         "//projects/mobile/android/features/scenarios/api:api_test",
         "//projects/mobile/android/features/scenarios/impl:robolectric_test",
+        "//projects/mobile/android/features/hermes/impl:robolectric_test",
         "//projects/mobile/android/features/secrets/impl:robolectric_test",
         "//projects/mobile/android/features/settings/impl:robolectric_test",
         "//projects/mobile/android/features/system/impl:robolectric_test",

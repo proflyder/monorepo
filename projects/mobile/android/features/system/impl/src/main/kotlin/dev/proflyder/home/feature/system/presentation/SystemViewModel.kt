@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dev.proflyder.home.core.access.AppAccessSource
 import dev.proflyder.home.core.access.administrator
+import dev.proflyder.home.core.access.hermesAllowed
 import dev.proflyder.home.core.access.secretsAllowed
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.navigation.Route
@@ -24,8 +25,7 @@ import kotlinx.coroutines.flow.runningFold
 
 internal data class SystemUiState(
     val snapshot: SystemState = SystemState(),
-    val administrator: Boolean = false,
-    val secrets: Boolean = false,
+    val links: SystemLinks = SystemLinks(),
 ) {
     val loading: Boolean get() = snapshot.loading
 
@@ -50,7 +50,10 @@ internal class SystemViewModel(
 ) : StateViewModel<SystemUiState, SystemIntent, SystemEvent>(SystemUiState()) {
     init {
         combine(repository.state, access.state) { state, accessState ->
-            SystemUiState(state, accessState.administrator, accessState.secretsAllowed)
+            SystemUiState(
+                snapshot = state,
+                links = SystemLinks(accessState.administrator, accessState.secretsAllowed, accessState.hermesAllowed),
+            )
         }
             .runningFold(state.value to state.value) { (_, previous), next -> previous to next }
             .onEach { (previous, next) -> publish(previous, next) }

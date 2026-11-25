@@ -79,8 +79,9 @@ class SystemViewModelTest {
         access.mutable.value = AppAccessState.Ready(
             AppAccess("Owner", AppModule.entries.toSet(), owner = true),
         )
-        assertTrue(viewModel.state.value.administrator)
-        assertTrue(viewModel.state.value.secrets)
+        assertTrue(viewModel.state.value.links.access)
+        assertTrue(viewModel.state.value.links.secrets)
+        assertTrue(viewModel.state.value.links.hermes)
 
         viewModel.dispatch(SystemIntent.Refresh)
         viewModel.dispatch(SystemIntent.OpenSection(SystemSection.CLUSTER))

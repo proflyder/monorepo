@@ -38,3 +38,9 @@ internal sealed interface SystemRow {
         val level: HealthLevel? = null,
     ) : SystemRow
 }
+
+internal data class SystemLinks(
+    val access: Boolean = false,
+    val secrets: Boolean = false,
+    val hermes: Boolean = false,
+)

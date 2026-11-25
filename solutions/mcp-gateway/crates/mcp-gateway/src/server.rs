@@ -43,6 +43,7 @@ pub struct Options {
     pub access: Option<AccessBinding>,
     pub system: Option<Arc<crate::system::Dashboard>>,
     pub chat: Option<Arc<crate::chat::Chat>>,
+    pub hermes: Option<Arc<crate::hermes::Panel>>,
     pub chat_alerts_token: Option<String>,
     pub groups: Vec<Arc<dyn ToolGroup>>,
     pub deps: Arc<Deps>,
@@ -115,29 +116,25 @@ pub fn router(options: Options) -> Router {
     }
 
     if let Some(access) = options.access {
-        let mut surface = Router::new();
-        if let Some(dashboard) = options.system {
-            let routes =
-                crate::system::router(dashboard).route_layer(middleware::from_fn_with_state(
-                    AppAccess {
-                        binding: access.clone(),
-                        module: Module::System,
-                        realm: APP_REALM,
-                    },
-                    require_app,
-                ));
-            surface = surface.merge(routes);
-        }
-        if let Some(chat) = options.chat {
-            let routes = crate::chat::router(chat).route_layer(middleware::from_fn_with_state(
+        let gated = |routes: Router<ObserveState>, module: Module| {
+            routes.route_layer(middleware::from_fn_with_state(
                 AppAccess {
-                    binding: access,
-                    module: Module::Chat,
+                    binding: access.clone(),
+                    module,
                     realm: APP_REALM,
                 },
                 require_app,
-            ));
-            surface = surface.merge(routes);
+            ))
+        };
+        let mut surface = Router::new();
+        if let Some(dashboard) = options.system {
+            surface = surface.merge(gated(crate::system::router(dashboard), Module::System));
+        }
+        if let Some(chat) = options.chat {
+            surface = surface.merge(gated(crate::chat::router(chat), Module::Chat));
+        }
+        if let Some(panel) = options.hermes {
+            surface = surface.merge(gated(crate::hermes::router(panel), Module::Chat));
         }
         app = app.merge(surface);
     }
@@ -356,6 +353,9 @@ fn route_of(path: &str) -> &str {
         "/v1/system/hosts" => "/v1/system/hosts",
         "/v1/system/k8s" => "/v1/system/k8s",
         "/v1/system/devices" => "/v1/system/devices",
+        "/v1/hermes/agents" => "/v1/hermes/agents",
+        "/v1/hermes/reports" => "/v1/hermes/reports",
+        "/v1/hermes/voice" => "/v1/hermes/voice",
         "/healthz" => "/healthz",
         "/readyz" => "/readyz",
         "/metrics" => "/metrics",

@@ -18,6 +18,7 @@ import dev.proflyder.home.core.model.SystemSummary
 import dev.proflyder.home.core.model.Usage
 import dev.proflyder.home.core.navigation.Route
 import dev.proflyder.home.feature.access.AccessRoutes
+import dev.proflyder.home.feature.hermes.HermesRoutes
 import dev.proflyder.home.feature.secrets.SecretsRoutes
 import dev.proflyder.home.feature.system.SystemHealthDestination
 import dev.proflyder.home.feature.system.impl.R
@@ -27,14 +28,11 @@ import kotlin.math.roundToInt
 internal class SystemRows(private val context: Context) {
     private val separator get() = context.getString(R.string.system_separator)
 
-    fun overview(
-        snapshot: SystemSnapshot,
-        administrator: Boolean = false,
-        secrets: Boolean = false,
-    ): List<SystemRow> = buildList {
+    fun overview(snapshot: SystemSnapshot, links: SystemLinks = SystemLinks()): List<SystemRow> = buildList {
         add(healthEntry(snapshot))
-        if (administrator) add(accessCard())
-        if (secrets) add(secretsCard())
+        if (links.access) add(accessCard())
+        if (links.secrets) add(secretsCard())
+        if (links.hermes) add(hermesCard())
     }
 
     fun health(snapshot: SystemSnapshot): List<SystemRow> = buildList {
@@ -52,6 +50,13 @@ internal class SystemRows(private val context: Context) {
         subtitle = join(context.getString(statusTitle(snapshot.summary.status)), alertsText(snapshot.summary)),
         route = Route.Screen(SystemHealthDestination),
         level = snapshot.summary.status,
+    )
+
+    private fun hermesCard(): SystemRow.Link = SystemRow.Link(
+        key = "hermes",
+        title = context.getString(R.string.system_card_hermes),
+        subtitle = context.getString(R.string.system_card_hermes_subtitle),
+        route = Route.Link(HermesRoutes.OVERVIEW),
     )
 
     private fun accessCard(): SystemRow.Link = SystemRow.Link(

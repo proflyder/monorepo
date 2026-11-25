@@ -356,6 +356,31 @@ Android ──/v1/chat/*──► mcp-gateway ──► chat relay (voice-proxy)
 --lib chat`, затем скопировать в
 `projects/mobile/android/core/network/src/test/resources/fixtures/chat/`.
 
+## Панель Hermes (`/v1/hermes/*`)
+
+Read-only экран «Hermes» Android-приложения (вход строкой на вкладке
+«Система»). Модуль `chat` и owner, как у чата; маршруты включаются вместе с
+чатом (`MCP_APP_API=true` и `MCP_CHAT_HERMES_URL`). Код —
+`crates/mcp-gateway/src/hermes/`. Мутаций нет, поэтому аудита нет; ошибка
+источника не даёт `5xx`, а выставляет `available=false`.
+
+| Маршрут | Источник | Содержимое |
+|---|---|---|
+| `GET /v1/hermes/agents` | bb-диспетчер, метод `status` (limit 20) | треды личного профиля: `id`, `title`, `project`, `status` (как в bb), `runtimeSeconds`; `available` |
+| `GET /v1/hermes/reports` | relay → Hermes `GET /api/sessions?source=telegram`, 5 последних сессий → `GET /api/sessions/<id>/messages` | ответы на `/report`: сообщение пользователя, которое начинается с маркера вызова скилла `report` (или `/report`), и последний непустой ответ ассистента до следующего сообщения; `requestedAt`, `completedAt`, `text` (через `redact`), `failed` |
+| `GET /v1/hermes/voice` | relay `GET /v1/health`; сессии `source=api_server` с id `api-…` (голосовые ходы HA без `X-Hermes-Session-Id`), 10 последних | `relayUp` (ответил voice-proxy), `hermesUp`/`hermesVersion`, `agentMode` (голосовой режим агента шлюза), `requests[]`: `at`, `text`, `reply`, `latencyMs` (между временем сообщения пользователя и ответа), `failed` |
+
+Чего нет и почему:
+
+- **Отмена агента.** У bb-диспетчера нет метода остановки треда (семь
+  операций, см. `solutions/bb-home-dispatcher/README.md`). Нужен новый метод
+  `cancel` в плагине и в контракте `contract/params.json`, плюс аудит в шлюзе.
+- **Отчёт bb-агента.** `turn_result` требует `afterSeq` конкретного хода, а
+  `status` его не отдаёт. Нужен метод «последний завершённый ход треда».
+- **Ошибки голосового пути до Hermes.** Отказы роутера voice-proxy (профиль,
+  шлюз, отмена) не сохраняются; видны только ходы, дошедшие до Hermes. Нужен
+  журнал событий voice-proxy или метрики с разбивкой по исходу.
+
 ## Контракт ответа
 
 Каждый инструмент возвращает JSON:

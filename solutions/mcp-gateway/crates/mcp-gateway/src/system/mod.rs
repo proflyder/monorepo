@@ -293,4 +293,4 @@ fn json<T: Serialize>(value: &T) -> Response<Body> {
 }
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;

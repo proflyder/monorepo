@@ -19,7 +19,7 @@ internal abstract class SystemScreenFragment :
 
     private val adapter by lazy { SystemAdapter(IntentAdapterCallback(::dispatch, ::rowIntent)) }
 
-    abstract fun rows(snapshot: SystemSnapshot, administrator: Boolean, secrets: Boolean): List<SystemRow>
+    abstract fun rows(snapshot: SystemSnapshot, links: SystemLinks): List<SystemRow>
 
     override fun onViewReady(binding: FragmentSystemBinding, savedInstanceState: Bundle?) {
         binding.systemList.adapter = adapter
@@ -30,7 +30,7 @@ internal abstract class SystemScreenFragment :
     }
 
     private fun rowsOf(state: SystemUiState): List<SystemRow> =
-        state.snapshot.snapshot?.let { rows(it, state.administrator, state.secrets) }.orEmpty()
+        state.snapshot.snapshot?.let { rows(it, state.links) }.orEmpty()
 
     private fun rowIntent(row: SystemRow): SystemIntent? = when (row) {
         is SystemRow.Card -> SystemIntent.OpenSection(row.section)
@@ -60,19 +60,19 @@ internal abstract class SystemScreenFragment :
 }
 
 internal class SystemFragment : SystemScreenFragment() {
-    override fun rows(snapshot: SystemSnapshot, administrator: Boolean, secrets: Boolean): List<SystemRow> =
-        SystemRows(requireContext()).overview(snapshot, administrator, secrets)
+    override fun rows(snapshot: SystemSnapshot, links: SystemLinks): List<SystemRow> =
+        SystemRows(requireContext()).overview(snapshot, links)
 }
 
 internal class SystemHealthFragment : SystemScreenFragment() {
-    override fun rows(snapshot: SystemSnapshot, administrator: Boolean, secrets: Boolean): List<SystemRow> =
+    override fun rows(snapshot: SystemSnapshot, links: SystemLinks): List<SystemRow> =
         SystemRows(requireContext()).health(snapshot)
 }
 
 internal class SystemDetailFragment : SystemScreenFragment() {
     private val destination by destination(SystemDetailDestination)
 
-    override fun rows(snapshot: SystemSnapshot, administrator: Boolean, secrets: Boolean): List<SystemRow> =
+    override fun rows(snapshot: SystemSnapshot, links: SystemLinks): List<SystemRow> =
         SystemRows(requireContext()).detail(destination?.section ?: SystemSection.HOST, snapshot)
 }
 

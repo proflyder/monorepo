@@ -275,6 +275,23 @@ pub async fn run() -> anyhow::Result<()> {
         )
     };
 
+    let hermes = if config.chat_hermes_url.is_empty() || !config.app_api {
+        None
+    } else {
+        let relay = crate::hermes::history::RelayClient::new(
+            &config.chat_hermes_url,
+            config.chat_hermes_token.clone(),
+        )
+        .map_err(anyhow::Error::msg)?;
+        Some(Arc::new(crate::hermes::Panel::new(
+            crate::hermes::Sources {
+                bb: deps.bb.clone(),
+                history: Some(Arc::new(relay)),
+                mode: Arc::clone(&deps.bb_mode),
+            },
+        )))
+    };
+
     let router = server::router(server::Options {
         auth_token: config.auth_token.clone(),
         voice_token: (!config.voice_token.is_empty()).then(|| config.voice_token.clone()),
@@ -284,6 +301,7 @@ pub async fn run() -> anyhow::Result<()> {
         chat_alerts_token: (!config.chat_alerts_token.is_empty())
             .then(|| config.chat_alerts_token.clone()),
         chat,
+        hermes,
         groups,
         deps: Arc::clone(&deps),
         metrics: Arc::clone(&metrics),
