@@ -2,6 +2,7 @@ package dev.proflyder.home.core.network
 
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RemoteFailure
+import dev.proflyder.home.core.operation.suspendRunCatching
 import java.lang.reflect.ParameterizedType
 import java.lang.reflect.Type
 import java.util.concurrent.atomic.AtomicBoolean
@@ -61,7 +62,7 @@ internal class OutcomeExecutor(
     }
 
     private suspend fun <T> attempt(call: Call<T>, number: Int): Outcome<T> {
-        val result = runCatching { call.awaitResponse() }
+        val result = suspendRunCatching { call.awaitResponse() }
         val failure = result.exceptionOrNull() ?: return result.getOrThrow().toOutcome(detailed).also(::report)
         if (!retry.allows(number, failure)) return Outcome.Failure(failure.toCallFailure())
         delay(retry.delayAfter(number, failure))

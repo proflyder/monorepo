@@ -160,8 +160,6 @@ class GroupedRowsScreenshotTest {
 
         private fun row(parent: ViewGroup) = ListRow(parent.context).apply {
             layoutParams = RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-            val inset = resources.getDimensionPixelSize(R.dimen.ds_space_l)
-            setPaddingRelative(inset, 0, inset, 0)
             subtitle = "Subtitle"
             chevron = true
             setOnClickListener {}

@@ -12,6 +12,7 @@ import dev.proflyder.home.core.model.SecretRollback
 import dev.proflyder.home.core.model.SecretValue
 import dev.proflyder.home.core.model.SecretVersionRef
 import dev.proflyder.home.core.model.StepUpChallenge
+import dev.proflyder.home.core.model.StepUpOperation
 import dev.proflyder.home.feature.secrets.presentation.DeviceKeyMaterial
 import dev.proflyder.home.feature.secrets.presentation.DeviceKeyResult
 import dev.proflyder.home.feature.secrets.presentation.DeviceSignatureResult
@@ -73,16 +74,9 @@ internal class FakeSecretsRepository : SecretsRepository {
         return enrollResult
     }
 
-    override suspend fun challenge(
-        operation: SecretOperation,
-        path: String?,
-        key: String?,
-        version: Long?,
-        cas: Long?,
-        valueHash: String?,
-    ): Outcome<StepUpChallenge> {
-        challenges += operation
-        lastValueHash = valueHash
+    override suspend fun challenge(operation: StepUpOperation): Outcome<StepUpChallenge> {
+        challenges += operation.operation
+        lastValueHash = (operation as? StepUpOperation.Update)?.valueHash
         return stepUpChallengeResult
     }
 

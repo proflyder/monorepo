@@ -67,6 +67,36 @@ enum class SecretOperation(val wire: String) {
     DELETE("delete"),
 }
 
+sealed interface StepUpOperation {
+    val operation: SecretOperation
+
+    data object Session : StepUpOperation {
+        override val operation: SecretOperation = SecretOperation.SESSION
+    }
+
+    sealed interface Mutation : StepUpOperation {
+        val path: String
+        val cas: Long
+    }
+
+    data class Update(
+        override val path: String,
+        val key: String,
+        override val cas: Long,
+        val valueHash: String,
+    ) : Mutation {
+        override val operation: SecretOperation = SecretOperation.UPDATE
+    }
+
+    data class Rollback(override val path: String, val version: Long, override val cas: Long) : Mutation {
+        override val operation: SecretOperation = SecretOperation.ROLLBACK
+    }
+
+    data class Delete(override val path: String, val version: Long, override val cas: Long) : Mutation {
+        override val operation: SecretOperation = SecretOperation.DELETE
+    }
+}
+
 data class StepUpSession(
     val session: String,
     val expiresInSeconds: Long,

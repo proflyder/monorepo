@@ -1,6 +1,7 @@
 package dev.proflyder.home.feature.scenarios.presentation
 
 import android.content.Context
+import dev.proflyder.home.core.designsystem.joinMeta
 import dev.proflyder.home.core.model.ControlEntry
 import dev.proflyder.home.core.model.Scenario
 import dev.proflyder.home.core.model.ScenarioCondition
@@ -126,7 +127,7 @@ internal object ScenarioFormat {
             catalogLoaded -> parts += context.getString(R.string.scenarios_step_missing)
         }
         parts += paramsSummary(context, step.paramsJson)
-        return StepDescription(title, parts.joinToString(SEPARATOR))
+        return StepDescription(title, context.joinMeta(parts))
     }
 
     private fun addEntryDetails(
@@ -190,8 +191,6 @@ internal object ScenarioFormat {
 
     private fun dev.proflyder.home.core.model.WallTime.display(): String =
         String.format(Locale.ROOT, "%02d:%02d", hour, minute)
-
-    const val SEPARATOR = " · "
 }
 
 internal fun List<ControlEntry>.titleOf(entryId: String): String? =

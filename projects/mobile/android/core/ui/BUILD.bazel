@@ -57,6 +57,7 @@ home_android_local_test(
         "//projects/mobile/android/core/runtime",
         "//projects/mobile/android/core/testing",
         "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_android",
+        "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_test",
     ],
 )
 

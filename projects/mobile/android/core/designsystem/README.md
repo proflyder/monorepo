@@ -160,6 +160,17 @@ the new theme automatically.
   rounded bottom for the last, the plain row rectangle in between. Only
   clickable rows get the ripple, so the adapter sets `isClickable`; rows must
   not declare `selectableItemBackground` themselves.
+- `GroupedRowsLayout` (`list`) is the same contract for a static card: a
+  vertical `LinearLayout` placed inside a `MaterialCardView` that binds a
+  `GroupedRowRipple` to every visible child on layout, using the card's corner
+  radius. Non-clickable children (a summary line) keep the slot order but get
+  no ripple.
+- `ListRow` carries its own `ds_space_l` horizontal padding
+  (`Widget.Home.ListRow`), so a row inside a grouped card needs no per-layout
+  padding. A row inside a container that already pads its content uses
+  `style="@style/Widget.Home.ListRow.Embedded"`.
+- `Context.joinMeta(parts)` joins metadata fragments with `ds_meta_separator`;
+  features do not hard-code the separator.
 - `GroupedRowsScreenshotTest` renders first, middle and last pressed rows over
   the theme window background in dark and light. Robolectric does not paint the
   patterned API 35 ripple on a software canvas, so the test paints the row's

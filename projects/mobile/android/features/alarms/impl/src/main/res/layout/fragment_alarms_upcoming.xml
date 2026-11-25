@@ -5,11 +5,10 @@
     android:layout_height="wrap_content"
     android:visibility="gone">
 
-    <LinearLayout
+    <dev.proflyder.home.core.designsystem.list.GroupedRowsLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:divider="@drawable/alarms_upcoming_divider"
-        android:orientation="vertical"
         android:showDividers="middle">
 
         <include
@@ -23,5 +22,5 @@
         <include
             android:id="@+id/alarms_upcoming_third"
             layout="@layout/item_alarms_upcoming" />
-    </LinearLayout>
+    </dev.proflyder.home.core.designsystem.list.GroupedRowsLayout>
 </com.google.android.material.card.MaterialCardView>

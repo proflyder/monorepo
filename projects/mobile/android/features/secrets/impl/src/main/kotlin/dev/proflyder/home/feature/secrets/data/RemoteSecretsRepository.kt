@@ -6,11 +6,11 @@ import dev.proflyder.home.core.model.DeviceEnrollment
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.model.SecretMetadata
-import dev.proflyder.home.core.model.SecretOperation
 import dev.proflyder.home.core.model.SecretRollback
 import dev.proflyder.home.core.model.SecretValue
 import dev.proflyder.home.core.model.SecretVersionRef
 import dev.proflyder.home.core.model.StepUpChallenge
+import dev.proflyder.home.core.model.StepUpOperation
 import dev.proflyder.home.core.network.SecretsApi
 import dev.proflyder.home.feature.secrets.SecretsCatalogState
 import dev.proflyder.home.feature.secrets.SecretsRepository
@@ -67,14 +67,7 @@ class RemoteSecretsRepository(
     ): Outcome<DeviceEnrollment> =
         api.enroll(code, publicKey, attestationChallenge, attestationChain)
 
-    override suspend fun challenge(
-        operation: SecretOperation,
-        path: String?,
-        key: String?,
-        version: Long?,
-        cas: Long?,
-        valueHash: String?,
-    ): Outcome<StepUpChallenge> = api.challenge(operation, path, key, version, cas, valueHash)
+    override suspend fun challenge(operation: StepUpOperation): Outcome<StepUpChallenge> = api.challenge(operation)
 
     override suspend fun stepUp(challenge: String, signature: String): Outcome<Unit> =
         when (val result = api.stepUp(challenge, signature)) {

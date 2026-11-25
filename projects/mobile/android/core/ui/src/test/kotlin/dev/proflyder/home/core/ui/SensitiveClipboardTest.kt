@@ -1,8 +1,7 @@
-package dev.proflyder.home.feature.secrets
+package dev.proflyder.home.core.ui
 
 import android.content.ClipboardManager
 import android.content.Context
-import dev.proflyder.home.feature.secrets.presentation.SecretClipboard
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
@@ -19,14 +18,14 @@ import org.robolectric.annotation.Config
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
-class SecretClipboardTest {
+class SensitiveClipboardTest {
     private fun clipboard(): ClipboardManager =
         RuntimeEnvironment.getApplication().getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
 
     @Test
     fun aCopiedValueClearsAfterThirtySeconds() = runTest {
         val clipboard = clipboard()
-        val copier = SecretClipboard(RuntimeEnvironment.getApplication(), TestScope(testScheduler))
+        val copier = SensitiveClipboard(RuntimeEnvironment.getApplication(), LABEL, TestScope(testScheduler))
 
         copier.copy("s3cret")
         assertEquals("s3cret", clipboard.primaryClip?.getItemAt(0)?.text?.toString())
@@ -40,7 +39,7 @@ class SecretClipboardTest {
     @Test
     fun aCopyOrderedTwiceKeepsOnlyTheLatestForTheSameWindow() = runTest {
         val clipboard = clipboard()
-        val copier = SecretClipboard(RuntimeEnvironment.getApplication(), TestScope(testScheduler))
+        val copier = SensitiveClipboard(RuntimeEnvironment.getApplication(), LABEL, TestScope(testScheduler))
 
         copier.copy("first")
         advanceTimeBy(20_000)
@@ -49,5 +48,9 @@ class SecretClipboardTest {
         runCurrent()
 
         assertEquals("second", clipboard.primaryClip?.getItemAt(0)?.text?.toString())
+    }
+
+    private companion object {
+        const val LABEL = "label"
     }
 }

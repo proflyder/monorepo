@@ -34,7 +34,9 @@ internal data class AccessEditorState(
 ) {
     val canEditModules: Boolean get() = !owner
 
-    val canSave: Boolean get() = name.trim().isNotEmpty() && name.trim().length <= MAX_NAME && !saving
+    val cleanName: String get() = name.trim()
+
+    val canSave: Boolean get() = cleanName.isNotEmpty() && cleanName.length <= MAX_NAME && !saving
 }
 
 internal data class AccessUiState(
@@ -116,7 +118,7 @@ internal class AccessViewModel(
     private fun save() {
         val editor = currentState.editor ?: return
         if (!editor.canSave) {
-            updateState { copy(editor = editor.copy(nameError = editor.name.trim().isEmpty())) }
+            updateState { copy(editor = editor.copy(nameError = editor.cleanName.isEmpty())) }
             return
         }
         updateState { copy(editor = editor.copy(saving = true, nameError = false, errorRes = null)) }
@@ -125,7 +127,7 @@ internal class AccessViewModel(
 
     private fun create(editor: AccessEditorState) {
         launch {
-            val result = repository.create(editor.name.trim(), editor.modules)
+            val result = repository.create(editor.cleanName, editor.modules)
             when (result) {
                 is Outcome.Success -> updateState {
                     copy(editor = null, created = CreatedAccessState(result.value.access.name, result.value.token))
@@ -138,7 +140,7 @@ internal class AccessViewModel(
     private fun update(editor: AccessEditorState) {
         val id = editor.id ?: return
         launch {
-            val result = repository.update(id, editor.name.trim(), editor.modules)
+            val result = repository.update(id, editor.cleanName, editor.modules)
             when (result) {
                 is Outcome.Success -> updateState { copy(editor = null) }
                 is Outcome.Failure -> fail(editor, result.failure)

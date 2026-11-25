@@ -27,6 +27,7 @@
                 android:padding="@dimen/vpn_card_padding">
 
                 <dev.proflyder.home.core.designsystem.ListRow
+                    style="@style/Widget.Home.ListRow.Embedded"
                     android:id="@+id/vpn_status_row"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -106,6 +107,7 @@
                 android:padding="@dimen/vpn_card_padding">
 
                 <dev.proflyder.home.core.designsystem.ListRow
+                    style="@style/Widget.Home.ListRow.Embedded"
                     android:id="@+id/vpn_open_row"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -116,6 +118,7 @@
                     app:rowTitle="@string/vpn_open_title" />
 
                 <dev.proflyder.home.core.designsystem.ListRow
+                    style="@style/Widget.Home.ListRow.Embedded"
                     android:id="@+id/vpn_auto_row"
                     android:layout_marginTop="@dimen/ds_space_s"
                     android:layout_width="match_parent"
@@ -172,6 +175,7 @@
                     android:layout_marginTop="@dimen/ds_space_m" />
 
                 <dev.proflyder.home.core.designsystem.ListRow
+                    style="@style/Widget.Home.ListRow.Embedded"
                     android:id="@+id/vpn_certificate_row"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -220,6 +224,7 @@
                 android:padding="@dimen/vpn_card_padding">
 
                 <dev.proflyder.home.core.designsystem.ListRow
+                    style="@style/Widget.Home.ListRow.Embedded"
                     android:id="@+id/vpn_profile_row"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"

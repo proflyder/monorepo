@@ -1,15 +1,13 @@
 package dev.proflyder.home.feature.access.presentation
 
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.DialogInterface
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
 import android.widget.LinearLayout
 import androidx.appcompat.app.AlertDialog
-import androidx.core.content.getSystemService
 import androidx.core.view.isVisible
+import androidx.lifecycle.lifecycleScope
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.materialswitch.MaterialSwitch
 import dev.proflyder.home.core.designsystem.HomePopupMenu
@@ -19,6 +17,7 @@ import dev.proflyder.home.core.presentation.ScreenFragment
 import dev.proflyder.home.core.presentation.TextBinder
 import dev.proflyder.home.core.presentation.bindText
 import dev.proflyder.home.core.presentation.screenViewModel
+import dev.proflyder.home.core.ui.SensitiveClipboard
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.core.ui.setupPullToRefresh
 import dev.proflyder.home.core.ui.userMessage
@@ -38,6 +37,9 @@ internal class AccessFragment :
     private var editorName: TextBinder? = null
     private var editorKey: String? = null
     private var createdDialog: AlertDialog? = null
+    private val clipboard by lazy {
+        SensitiveClipboard(requireContext(), getString(R.string.access_title), viewLifecycleOwner.lifecycleScope)
+    }
 
     override fun onViewReady(binding: FragmentAccessBinding, savedInstanceState: Bundle?) {
         binding.accessList.adapter = adapter
@@ -189,8 +191,7 @@ internal class AccessFragment :
     }
 
     private fun copyToken(created: CreatedAccessState) {
-        val clipboard = requireContext().getSystemService<ClipboardManager>() ?: return
-        clipboard.setPrimaryClip(ClipData.newPlainText(getString(R.string.access_title), created.token))
+        clipboard.copy(created.token)
         showMessage(R.string.access_created_copied)
     }
 

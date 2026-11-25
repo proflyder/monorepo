@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 @SingleIn(AppScope::class)
@@ -67,7 +68,7 @@ internal class UpdateCoordinator(
     }
 
     override fun dismissPrompt() {
-        mutableState.value = mutableState.value.copy(promptVisible = false)
+        mutableState.update { it.copy(promptVisible = false) }
     }
 
     private fun onForeground() {
@@ -92,7 +93,7 @@ internal class UpdateCoordinator(
 
     private suspend fun runSignIn() {
         if (busy()) return
-        mutableState.value = mutableState.value.copy(phase = UpdatePhase.SIGNING_IN, failure = null)
+        mutableState.update { it.copy(phase = UpdatePhase.SIGNING_IN, failure = null) }
         when (val result = updater.signIn()) {
             is UpdateResult.Success -> retryAfterSignIn()
             is UpdateResult.Failure -> applySignInFailure(result.kind)
@@ -100,18 +101,15 @@ internal class UpdateCoordinator(
     }
 
     private suspend fun retryAfterSignIn() {
-        mutableState.value = mutableState.value.copy(phase = UpdatePhase.IDLE)
+        mutableState.update { it.copy(phase = UpdatePhase.IDLE) }
         check(manual = true)
     }
 
     private suspend fun runUpdate() {
         if (busy()) return
-        mutableState.value = mutableState.value.copy(
-            phase = UpdatePhase.DOWNLOADING,
-            progressPercent = 0,
-            failure = null,
-            promptVisible = true,
-        )
+        mutableState.update {
+            it.copy(phase = UpdatePhase.DOWNLOADING, progressPercent = 0, failure = null, promptVisible = true)
+        }
         updater.update().collect(::applyUpdateEvent)
     }
 
@@ -144,23 +142,25 @@ internal class UpdateCoordinator(
             UpdateFailureKind.SIGN_IN_CANCELLED -> UpdatePhase.SIGN_IN_REQUIRED
             else -> UpdatePhase.FAILED
         }
-        mutableState.value = mutableState.value.copy(phase = phase, failure = kind, promptVisible = true)
+        mutableState.update { it.copy(phase = phase, failure = kind, promptVisible = true) }
     }
 
     private fun applyUpdateEvent(event: UpdateEvent) {
-        mutableState.value = when (event) {
-            is UpdateEvent.Downloading -> mutableState.value.copy(progressPercent = event.percent)
-            UpdateEvent.Downloaded -> mutableState.value.copy(phase = UpdatePhase.INSTALLING, progressPercent = null)
-            UpdateEvent.Completed -> mutableState.value.copy(phase = UpdatePhase.INSTALLING, progressPercent = null)
-            UpdateEvent.Cancelled -> mutableState.value.copy(phase = UpdatePhase.AVAILABLE, progressPercent = null)
-            is UpdateEvent.Failed -> mutableState.value.copy(
+        mutableState.update { state -> state.after(event) }
+    }
+
+    private fun UpdateState.after(event: UpdateEvent): UpdateState =
+        when (event) {
+            is UpdateEvent.Downloading -> copy(progressPercent = event.percent)
+            UpdateEvent.Downloaded, UpdateEvent.Completed -> copy(phase = UpdatePhase.INSTALLING, progressPercent = null)
+            UpdateEvent.Cancelled -> copy(phase = UpdatePhase.AVAILABLE, progressPercent = null)
+            is UpdateEvent.Failed -> copy(
                 phase = UpdatePhase.FAILED,
                 progressPercent = null,
                 failure = event.kind,
                 promptVisible = true,
             )
         }
-    }
 
     private fun idleState(phase: UpdatePhase): UpdateState = UpdateState(currentVersion = version.name, phase = phase)
 

@@ -7,11 +7,11 @@ import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.model.SecretEntry
 import dev.proflyder.home.core.model.SecretMetadata
-import dev.proflyder.home.core.model.SecretOperation
 import dev.proflyder.home.core.model.SecretRollback
 import dev.proflyder.home.core.model.SecretValue
 import dev.proflyder.home.core.model.SecretVersionRef
 import dev.proflyder.home.core.model.StepUpChallenge
+import dev.proflyder.home.core.model.StepUpOperation
 import kotlinx.coroutines.flow.StateFlow
 
 data class SecretsCatalogState(
@@ -41,14 +41,7 @@ interface SecretsRepository {
         attestationChain: List<String>,
     ): Outcome<DeviceEnrollment>
 
-    suspend fun challenge(
-        operation: SecretOperation,
-        path: String?,
-        key: String?,
-        version: Long?,
-        cas: Long?,
-        valueHash: String?,
-    ): Outcome<StepUpChallenge>
+    suspend fun challenge(operation: StepUpOperation): Outcome<StepUpChallenge>
 
     suspend fun stepUp(challenge: String, signature: String): Outcome<Unit>
 

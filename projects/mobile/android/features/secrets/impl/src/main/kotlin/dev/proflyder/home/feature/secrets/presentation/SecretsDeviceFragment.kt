@@ -22,7 +22,7 @@ internal class SecretsDeviceFragment :
     ) {
     override val viewModel: SecretsDeviceViewModel by screenViewModel()
 
-    private val signer by lazy { AndroidDeviceSigner(requireContext().applicationContext) }
+    private val signer by lazy { deviceSigner(requireContext().applicationContext) }
 
     override fun onViewReady(binding: FragmentSecretsDeviceBinding, savedInstanceState: Bundle?) {
         binding.secretsDeviceCode.doAfterTextChanged { text ->

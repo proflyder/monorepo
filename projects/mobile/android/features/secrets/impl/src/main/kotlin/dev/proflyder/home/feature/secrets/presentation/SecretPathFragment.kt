@@ -8,10 +8,12 @@ import androidx.appcompat.app.AlertDialog
 import androidx.core.widget.doAfterTextChanged
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import dev.proflyder.home.core.designsystem.list.addGroupedRows
 import dev.proflyder.home.core.model.SecretVersion
 import dev.proflyder.home.core.navigation.Route
 import dev.proflyder.home.core.navigation.destination
 import dev.proflyder.home.core.presentation.screenViewModel
+import dev.proflyder.home.core.ui.SensitiveClipboard
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.core.ui.setupPullToRefresh
 import dev.proflyder.home.core.ui.userMessage
@@ -34,7 +36,7 @@ internal class SecretPathFragment :
 
     private val route: SecretsPathDestination? by destination(SecretsPathDestination)
 
-    private val signer by lazy { AndroidDeviceSigner(requireContext().applicationContext) }
+    private val signer by lazy { deviceSigner(requireContext().applicationContext) }
 
     private val actions = object : SecretPathActions {
         override fun reveal(key: String) = dispatch(SecretPathIntent.Reveal(key))
@@ -49,7 +51,7 @@ internal class SecretPathFragment :
     }
 
     private val adapter by lazy { SecretPathAdapter(actions) }
-    private val clipboard by lazy { SecretClipboard(requireContext(), viewLifecycleOwner.lifecycleScope) }
+    private val clipboard by lazy { SensitiveClipboard(requireContext(), getString(R.string.secrets_clip_label), viewLifecycleOwner.lifecycleScope) }
 
     private var activeDialog: AlertDialog? = null
     private var activeTag: DialogTag? = null
@@ -65,6 +67,7 @@ internal class SecretPathFragment :
 
     override fun onViewReady(binding: FragmentSecretPathBinding, savedInstanceState: Bundle?) {
         binding.secretPathList.adapter = adapter
+        binding.secretPathList.addGroupedRows()
         binding.secretPathRefresh.setupPullToRefresh(binding.secretPathList) {
             dispatch(SecretPathIntent.Refresh)
         }

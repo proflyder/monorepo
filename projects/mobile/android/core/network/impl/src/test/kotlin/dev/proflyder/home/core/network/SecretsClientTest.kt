@@ -7,7 +7,7 @@ import dev.proflyder.home.core.endpoint.EndpointParseResult
 import dev.proflyder.home.core.endpoint.ServerEndpoint
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RemoteFailure
-import dev.proflyder.home.core.model.SecretOperation
+import dev.proflyder.home.core.model.StepUpOperation
 import dev.proflyder.home.core.testing.TestFixtures
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -143,12 +143,7 @@ class SecretsClientTest {
 
         val challenge = (
             client().challenge(
-                SecretOperation.UPDATE,
-                "k8s/home-assistant/phone-push",
-                "service_token",
-                null,
-                3,
-                valueHash,
+                StepUpOperation.Update("k8s/home-assistant/phone-push", "service_token", 3, valueHash),
             ) as Outcome.Success
             ).value
 
@@ -259,7 +254,7 @@ class SecretsClientTest {
                 .setBody(TestFixtures.read("secrets/rate_limited.json")),
         )
 
-        val failure = client().challenge(SecretOperation.SESSION, null, null, null, null, null) as Outcome.Failure
+        val failure = client().challenge(StepUpOperation.Session) as Outcome.Failure
         val serverFailure = failure.failure as RemoteFailure.Server
 
         assertEquals(429, serverFailure.httpStatus)

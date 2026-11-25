@@ -10,6 +10,7 @@ import dev.proflyder.home.core.model.SecretRollback
 import dev.proflyder.home.core.model.SecretValue
 import dev.proflyder.home.core.model.SecretVersionRef
 import dev.proflyder.home.core.model.StepUpChallenge
+import dev.proflyder.home.core.model.StepUpOperation
 import dev.proflyder.home.core.model.StepUpSession
 import dev.proflyder.home.core.network.SecretsApi
 import dev.proflyder.home.feature.secrets.data.RemoteSecretsRepository
@@ -47,15 +48,8 @@ class RemoteSecretsRepositoryTest {
             attestationChain: List<String>,
         ): Outcome<DeviceEnrollment> = Outcome.Success(DeviceEnrollment(true, "device-1", 1))
 
-        override suspend fun challenge(
-            operation: SecretOperation,
-            path: String?,
-            key: String?,
-            version: Long?,
-            cas: Long?,
-            valueHash: String?,
-        ): Outcome<StepUpChallenge> {
-            lastChallenge = operation
+        override suspend fun challenge(operation: StepUpOperation): Outcome<StepUpChallenge> {
+            lastChallenge = operation.operation
             return Outcome.Success(StepUpChallenge("challenge-1", "payload-1", 60))
         }
 
@@ -134,7 +128,7 @@ class RemoteSecretsRepositoryTest {
         assertTrue(repository.device() is Outcome.Success)
         assertTrue(repository.deviceChallenge() is Outcome.Success)
         assertTrue(repository.enroll("code", "key", "attestation", emptyList()) is Outcome.Success)
-        assertTrue(repository.challenge(SecretOperation.SESSION, null, null, null, null, null) is Outcome.Success)
+        assertTrue(repository.challenge(StepUpOperation.Session) is Outcome.Success)
         assertEquals(SecretOperation.SESSION, api.lastChallenge)
     }
 }

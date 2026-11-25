@@ -6,12 +6,12 @@ import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.SecretCatalog
 import dev.proflyder.home.core.model.SecretEntry
 import dev.proflyder.home.core.model.SecretMetadata
-import dev.proflyder.home.core.model.SecretOperation
 import dev.proflyder.home.core.model.SecretRollback
 import dev.proflyder.home.core.model.SecretValue
 import dev.proflyder.home.core.model.SecretVersion
 import dev.proflyder.home.core.model.SecretVersionRef
 import dev.proflyder.home.core.model.StepUpChallenge
+import dev.proflyder.home.core.model.StepUpOperation
 import dev.proflyder.home.core.model.StepUpSession
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
@@ -125,6 +125,16 @@ internal data class SecretChallengeBody(
     val cas: Long? = null,
     val valueHash: String? = null,
 )
+
+internal fun StepUpOperation.toBody(): SecretChallengeBody {
+    val action = operation.wire
+    return when (this) {
+        StepUpOperation.Session -> SecretChallengeBody(action)
+        is StepUpOperation.Update -> SecretChallengeBody(action, path, key, cas = cas, valueHash = valueHash)
+        is StepUpOperation.Rollback -> SecretChallengeBody(action, path, version = version, cas = cas)
+        is StepUpOperation.Delete -> SecretChallengeBody(action, path, version = version, cas = cas)
+    }
+}
 
 @Serializable
 internal data class SecretChallengeDto(
@@ -244,15 +254,8 @@ class HttpSecretsClient(private val http: HomeHttp) : SecretsApi {
         api.enroll(SecretDeviceEnrollBody(code.trim(), publicKey, attestationChallenge, attestationChain))
             .mapResult { value -> DeviceEnrollment(value.enrolled, value.deviceId, value.enrolledAt, value.publicKey) }
 
-    override suspend fun challenge(
-        operation: SecretOperation,
-        path: String?,
-        key: String?,
-        version: Long?,
-        cas: Long?,
-        valueHash: String?,
-    ): Outcome<StepUpChallenge> =
-        api.challenge(SecretChallengeBody(operation.wire, path, key, version, cas, valueHash))
+    override suspend fun challenge(operation: StepUpOperation): Outcome<StepUpChallenge> =
+        api.challenge(operation.toBody())
             .mapResult { value -> StepUpChallenge(value.challenge, value.payload, value.expiresIn) }
 
     override suspend fun stepUp(challenge: String, signature: String): Outcome<StepUpSession> =

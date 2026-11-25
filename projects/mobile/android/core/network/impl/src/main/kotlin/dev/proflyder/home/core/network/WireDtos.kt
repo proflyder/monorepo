@@ -8,6 +8,7 @@ import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
 import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonBuilder
 import kotlinx.serialization.json.JsonDecoder
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonEncoder
@@ -32,8 +33,9 @@ internal object Int64StringSerializer : KSerializer<Long> {
     }
 }
 
-@Suppress("LongLambda")
-internal val NetworkJson = Json {
+internal val NetworkJson = Json { lenientWireFormat() }
+
+private fun JsonBuilder.lenientWireFormat() {
     ignoreUnknownKeys = true
     coerceInputValues = true
     explicitNulls = false
