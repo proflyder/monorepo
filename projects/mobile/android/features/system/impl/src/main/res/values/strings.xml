@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="DuplicateStrings">
     <string name="system_title">System</string>
+    <string name="system_health_title">System health</string>
     <string name="system_card_host">Nettop (Proxmox)</string>
     <string name="system_card_guests">Guests (VM/CT)</string>
     <string name="system_card_cluster">Cluster</string>

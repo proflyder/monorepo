@@ -11,6 +11,7 @@ import dev.proflyder.home.core.presentation.KeyedDiff
 import dev.proflyder.home.core.ui.BaseListAdapter
 import dev.proflyder.home.core.ui.BaseViewHolder
 import dev.proflyder.home.core.ui.ViewBinding
+import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.feature.system.impl.R
 import dev.proflyder.home.feature.system.impl.databinding.ItemSystemCardBinding
 import dev.proflyder.home.feature.system.impl.databinding.ItemSystemGroupBinding
@@ -132,6 +133,8 @@ internal class SystemAdapter(
             val link = item as SystemRow.Link
             views.systemLinkTitle.text = link.title
             views.systemLinkSubtitle.text = link.subtitle
+            views.systemLinkLight.setVisible(link.level != null)
+            link.level?.let(views.systemLinkLight::tintLevel)
             views.root.setOnClickListener { callback.onItemClick(link) }
         }
     }
