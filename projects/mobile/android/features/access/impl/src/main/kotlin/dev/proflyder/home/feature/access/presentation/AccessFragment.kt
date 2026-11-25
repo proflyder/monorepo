@@ -17,6 +17,7 @@ import dev.proflyder.home.core.presentation.TextBinder
 import dev.proflyder.home.core.presentation.bindText
 import dev.proflyder.home.core.presentation.screenViewModel
 import dev.proflyder.home.core.ui.SensitiveClipboard
+import dev.proflyder.home.core.ui.StateDialogSlot
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.core.ui.setupPullToRefresh
 import dev.proflyder.home.core.ui.userMessage
@@ -31,10 +32,10 @@ internal class AccessFragment :
     override val viewModel: AccessViewModel by screenViewModel()
 
     private val adapter = AccessAdapter(AccessAdapterCallback(::openToken, ::openMenu))
+    private val editorSlot = StateDialogSlot()
     private var editorDialog: AlertDialog? = null
     private var editorViews: DialogAccessEditorBinding? = null
     private var editorName: TextBinder? = null
-    private var editorKey: String? = null
     private var createdDialog: AlertDialog? = null
     private val clipboard by lazy {
         SensitiveClipboard.forProcess(requireContext(), getString(R.string.access_title))
@@ -95,39 +96,34 @@ internal class AccessFragment :
     }
 
     private fun renderEditor(editor: AccessEditorState?) {
-        if (editor == null) {
+        if (editor == null) return dismissEditor()
+        val key = editor.id ?: NEW_EDITOR
+        if (!editorSlot.isShowing(key)) {
             dismissEditor()
-            return
+            editorSlot.show(key, ::onEditorClosedByUser) { createEditor(editor) }
         }
-        val views = editorViews ?: showEditor(editor).also { editorViews = it }
-        if (editorKey != (editor.id ?: NEW_EDITOR)) {
-            dismissEditor()
-            editorViews = showEditor(editor)
-            return
-        }
-        updateEditor(views, editor)
+        editorViews?.let { updateEditor(it, editor) }
     }
 
-    private fun showEditor(editor: AccessEditorState): DialogAccessEditorBinding {
-        editorKey = editor.id ?: NEW_EDITOR
+    private fun onEditorClosedByUser() = dispatch(AccessIntent.EditorDismiss)
+
+    private fun createEditor(editor: AccessEditorState): AlertDialog {
         val views = DialogAccessEditorBinding.inflate(layoutInflater)
         bindModules(views.accessEditorModules)
         editorName = bindText(views.accessEditorName, AccessIntent::EditorName)
+        editorViews = views
         val title = if (editor.id == null) R.string.access_new_title else R.string.access_edit_title
-        editorDialog = MaterialAlertDialogBuilder(requireContext())
+        return MaterialAlertDialogBuilder(requireContext())
             .setTitle(title)
             .setView(views.root)
-            .setNegativeButton(android.R.string.cancel) { _, _ -> dispatch(AccessIntent.EditorDismiss) }
+            .setNegativeButton(android.R.string.cancel) { dialog, _ -> dialog.cancel() }
             .setPositiveButton(R.string.access_editor_save, null)
-            .setOnDismissListener { editorName = null }
             .create()
-            .also(::showEditorDialog)
-        updateEditor(views, editor)
-        return views
+            .also { dialog -> dialog.setOnShowListener { bindSave(dialog) } }
+            .also { editorDialog = it }
     }
 
-    private fun showEditorDialog(dialog: AlertDialog) {
-        dialog.show()
+    private fun bindSave(dialog: AlertDialog) {
         dialog.getButton(DialogInterface.BUTTON_POSITIVE).setOnClickListener { dispatch(AccessIntent.EditorSave) }
     }
 
@@ -163,12 +159,10 @@ internal class AccessFragment :
     }
 
     private fun dismissEditor() {
-        editorDialog?.setOnDismissListener(null)
-        editorDialog?.dismiss()
+        editorSlot.clear()
         editorDialog = null
         editorViews = null
         editorName = null
-        editorKey = null
     }
 
     private fun renderCreated(created: CreatedAccessState?) {

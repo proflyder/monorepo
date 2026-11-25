@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.StateFlow
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -95,6 +96,52 @@ class AccessFragmentTest {
         viewModel.dispatch(AccessIntent.EditorDismiss)
         idle()
         assertFalse(editor.isShowing)
+    }
+
+    @Test
+    fun theSameTokenReopensAfterTheEditorIsClosedWithBack() {
+        show()
+        viewModel.dispatch(AccessIntent.Edit(phone))
+        idle()
+        val first = dialog()
+        first.cancel()
+        idle()
+        assertFalse(first.isShowing)
+        assertEquals(null, viewModel.state.value.editor)
+
+        viewModel.dispatch(AccessIntent.Edit(phone))
+        idle()
+        assertTrue(dialog().isShowing)
+        assertNotSame(first, dialog())
+    }
+
+    @Test
+    fun theSameTokenReopensAfterTheEditorIsClosedWithCancel() {
+        show()
+        viewModel.dispatch(AccessIntent.Edit(phone))
+        idle()
+        val first = dialog()
+        first.getButton(DialogInterface.BUTTON_NEGATIVE).performClick()
+        idle()
+        assertFalse(first.isShowing)
+        assertEquals(null, viewModel.state.value.editor)
+
+        viewModel.dispatch(AccessIntent.Edit(phone))
+        idle()
+        assertTrue(dialog().isShowing)
+    }
+
+    @Test
+    fun savingClosesTheEditorWithoutReopeningIt() {
+        show()
+        viewModel.dispatch(AccessIntent.Edit(phone))
+        idle()
+        val editor = dialog()
+        editor.getButton(DialogInterface.BUTTON_POSITIVE).performClick()
+        idle()
+        assertFalse(editor.isShowing)
+        assertEquals(null, viewModel.state.value.editor)
+        assertSame(editor, dialog())
     }
 
     @Test

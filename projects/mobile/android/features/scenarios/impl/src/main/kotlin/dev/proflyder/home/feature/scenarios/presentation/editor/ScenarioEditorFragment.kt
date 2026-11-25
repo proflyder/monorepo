@@ -11,6 +11,7 @@ import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.presentation.ScreenFragment
 import dev.proflyder.home.core.presentation.screenViewModel
 import dev.proflyder.home.core.presentation.showNotice
+import dev.proflyder.home.core.ui.StateDialogSlot
 import dev.proflyder.home.core.ui.keepFocusedVisible
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.core.ui.userMessage
@@ -34,7 +35,7 @@ internal class ScenarioEditorFragment : ScreenFragment<
     >(FragmentScenarioEditorBinding.Companion::inflate) {
     override val viewModel: ScenarioEditorViewModel by screenViewModel()
 
-    private val promptSlot = DialogSlot()
+    private val promptSlot = StateDialogSlot()
     private val menus = ScenarioEditorMenus(this)
 
     override fun onScreenCreate(savedInstanceState: Bundle?) {
