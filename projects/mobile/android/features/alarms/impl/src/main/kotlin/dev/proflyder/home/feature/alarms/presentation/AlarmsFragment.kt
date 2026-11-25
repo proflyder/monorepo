@@ -12,6 +12,7 @@ import dev.proflyder.home.core.presentation.ScreenFragment
 import dev.proflyder.home.core.presentation.UndoNotice
 import dev.proflyder.home.core.presentation.flowViewModel
 import dev.proflyder.home.core.presentation.render
+import dev.proflyder.home.core.presentation.renderSlice
 import dev.proflyder.home.core.ui.ListStateViews
 import dev.proflyder.home.core.presentation.tabViewModels
 import dev.proflyder.home.core.ui.liftAboveBottomInsets
@@ -65,6 +66,7 @@ internal class AlarmsFragment :
         addBackCallback(exitSelection)
         render(AlarmsUiState::list) { list -> renderList(states, list) }
         render(AlarmsUiState::rows, adapter::submitList)
+        viewLifecycleOwner.renderSlice(viewModel.minute, { it }, adapter::tick)
         render(AlarmsUiState::selection) { selection -> renderSelection(selectionBars, selection) }
         render(actions, AlarmActionsState::undo) { deleted -> undo.render(deleted?.let { getString(R.string.alarms_deleted) }) }
     }

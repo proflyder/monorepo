@@ -27,6 +27,10 @@ import dev.zacsweers.metro.ClassKey
 import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.binding
+import dev.proflyder.home.core.ui.Notices
+import dev.proflyder.home.feature.alarms.nextTrigger
+import java.time.Instant
+import java.time.ZoneId
 import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.launchIn
@@ -49,6 +53,7 @@ internal sealed interface AlarmActionEvent {
     data class AskDisable(val id: String) : AlarmActionEvent
     data class ConfirmDelete(val id: String) : AlarmActionEvent
     data class Failure(val failure: RemoteFailure) : AlarmActionEvent, DeliveredWhenStarted
+    data class Scheduled(val now: Instant, val trigger: Instant) : AlarmActionEvent, DeliveredWhenStarted
 }
 
 internal class AlarmActions(
@@ -58,6 +63,8 @@ internal class AlarmActions(
     private val emit: (AlarmActionEvent) -> Unit,
     onBusy: (Boolean) -> Unit,
     private val undo: UndoWindow<Schedule>? = null,
+    private val now: () -> Instant = Instant::now,
+    private val zone: () -> ZoneId = ZoneId::systemDefault,
 ) {
     private val runner = ExclusiveActions(scope, { key -> onBusy(key != null) }) { emit(AlarmActionEvent.Failure(it)) }
 
@@ -77,10 +84,15 @@ internal class AlarmActions(
     private fun toggle(id: String, enabled: Boolean) {
         val alarm = repository[id] ?: return
         when {
-            enabled -> run(id) { repository.setEnabled(it, true) }
+            enabled -> runner.run(id, { repository.setEnabled(id, true) }, ::announce)
             alarmDisableChoice(alarm) == AlarmDisableChoice.DISABLE -> run(id) { repository.setEnabled(it, false) }
             else -> emit(AlarmActionEvent.AskDisable(id))
         }
+    }
+
+    private fun announce(alarm: Schedule) {
+        val at = now()
+        alarm.nextTrigger(at, zone())?.let { emit(AlarmActionEvent.Scheduled(at, it)) }
     }
 
     private fun delete(id: String) {
@@ -141,6 +153,10 @@ internal class AlarmPrompts(
             is AlarmActionEvent.AskDisable -> askDisable(event.id)
             is AlarmActionEvent.ConfirmDelete -> confirmDelete(event.id)
             is AlarmActionEvent.Failure -> fragment.showFailure(event.failure)
+            is AlarmActionEvent.Scheduled -> Notices.show(
+                fragment.requireView(),
+                AlarmCountdownText.notice(fragment.resources, event.now, event.trigger),
+            )
         }
     }
 
