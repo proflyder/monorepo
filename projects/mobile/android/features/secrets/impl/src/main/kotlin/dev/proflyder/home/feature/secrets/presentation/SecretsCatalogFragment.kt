@@ -6,7 +6,7 @@ import androidx.recyclerview.widget.ConcatAdapter
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import dev.proflyder.home.core.designsystem.list.ListHeaderSpacer
-import dev.proflyder.home.core.designsystem.list.addGroupedRows
+import dev.proflyder.home.core.designsystem.list.addFullWidthRows
 import dev.proflyder.home.core.navigation.Navigator
 import dev.proflyder.home.core.navigation.NavigatorHost
 import dev.proflyder.home.core.navigation.Route
@@ -58,7 +58,7 @@ internal class SecretsCatalogFragment :
 
     override fun onViewReady(binding: FragmentSecretsCatalogBinding, savedInstanceState: Bundle?) {
         binding.secretsCatalogList.adapter = ConcatAdapter(ListHeaderSpacer.leading(binding.secretsCatalogList, binding.secretsCatalogHeader), adapter)
-        binding.secretsCatalogList.addGroupedRows()
+        binding.secretsCatalogList.addFullWidthRows()
         binding.secretsCatalogRefresh.setupPullToRefresh(binding.secretsCatalogList) {
             dispatch(SecretsCatalogIntent.Refresh)
         }

@@ -45,6 +45,7 @@ home_android_local_test(
         "dev.proflyder.home.feature.settings.presentation.HistorySwipeTest",
         "dev.proflyder.home.feature.settings.presentation.NotificationHistoryRowTest",
         "dev.proflyder.home.feature.settings.presentation.NotificationHistoryStickyTest",
+        "dev.proflyder.home.feature.settings.presentation.NotificationHistorySwipeFragmentTest",
         "dev.proflyder.home.feature.settings.presentation.SettingsScreensScreenshotTest",
         "dev.proflyder.home.feature.settings.presentation.SettingsViewModelTest",
     ],

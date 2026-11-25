@@ -8,7 +8,7 @@ import androidx.appcompat.app.AlertDialog
 import androidx.core.widget.doAfterTextChanged
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import dev.proflyder.home.core.designsystem.list.addGroupedRows
+import dev.proflyder.home.core.designsystem.list.addFullWidthRows
 import dev.proflyder.home.core.model.SecretVersion
 import dev.proflyder.home.core.navigation.Route
 import dev.proflyder.home.core.navigation.destination
@@ -69,7 +69,7 @@ internal class SecretPathFragment :
 
     override fun onViewReady(binding: FragmentSecretPathBinding, savedInstanceState: Bundle?) {
         binding.secretPathList.adapter = adapter
-        binding.secretPathList.addGroupedRows()
+        binding.secretPathList.addFullWidthRows()
         binding.secretPathRefresh.setupPullToRefresh(binding.secretPathList) {
             dispatch(SecretPathIntent.Refresh)
         }

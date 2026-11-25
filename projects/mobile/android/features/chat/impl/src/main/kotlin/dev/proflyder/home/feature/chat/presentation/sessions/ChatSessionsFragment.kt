@@ -1,5 +1,6 @@
 package dev.proflyder.home.feature.chat.presentation.sessions
 
+import dev.proflyder.home.core.designsystem.list.addFullWidthRows
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
@@ -33,7 +34,7 @@ internal class ChatSessionsFragment :
 
     override fun onViewReady(binding: FragmentChatSessionsBinding, savedInstanceState: Bundle?) = with(binding) {
         chatSessionsList.adapter = ConcatAdapter(ListHeaderSpacer.leading(chatSessionsList, chatSessionsHeader), adapter)
-        chatSessionsList.addItemDecoration(SessionDividers(chatSessionsList))
+        chatSessionsList.addFullWidthRows(chatSessionsList.resources.getDimensionPixelSize(R.dimen.chat_session_divider_inset))
         chatSessionsSearchReveal.attach(chatSessionsList, chatSessionsSearch)
         chatSessionsRefresh.setupPullToRefresh(chatSessionsList, chatSessionsSearchReveal) { dispatch(ChatSessionsIntent.Refresh) }
         chatSessionsRetry.setOnClickListener { dispatch(ChatSessionsIntent.Refresh) }

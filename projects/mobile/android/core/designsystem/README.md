@@ -163,6 +163,13 @@ the new theme automatically.
   rounded bottom for the last, the plain row rectangle in between. Only
   clickable rows get the ripple, so the adapter sets `isClickable`; rows must
   not declare `selectableItemBackground` themselves.
+- `addFullWidthRows(dividerInset)` (`list`) is the edge-to-edge list pattern
+  (notification history, secrets, chat sessions): no card surface, a thin
+  divider from `dividerInset` to the end edge between rows of one section
+  (sectioned adapters) or of one adapter, following swipe translation. It only
+  draws; clickable rows get the full-row rectangular ripple from
+  `View.applyFullRowRipple()` in their holder or `?attr/selectableItemBackground`
+  in the layout.
 - `GroupedRowsLayout` (`list`) is the same contract for a static card: a
   vertical `LinearLayout` placed inside a `MaterialCardView` that binds a
   `GroupedRowRipple` to every visible child on layout, using the card's corner

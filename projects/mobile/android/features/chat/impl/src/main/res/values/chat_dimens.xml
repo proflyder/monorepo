@@ -29,7 +29,6 @@
     <dimen name="chat_session_meta_icon">16dp</dimen>
     <dimen name="chat_session_search_margin">8dp</dimen>
     <dimen name="chat_session_divider_inset">76dp</dimen>
-    <dimen name="chat_session_divider_height">0.5dp</dimen>
     <dimen name="chat_session_row_padding_horizontal">16dp</dimen>
     <dimen name="chat_session_row_padding_vertical">10dp</dimen>
 </resources>

@@ -11,8 +11,6 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:clipToPadding="false"
-        android:paddingStart="@dimen/ds_space_l"
-        android:paddingEnd="@dimen/ds_space_l"
         android:paddingBottom="@dimen/ds_space_xl"
         app:layoutManager="dev.proflyder.home.core.designsystem.list.StickyHeadersLayoutManager"
         tools:itemCount="3"
@@ -91,7 +89,7 @@
         android:layout_height="wrap_content"
         android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:paddingStart="@dimen/ds_space_l"
+        android:paddingStart="@dimen/settings_row_padding"
         android:paddingTop="@dimen/ds_space_s"
         android:paddingEnd="@dimen/ds_space_s"
         android:paddingBottom="@dimen/ds_space_m">
