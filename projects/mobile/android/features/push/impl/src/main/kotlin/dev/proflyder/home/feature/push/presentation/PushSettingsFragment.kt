@@ -7,7 +7,6 @@ import dev.proflyder.home.core.designsystem.ListRow
 import dev.proflyder.home.core.designsystem.Tone
 import dev.proflyder.home.core.presentation.ScreenFragment
 import dev.proflyder.home.core.presentation.screenViewModel
-import dev.proflyder.home.core.ui.applyScrollBottomInset
 import dev.proflyder.home.core.ui.keepFocusedVisible
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.feature.push.PushPermissionStatus
@@ -24,7 +23,6 @@ internal class PushSettingsFragment :
     override val viewModel: PushSettingsViewModel by screenViewModel()
 
     override fun onViewReady(binding: FragmentPushSettingsBinding, savedInstanceState: Bundle?) {
-        binding.root.applyScrollBottomInset()
         binding.root.keepFocusedVisible()
         bindRow(binding.pushNotificationsRow, binding.pushNotificationsAction, PushSettingsScreen.NOTIFICATIONS)
         bindRow(binding.pushDndRow, binding.pushDndAction, PushSettingsScreen.DND)

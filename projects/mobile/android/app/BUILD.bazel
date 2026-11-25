@@ -111,6 +111,15 @@ home_android_binary(
     deps = [":app_lib"],
 )
 
+home_android_binary(
+    name = "app_preview",
+    app_label = "@string/app_name_preview",
+    application_id = "dev.proflyder.home.preview",
+    custom_package = "dev.proflyder.home",
+    manifest = "src/main/AndroidManifest.xml",
+    deps = [":app_lib"],
+)
+
 sh_test(
     name = "apk_runtime_closure_test",
     srcs = ["//platform/android:apk_runtime_closure.sh"],
@@ -163,11 +172,12 @@ home_android_local_test(
     associates = [":app_lib"],
     custom_package = "dev.proflyder.home",
     manifest = "src/main/AndroidManifest.xml",
+    manifest_values = {"appLabel": "@string/app_name"},
     test_classes = [
         "dev.proflyder.home.AppSmokeTestSuite",
         "dev.proflyder.home.ChatAttachMenuTest",
         "dev.proflyder.home.FabStyleScreenshotTest",
-        "dev.proflyder.home.GlassToolbarScreenshotTest",
+        "dev.proflyder.home.ChromeInsetsTest",
         "dev.proflyder.home.ScreenInsetsScreenshotTest",
         "dev.proflyder.home.HomeFabActivityTest",
         "dev.proflyder.home.KeyScreensScreenshotTest",
@@ -193,6 +203,7 @@ home_android_local_test(
         "@maven//:com_google_android_material_material",
         "@maven//:junit_junit",
         "@maven//:org_robolectric_robolectric",
+        "@maven//:androidx_swiperefreshlayout_swiperefreshlayout",
         "//projects/mobile/android/core/runtime",
         "@maven//:androidx_lifecycle_lifecycle_viewmodel_ktx",
         "//projects/mobile/android/core/designsystem",

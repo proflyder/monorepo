@@ -16,7 +16,6 @@ metro_android_library(
         "//projects/mobile/android/core/runtime",
         "//projects/mobile/android/core/ui",
         "//projects/mobile/android/features/time/api",
-        "@maven//:androidx_coordinatorlayout_coordinatorlayout",
         "@maven//:androidx_fragment_fragment_ktx",
         "@maven//:androidx_lifecycle_lifecycle_viewmodel_ktx",
         "@maven//:androidx_lifecycle_lifecycle_viewmodel_savedstate",

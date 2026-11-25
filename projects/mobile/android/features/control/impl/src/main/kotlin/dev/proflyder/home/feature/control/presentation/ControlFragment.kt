@@ -7,13 +7,13 @@ import androidx.recyclerview.widget.RecyclerView
 import dev.proflyder.home.core.presentation.ScreenFragment
 import dev.proflyder.home.core.presentation.screenViewModel
 import dev.proflyder.home.core.ui.Notices
-import dev.proflyder.home.core.ui.applyScrollBottomInset
-import dev.proflyder.home.core.ui.fabClearance
 import dev.proflyder.home.core.ui.liftAboveBottomInsets
 import dev.proflyder.home.feature.alarms.UpcomingAlarmsSection
 import dev.proflyder.home.feature.control.SpeedDialItem
 import dev.proflyder.home.feature.control.impl.R
 import dev.proflyder.home.feature.control.impl.databinding.FragmentControlBinding
+import dev.proflyder.home.core.ui.ContentInsets
+import dev.proflyder.home.core.ui.fabContentInsets
 
 internal class ControlFragment :
     ScreenFragment<FragmentControlBinding, ControlUiState, ControlIntent, ControlEvent>(
@@ -31,8 +31,9 @@ internal class ControlFragment :
         section(R.id.control_alarms_slot, UpcomingAlarmsSection)
     }
 
+    override fun contentInsets(): ContentInsets = fabContentInsets()
+
     override fun onViewReady(binding: FragmentControlBinding, savedInstanceState: Bundle?) {
-        binding.controlList.applyScrollBottomInset(binding.controlList.fabClearance())
         binding.controlQuickFab.liftAboveBottomInsets()
         binding.controlStatesBanner.liftAboveBottomInsets()
         val list = ControlListRenderer(binding, ::dispatch)

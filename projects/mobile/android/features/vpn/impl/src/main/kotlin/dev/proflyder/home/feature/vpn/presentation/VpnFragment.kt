@@ -13,7 +13,6 @@ import dev.proflyder.home.core.presentation.PillSegmentsBinder
 import dev.proflyder.home.core.presentation.ScreenFragment
 import dev.proflyder.home.core.presentation.SwitchBinder
 import dev.proflyder.home.core.presentation.screenViewModel
-import dev.proflyder.home.core.ui.applyScrollBottomInset
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.feature.vpn.VpnAuth
 import dev.proflyder.home.feature.vpn.VpnConnection
@@ -34,7 +33,6 @@ internal class VpnFragment :
     private val certificatePicker = registerForActivityResult(ActivityResultContracts.OpenDocument(), ::onCertificate)
 
     override fun onViewReady(binding: FragmentVpnBinding, savedInstanceState: Bundle?) {
-        binding.root.applyScrollBottomInset()
         val screen = VpnScreen(binding, ::dispatch)
         binding.vpnCertificateImport.setOnClickListener { certificatePicker.launch(CERTIFICATE_TYPES) }
         binding.vpnForget.setOnClickListener { confirmForget() }

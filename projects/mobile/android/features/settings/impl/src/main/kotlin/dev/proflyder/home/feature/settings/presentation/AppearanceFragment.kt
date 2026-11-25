@@ -14,7 +14,6 @@ import dev.proflyder.home.core.theme.R as ThemeR
 import dev.proflyder.home.core.theme.ThemeMode
 import dev.proflyder.home.core.presentation.ScreenFragment
 import dev.proflyder.home.core.presentation.screenViewModel
-import dev.proflyder.home.core.ui.applyScrollBottomInset
 import dev.proflyder.home.feature.settings.impl.R
 import dev.proflyder.home.feature.settings.impl.databinding.FragmentAppearanceBinding
 import dev.proflyder.home.feature.settings.impl.databinding.ItemAppearanceThemeBinding
@@ -26,7 +25,6 @@ internal class AppearanceFragment :
     override val viewModel: AppearanceViewModel by screenViewModel()
 
     override fun onViewReady(binding: FragmentAppearanceBinding, savedInstanceState: Bundle?) {
-        binding.root.applyScrollBottomInset()
         val cards = bindThemeCards(binding, AppThemes.isDynamicAvailable) { dispatch(AppearanceIntent.SelectTheme(it)) }
         binding.appearanceMode.setLabels(ThemeMode.entries.map { getString(MODE_LABELS.getValue(it)) })
         val mode = bindPills(binding.appearanceMode, ThemeMode.entries, AppearanceIntent::SelectMode)

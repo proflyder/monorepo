@@ -94,8 +94,8 @@ class NoticeSwipeActivityTest {
             params.bottomMargin >= bottom.height,
         )
         assertTrue(
-            "the notice must sit above the bottom bar: ${notice.bottom} > ${bottom.top}",
-            notice.bottom <= bottom.top,
+            "the notice must sit above the bottom bar: ${notice.windowBottom()} > ${bottom.windowTop()}",
+            notice.windowBottom() <= bottom.windowTop(),
         )
     }
 
@@ -149,3 +149,7 @@ class NoticeSwipeActivityTest {
         const val HEIGHT = 1920
     }
 }
+
+private fun View.windowTop(): Int = IntArray(2).also(::getLocationInWindow)[1]
+
+private fun View.windowBottom(): Int = windowTop() + height

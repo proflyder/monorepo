@@ -9,7 +9,6 @@ import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.model.SchedulerStatus
 import dev.proflyder.home.core.presentation.ScreenFragment
 import dev.proflyder.home.core.presentation.screenViewModel
-import dev.proflyder.home.core.ui.applyScrollBottomInset
 import dev.proflyder.home.core.ui.keepFocusedVisible
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.core.ui.setupPullToRefresh
@@ -28,7 +27,6 @@ internal class ConnectionFragment :
     override val viewModel: ConnectionViewModel by screenViewModel()
 
     override fun onViewReady(binding: FragmentConnectionBinding, savedInstanceState: Bundle?) {
-        binding.connectionScroll.applyScrollBottomInset()
         binding.connectionScroll.keepFocusedVisible()
         val tokenBinder = bindText(binding.connectionToken, ConnectionIntent::EditToken)
         binding.connectionRefresh.setupPullToRefresh(binding.connectionScroll) { dispatch(ConnectionIntent.Test) }

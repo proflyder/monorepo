@@ -1,8 +1,10 @@
 package dev.proflyder.home.feature.settings.presentation
 
 import android.os.Bundle
+import androidx.recyclerview.widget.ConcatAdapter
 import androidx.recyclerview.widget.ItemTouchHelper
 import dev.proflyder.home.core.model.NotificationHistory
+import dev.proflyder.home.core.designsystem.list.ListHeaderSpacer
 import dev.proflyder.home.core.presentation.IntentAdapterCallback
 import dev.proflyder.home.core.presentation.ListItemIntent
 import dev.proflyder.home.core.presentation.PagingBinder
@@ -14,7 +16,6 @@ import dev.proflyder.home.core.ui.AdapterCallback
 import dev.proflyder.home.core.ui.ListStateViews
 import dev.proflyder.home.core.ui.SwipeActions
 import dev.proflyder.home.core.ui.SwipeStyle
-import dev.proflyder.home.core.ui.applyScrollBottomInset
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.core.ui.swipeAction
 import dev.proflyder.home.core.ui.userMessage
@@ -37,7 +38,6 @@ internal class NotificationHistoryFragment :
     }
 
     override fun onViewReady(binding: FragmentNotificationHistoryBinding, savedInstanceState: Bundle?) {
-        binding.historyList.applyScrollBottomInset()
         val binder = PagingBinder<NotificationHistory>(
             recyclerView = binding.historyList,
             states = ListStateViews(
@@ -47,7 +47,7 @@ internal class NotificationHistoryFragment :
                 content = binding.historyList,
                 errorText = binding.historyErrorText,
             ),
-            content = adapter,
+            content = ConcatAdapter(ListHeaderSpacer.leading(binding.historyList, binding.historyListHeader), adapter),
             failureText = { it.userMessage(requireContext()) },
             dispatch = viewModel::dispatch,
         )

@@ -1,16 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
+<dev.proflyder.home.core.designsystem.glass.GlassHeaderLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <com.google.android.material.appbar.AppBarLayout
-        android:id="@+id/time_appbar"
+    <androidx.viewpager2.widget.ViewPager2
+        android:id="@+id/time_pager"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:background="@android:color/transparent"
-        app:elevation="0dp"
-        app:liftOnScroll="false">
+        android:layout_height="match_parent" />
+
+    <dev.proflyder.home.core.designsystem.glass.GlassScreenHeader
+        android:id="@+id/time_header"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
 
         <dev.proflyder.home.core.designsystem.PillSegments
             android:id="@+id/time_tabs"
@@ -19,13 +20,6 @@
             android:layout_marginTop="@dimen/ds_space_s"
             android:layout_marginBottom="@dimen/ds_space_s"
             android:paddingStart="@dimen/ds_space_l"
-            android:paddingEnd="@dimen/ds_space_l"
-            app:layout_scrollFlags="scroll|enterAlways" />
-    </com.google.android.material.appbar.AppBarLayout>
-
-    <androidx.viewpager2.widget.ViewPager2
-        android:id="@+id/time_pager"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        app:layout_behavior="@string/appbar_scrolling_view_behavior" />
-</androidx.coordinatorlayout.widget.CoordinatorLayout>
+            android:paddingEnd="@dimen/ds_space_l" />
+    </dev.proflyder.home.core.designsystem.glass.GlassScreenHeader>
+</dev.proflyder.home.core.designsystem.glass.GlassHeaderLayout>

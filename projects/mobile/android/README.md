@@ -64,32 +64,52 @@ a typed router. Device acceptance and open work: [STATE](../../../docs/STATE.md)
 
 ## App chrome
 
-`MainActivity` hosts one glass app bar for every screen
-(`core/designsystem/glass`). The fragment container draws edge to edge under
-it: the bar renders a blurred `RenderNode` snapshot of the content on API 31+
-and a near-opaque surface tint on older devices and in software rendering (`GlassPainter` draws tint, hairline and fade for both the bar and pinned section headers). Screens without a vertical scroller get the bar height as root padding, with an `colorOutlineVariant` hairline and a
-12 dp fade into the content. `BaseFragment` of a top-level screen applies the
-live `AppBarHost.appBarHeight` once, to exactly one view (`appBarInsetTarget`):
-the screen's own `AppBarLayout` if it has one, else the primary vertical
-scroller, else the screen root. Nested fragments (pager pages, sections) never
-pad themselves, and a scroller below fixed views in a vertical stack falls back
-to the root, so there is never a double gap or content hidden under the bar.
-Screens with a fixed header (history counters, secrets search, Time tabs) put
-it in their own `AppBarLayout` with `scroll|enterAlways`, like Home. A
-scrolled-away inner app bar is clipped at the bar edge (`HideUnderBar`), so it
-is never drawn or jittering under the glass. The padding binding follows the
-view's attach state, so re-attached views pick up the current height.
+`MainActivity` owns the global chrome. The fragment container is full-bleed
+(under the status bar, the toolbar and the bottom navigation); the toolbar
+(`top_chrome`) and the bottom navigation (`bottom_chrome`) are
+`GlassChromeLayout` overlays. Each records only the fragment container into a
+`RenderNode` with a blur `RenderEffect` (API 31+, hardware rendering): the
+window background first, so the sharp content under the bar is fully covered,
+then the content; then a surface tint of about 66 %. Below API 31 a translucent
+tint of about 91 %. Redraws follow scroll events of the content. Each block
+draws one `colorOutlineVariant` 0.5 dp hairline and a fade on its content side
+at the bottom of the combined glass rect.
 
-The blur snapshot is re-recorded when the backdrop changes: scroll events and
-every redraw of a screen's vertical list (`trackGlassBackdrop`), skipping the
-bar's own recording pass. The tint over blur is about 70 % opaque.
+The chrome publishes its size as WindowInsets (`MainInsets`): the container
+receives `statusBars.top` = toolbar block height and `navigationBars.bottom` =
+bottom block height (`underChrome`), re-dispatched when a chrome block changes
+size. Screens consume insets one way: `BaseFragment` calls
+`applyContentInsets(contentInsets())` on the primary vertical scroller (or the
+screen root when fixed views sit above the scroller or there is none):
+top/bottom padding, `clipToPadding=false`, consumed for the subtree, a list at
+the top stays at the top when the inset changes. Screens only override
+`contentInsets()` (FAB clearance, or `bottom = false` where a panel follows
+the keyboard).
 
-A sticky section header pinned at the bar edge is handed to the bar
-(`AppBarHost.pinUnderBar`): `GlassBarView` extends its surface over the header
-(same blur and tint), draws the header content and puts the single hairline
-and fade under the combined block. Elsewhere (below an expanded inner header)
-the header draws its own opaque surface. Every screen's resting geometry and
-the pinned history header are covered by `ScreenInsetsScreenshotTest`.
+Screen header content that should scroll away (Home alarms slot, history
+counters, secrets search) is the first list item: `ListHeaderSpacer` is the
+leading adapter of a `ConcatAdapter`, its item is a spacer of the header's
+height, and the header view (which may host a child fragment) follows the
+spacer's position, so it scrolls under the glass like any row. Only
+persistent controls (Time tabs) stay fixed: `GlassScreenHeader` inside a
+`GlassHeaderLayout`, which dispatches `top = header height` to the rest of the
+screen.
+
+The pinned section header stays a normal, visible list item. While pinned
+(`StickyGlass`) its background is a glass drawable with the bar's style (same
+blur radius, backdrop fill and tint) that blurs the rows behind it, so bar and
+header read as one surface; the header covers the bar edge (`GlassEdgeOwner`)
+and draws the single hairline and fade itself. It does not sample the bar's
+blur node: the header lives inside the content that node records, so the
+reference would form a RenderNode cycle. Never draw one view into another
+view's hardware canvas while it renders with alpha 0: its child RenderNodes
+are culled with the invisible parent, so the copy loses its text (seen on
+device in 0.1.0-82f92c8). Sections pin at the content top inset
+(`StickyHeadersLayoutManager`).
+Geometry is covered by `ChromeInsetsTest`, `ScreenInsetsScreenshotTest`,
+`NotificationHistoryStickyTest` (real history adapter behind `ConcatAdapter`)
+and `HomeScrolledGlassTest` (real Home renderer and adapter: the alarm slot
+scrolls under the bar, the pinned room and the bar share one glass rect).
 
 ## Build and test
 
@@ -184,6 +204,9 @@ targets, and Gradle sync is not used here.
 5. Run/Debug: Bazel run configuration for `//projects/mobile/android/app:app`
    (`android_binary`, ABI `arm64-v8a`); unit tests via the gutter icon or a
    Bazel test configuration for a `kt_android_local_test`/`kt_jvm_test` target.
+6. Side-by-side build: `//projects/mobile/android/app:app_preview` is the same
+   app as `dev.proflyder.home.preview` labelled "Home Preview" (debug key), so
+   it installs next to the release app for checking UI on a device.
 
 Known limitations: no Gradle-style Build Variants, Compose preview or Layout
 Inspector live updates; generated code appears only after *Build
@@ -538,10 +561,14 @@ badges are selectors in `render`.
   position 0 and starts at `paddingTop` (`isAtTop()`); `canScrollVertically`
   is not used for lists because a zero-height first row (the empty hub on the
   home screen) makes its offset estimate positive at the very top.
-- Sticky section headers (`StickySectionHeaders`) pin to the visible top of
-  the list (`paddingTop` with `clipToPadding`, otherwise the list edge), fill
-  the whole width with the window background and are pushed out by the next
-  header.
+- Sticky section headers: `StickyHeadersLayoutManager` (a `GridLayoutManager`,
+  span count 1 for plain lists). The current header (`SectionedAdapter.isStickyHeader`,
+  defaults to `isSectionHeader`; adapters wrapped in a `ConcatAdapter` are
+  resolved through `sections()`) is its own item view, detached around every
+  base layout and scroll call, ignored by the recycler and laid out last at the
+  pin edge (`StickyPinEdge`: `paddingTop`, or the content top inset), so it draws above the rows, takes taps and is pushed out by the next
+  header. Adapter changes rebind it on the next layout; `scrollToPosition`
+  keeps the target below it.
 - Results between screens and sheets are typed: `object X : ResultKey<T>(T.serializer())`
   with a `@Serializable` value; the sender calls `setResult(X, value)`, the
   host registers `onResult(X) { value -> Intent }` in `onScreenCreate`
@@ -623,9 +650,9 @@ badges are selectors in `render`.
   (same model as `ScreenFragment`, `by screenViewModel()`). Plain choices use
   `OptionsSheet` and `WheelSheet` from `core/presentation`; results come back
   through typed `ResultKey`s.
-- Sectioned lists: the adapter implements `SectionedAdapter`; decorations
-  `StickySectionHeaders().attachTo(list)` (a tap on the pinned header goes to
-  the header) and `addGroupedRows()` (cards, dividers and a row ripple clipped
+- Sectioned lists: the adapter implements `SectionedAdapter`, the list uses
+  `StickyHeadersLayoutManager` (XML `app:layoutManager` or code) and
+  `addGroupedRows()` (cards, dividers and a row ripple clipped
   to each row's card shape).
 - A notice with an action is a `RouteNotice(message, route)` shown by
   `showNotice`: a snackbar with "Open" that opens the typed `Route`.
@@ -745,7 +772,9 @@ navigate by route string, not by an impl destination.
 - **Insets.** Everything is edge-to-edge through one mechanism in
   `core/ui/WindowInsets.kt`; no layout hard-codes bar sizes. The bottom
   navigation hides while the keyboard is open; pinned panels use
-  `pinAboveKeyboard`, lists `applyScrollBottomInset`.
+  `pinAboveKeyboard`, scrolling content `applyContentInsets` (via `BaseFragment`);
+  `setupPullToRefresh` keeps the spinner under the glass from the same top
+  inset (`setProgressViewOffset`, re-applied on every inset change).
 - **Themes** are `ThemeOverlay`s applied in `onActivityPreCreated` before
   inflation (Material You: dynamic colours over Emerald). Stored keys are
   `emerald`, `system`, `neon`; a retired key stays in `AppTheme.legacyKeys`
@@ -778,9 +807,11 @@ to wallpaper colours on API 31+. Only the alias of
 (`core/launchericon/api`) is implemented by `PackageManagerLauncherIcons`
 (`core/launchericon/impl`), which enables the target alias first, then
 disables the others with `DONT_KILL_APP`, skipping writes when the state
-already matches. `LauncherIconSync` (an `AppStartable`) waits for the stored
-appearance and applies every distinct theme, so the startup sync and theme
-changes share one path. `MainActivity` stays exported without a launcher
+already matches. `LauncherIconSync` (an `AppStartable`) applies the stored
+theme's alias only when the process goes to background (`AppForeground`
+moving from visible to hidden): the running task may have been launched
+through the alias being disabled, and disabling it while visible makes the
+system finish the task. The theme itself applies in-app immediately. `MainActivity` stays exported without a launcher
 filter, so explicit intents and `getLaunchIntentForPackage` (push, VPN
 notifications) keep working. A new `AppTheme` entry fails compilation in
 `LauncherAliases` until its alias and icon exist.

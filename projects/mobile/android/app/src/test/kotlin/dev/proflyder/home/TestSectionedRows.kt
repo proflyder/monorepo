@@ -15,12 +15,13 @@ import dev.proflyder.home.core.designsystem.list.SectionedAdapter
 internal class TestSectionedRows(
     context: Context,
     @LayoutRes private val headerLayout: Int,
+    private val rows: List<String> = emptyList(),
     private val bindHeader: (View, Int) -> Unit,
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>(), SectionedAdapter {
     private val inflater = LayoutInflater.from(context)
     private val density = context.resources.displayMetrics.density
 
-    override fun isSectionHeader(position: Int): Boolean = position % (ROWS + 1) == 0
+    override fun isSectionHeader(position: Int): Boolean = position % SECTION_SIZE == 0
 
     override fun getItemCount(): Int = SECTIONS * (ROWS + 1)
 
@@ -33,10 +34,12 @@ internal class TestSectionedRows(
 
     override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
         when {
-            isSectionHeader(position) -> bindHeader(holder.itemView, position / (ROWS + 1))
-            else -> ((holder.itemView as MaterialCardView).getChildAt(0) as TextView).text = "Row $position"
+            isSectionHeader(position) -> bindHeader(holder.itemView, position / SECTION_SIZE)
+            else -> ((holder.itemView as MaterialCardView).getChildAt(0) as TextView).text = rowTitle(position)
         }
     }
+
+    private fun rowTitle(position: Int): String = rows.getOrNull(position % rows.size.coerceAtLeast(1)) ?: "Row $position"
 
     private fun card(parent: ViewGroup): MaterialCardView {
         val margin = (MARGIN_DP * density).toInt()
@@ -58,11 +61,12 @@ internal class TestSectionedRows(
     }
 
     companion object {
-        fun titled(context: Context, @LayoutRes layout: Int, @IdRes title: Int, titles: List<String>) =
-            TestSectionedRows(context, layout) { view, section -> view.findViewById<TextView>(title).text = titles[section % titles.size] }
+        fun titled(context: Context, @LayoutRes layout: Int, @IdRes title: Int, titles: List<String>, rows: List<String> = emptyList()) =
+            TestSectionedRows(context, layout, rows) { view, section -> view.findViewById<TextView>(title).text = titles[section % titles.size] }
 
         private const val SECTIONS = 4
         private const val ROWS = 6
+        const val SECTION_SIZE = ROWS + 1
         private const val HEADER = 0
         private const val ROW = 1
         private const val MARGIN_DP = 6

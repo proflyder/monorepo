@@ -20,6 +20,6 @@ import org.junit.runners.Suite
     RevealBinderTest::class,
     SectionsTest::class,
     SliderStylesTest::class,
-    StickyHeadersScreenshotTest::class,
+    StickyHeadersLayoutManagerTest::class,
 )
 class DesignSystemTestSuite

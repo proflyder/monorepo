@@ -1,21 +1,92 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     tools:ignore="SelectableText">
 
-    <com.google.android.material.appbar.AppBarLayout
-        android:id="@+id/history_appbar"
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/history_list"
         android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clipToPadding="false"
+        android:paddingStart="@dimen/ds_space_l"
+        android:paddingEnd="@dimen/ds_space_l"
+        android:paddingBottom="@dimen/ds_space_xl"
+        app:layoutManager="dev.proflyder.home.core.designsystem.list.StickyHeadersLayoutManager"
+        tools:itemCount="3"
+        tools:listitem="@layout/item_notification_history" />
+
+    <ProgressBar
+        android:id="@+id/history_progress"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:background="@android:color/transparent"
-        app:elevation="0dp"
-        app:liftOnScroll="false">
+        android:layout_gravity="center"
+        android:visibility="gone" />
 
     <LinearLayout
-        android:id="@+id/history_header"
+        android:id="@+id/history_error"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:padding="@dimen/settings_empty_padding"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/history_error_text"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:textAppearance="?attr/textAppearanceBodyLarge" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/history_retry"
+            style="@style/Widget.Home.Button.Filled.M"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/ds_space_m"
+            android:text="@string/ds_action_retry" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/history_empty"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:padding="@dimen/settings_empty_padding"
+        android:visibility="gone">
+
+        <ImageView
+            android:layout_width="@dimen/settings_empty_icon"
+            android:layout_height="@dimen/settings_empty_icon"
+            android:importantForAccessibility="no"
+            android:src="@drawable/settings_ic_history_muted" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/ds_space_l"
+            android:gravity="center"
+            android:text="@string/history_empty"
+            android:textAppearance="?attr/textAppearanceTitleMedium" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/ds_space_s"
+            android:gravity="center"
+            android:text="@string/history_empty_hint"
+            android:textAppearance="?attr/textAppearanceBodyMedium"
+            android:textColor="?attr/colorOnSurfaceVariant" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/history_list_header"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:gravity="center_vertical"
@@ -23,8 +94,7 @@
         android:paddingStart="@dimen/ds_space_l"
         android:paddingTop="@dimen/ds_space_s"
         android:paddingEnd="@dimen/ds_space_s"
-        android:paddingBottom="@dimen/ds_space_m"
-        app:layout_scrollFlags="scroll|enterAlways">
+        android:paddingBottom="@dimen/ds_space_m">
 
         <TextView
             android:id="@+id/history_count"
@@ -50,90 +120,4 @@
             android:layout_width="wrap_content"
             android:text="@string/history_clear" />
     </LinearLayout>
-    </com.google.android.material.appbar.AppBarLayout>
-
-    <FrameLayout
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        app:layout_behavior="@string/appbar_scrolling_view_behavior">
-
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/history_list"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:clipToPadding="false"
-            android:paddingStart="@dimen/ds_space_l"
-            android:paddingEnd="@dimen/ds_space_l"
-            android:paddingBottom="@dimen/ds_space_xl"
-            app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
-            tools:itemCount="3"
-            tools:listitem="@layout/item_notification_history" />
-
-        <ProgressBar
-            android:id="@+id/history_progress"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center"
-            android:visibility="gone" />
-
-        <LinearLayout
-            android:id="@+id/history_error"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center"
-            android:gravity="center"
-            android:orientation="vertical"
-            android:padding="@dimen/settings_empty_padding"
-            android:visibility="gone">
-
-            <TextView
-                android:id="@+id/history_error_text"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:gravity="center"
-                android:textAppearance="?attr/textAppearanceBodyLarge" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/history_retry"
-                style="@style/Widget.Home.Button.Filled.M"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/ds_space_m"
-                android:text="@string/ds_action_retry" />
-        </LinearLayout>
-
-        <LinearLayout
-            android:id="@+id/history_empty"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center"
-            android:gravity="center"
-            android:orientation="vertical"
-            android:padding="@dimen/settings_empty_padding"
-            android:visibility="gone">
-
-            <ImageView
-                android:layout_width="@dimen/settings_empty_icon"
-                android:layout_height="@dimen/settings_empty_icon"
-                android:importantForAccessibility="no"
-                android:src="@drawable/settings_ic_history_muted" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/ds_space_l"
-                android:gravity="center"
-                android:text="@string/history_empty"
-                android:textAppearance="?attr/textAppearanceTitleMedium" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/ds_space_s"
-                android:gravity="center"
-                android:text="@string/history_empty_hint"
-                android:textAppearance="?attr/textAppearanceBodyMedium"
-                android:textColor="?attr/colorOnSurfaceVariant" />
-        </LinearLayout>
-    </FrameLayout>
-</androidx.coordinatorlayout.widget.CoordinatorLayout>
+</FrameLayout>

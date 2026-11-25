@@ -28,6 +28,7 @@ home_android_local_test(
     ],
     deps = [
         "//projects/mobile/android/core/launchericon/api",
+        "//projects/mobile/android/core/runtime",
         "//projects/mobile/android/core/theme",
         "@maven//:androidx_datastore_datastore_preferences",
         "@maven//:junit_junit",

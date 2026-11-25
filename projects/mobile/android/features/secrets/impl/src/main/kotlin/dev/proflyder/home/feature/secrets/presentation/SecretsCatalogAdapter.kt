@@ -26,6 +26,8 @@ internal class SecretsCatalogAdapter(
     SectionedAdapter {
     override fun isSectionHeader(position: Int): Boolean = getItem(position) !is SecretsCatalogRow.EntryRow
 
+    override fun isStickyHeader(position: Int): Boolean = getItem(position) is SecretsCatalogRow.Group
+
     override fun viewTypeOf(item: SecretsCatalogRow): Int = when (item) {
         SecretsCatalogRow.DeviceCard -> TYPE_DEVICE
         is SecretsCatalogRow.Group -> TYPE_GROUP

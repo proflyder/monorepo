@@ -2,7 +2,7 @@ package dev.proflyder.home.core.designsystem
 
 import dev.proflyder.home.core.designsystem.list.GroupSlot
 import dev.proflyder.home.core.designsystem.list.SectionedAdapter
-import dev.proflyder.home.core.designsystem.list.headerAtOrBefore
+import dev.proflyder.home.core.designsystem.list.stickyHeaderAtOrBefore
 import dev.proflyder.home.core.designsystem.list.slotOf
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -32,6 +32,6 @@ class SectionsTest {
 
     @Test
     fun theNearestHeaderAboveARowOwnsIt() {
-        assertEquals(listOf(0, 0, 0, 3, 3), (0..4).map { sections.headerAtOrBefore(it) })
+        assertEquals(listOf(0, 0, 0, 3, 3), (0..4).map { sections.stickyHeaderAtOrBefore(it) })
     }
 }

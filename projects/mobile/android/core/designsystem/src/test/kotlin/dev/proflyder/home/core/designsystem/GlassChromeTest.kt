@@ -2,166 +2,208 @@ package dev.proflyder.home.core.designsystem.glass
 
 import android.app.Activity
 import android.content.Context
-import android.content.ContextWrapper
-import android.view.ContextThemeWrapper
-import android.graphics.Bitmap
-import android.graphics.Canvas
-import android.graphics.Rect
+import android.os.Looper
+import android.view.View
+import android.view.ViewGroup
 import android.widget.FrameLayout
-import android.widget.LinearLayout
-import android.widget.TextView
-import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.appcompat.view.ContextThemeWrapper
+import androidx.core.graphics.Insets
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.recyclerview.widget.ConcatAdapter
 import androidx.recyclerview.widget.RecyclerView
-import com.google.android.material.appbar.AppBarLayout
+import dev.proflyder.home.core.designsystem.R
+import dev.proflyder.home.core.designsystem.list.ListHeaderSpacer
+import dev.proflyder.home.core.designsystem.list.SectionedAdapter
+import dev.proflyder.home.core.designsystem.list.StickyHeadersLayoutManager
+import dev.proflyder.home.core.designsystem.list.sections
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.RuntimeEnvironment
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
-import com.google.android.material.R as MaterialR
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class GlassChromeTest {
+    private lateinit var activity: Activity
+    private lateinit var context: Context
+
+    @Before
+    fun setUp() {
+        activity = Robolectric.buildActivity(Activity::class.java).setup().get()
+        context = ContextThemeWrapper(activity, R.style.Base_Theme_Home)
+    }
+
     @Test
-    fun listTopPaddingEqualsTheBarHeight() {
-        val source = AppBarHeightTracker().apply { update(120) }
-        val context = SourceContext(RuntimeEnvironment.getApplication(), source)
-        val list = RecyclerView(context).apply {
-            layoutManager = LinearLayoutManager(context)
-            setPadding(0, 0, 0, 12)
+    fun screenHeaderTakesTheChromeInsetAndContentStartsBelowIt() {
+        val content = InsetProbe(context)
+        val header = GlassScreenHeader(context).apply { addView(View(context), ViewGroup.LayoutParams(WIDTH, HEADER)) }
+        val layout = GlassHeaderLayout(context).apply {
+            addView(content)
+            addView(header, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         }
-        list.applyAppBarContentPadding()
-        assertEquals(source.appBarHeight, list.paddingTop)
-        assertEquals(12, list.paddingBottom)
+        show(layout)
+        assertEquals(BAR, header.paddingTop)
+        assertEquals(BAR + HEADER, header.height)
+        assertEquals(BAR + HEADER, content.insetTop)
+        assertEquals(NAV, content.insetBottom)
     }
 
     @Test
-    fun listFollowsTheBarHeightChanges() {
-        val source = AppBarHeightTracker().apply { update(80) }
-        val context = SourceContext(RuntimeEnvironment.getApplication(), source)
-        val list = RecyclerView(context).apply {
-            layoutManager = LinearLayoutManager(context)
-            setPadding(0, 4, 0, 0)
+    fun hiddenScreenHeaderPassesTheChromeInsetThrough() {
+        val content = InsetProbe(context)
+        val header = GlassScreenHeader(context).apply { visibility = View.GONE }
+        val layout = GlassHeaderLayout(context).apply {
+            addView(content)
+            addView(header)
         }
-        list.applyAppBarContentPadding()
-        assertEquals(84, list.paddingTop)
-        val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
-        activity.setContentView(list)
-        source.update(184)
-        assertEquals(188, list.paddingTop)
-        activity.setContentView(FrameLayout(activity))
-        source.update(60)
-        assertEquals(188, list.paddingTop)
-        activity.setContentView(list)
-        assertEquals(64, list.paddingTop)
+        show(layout)
+        assertEquals(BAR, content.insetTop)
     }
 
     @Test
-    fun screenWithoutScrollerPadsItsRoot() {
-        val source = AppBarHeightTracker().apply { update(96) }
-        val context = SourceContext(RuntimeEnvironment.getApplication(), source)
-        val root = FrameLayout(context).apply { addView(TextView(context)) }
-        root.applyAppBarContentPadding()
-        assertEquals(96, root.paddingTop)
+    fun headerContentDoesNotGetTheChromeInsetAgain() {
+        val nested = InsetProbe(context)
+        val header = GlassScreenHeader(context).apply { addView(nested) }
+        show(GlassHeaderLayout(context).apply { addView(header) })
+        assertTrue("nested got ${nested.insetTop}", nested.insetTop <= 0)
     }
 
     @Test
-    fun listUnderAnInnerAppBarPadsThatAppBar() {
-        val source = AppBarHeightTracker().apply { update(100) }
-        val themed = ContextThemeWrapper(RuntimeEnvironment.getApplication(), MaterialR.style.Theme_Material3_DayNight_NoActionBar)
-        val context = SourceContext(themed, source)
-        val inner = AppBarLayout(context)
-        val list = RecyclerView(context).apply { layoutManager = LinearLayoutManager(context) }
-        val root = FrameLayout(context).apply {
-            addView(inner)
+    fun coveredEdgeIsReleasedOnlyByItsLastCover() {
+        var changes = 0
+        val covers = EdgeCovers { changes++ }
+        covers.coverEdge("a", true)
+        covers.coverEdge("b", true)
+        covers.coverEdge("a", false)
+        assertTrue(covers.covered)
+        covers.coverEdge("b", false)
+        assertFalse(covers.covered)
+        assertEquals(4, changes)
+    }
+
+    @Test
+    fun edgeOwnerAboveAListIsItsScreenHeader() {
+        val list = RecyclerView(context)
+        val header = GlassScreenHeader(context)
+        GlassHeaderLayout(context).apply {
             addView(list)
+            addView(header)
         }
-        root.applyAppBarContentPadding()
-        assertEquals(100, inner.paddingTop)
-        assertEquals(0, list.paddingTop)
-        assertEquals(false, list.clipToPadding)
+        assertEquals(header, list.glassEdgeAbove())
     }
 
     @Test
-    fun listBelowFixedContentPadsTheScreenInstead() {
-        val source = AppBarHeightTracker().apply { update(90) }
-        val context = SourceContext(RuntimeEnvironment.getApplication(), source)
-        val list = RecyclerView(context).apply {
-            layoutManager = LinearLayoutManager(context)
-            setPadding(0, 6, 0, 0)
-        }
-        val root = LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL
-            addView(TextView(context))
-            addView(list)
-        }
-        root.applyAppBarContentPadding()
-        assertEquals(90, root.paddingTop)
-        assertEquals(6, list.paddingTop)
-    }
-
-    @Test
-    fun innerAppBarScrolledAwayIsNotDrawnUnderTheBar() {
-        val source = AppBarHeightTracker().apply { update(100) }
-        val themed = ContextThemeWrapper(RuntimeEnvironment.getApplication(), MaterialR.style.Theme_Material3_DayNight_NoActionBar)
-        val context = SourceContext(themed, source)
-        val inner = AppBarLayout(context)
+    fun listHeaderFollowsItsSpacerAndScrollsAway() {
+        val list = RecyclerView(context).apply { layoutManager = StickyHeadersLayoutManager(context) }
+        val header = View(context)
+        list.adapter = ConcatAdapter(ListHeaderSpacer.leading(list, header), Rows())
         val root = FrameLayout(context).apply {
-            addView(inner)
-            addView(RecyclerView(context).apply { layoutManager = LinearLayoutManager(context) })
+            addView(list)
+            addView(header, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, HEADER))
         }
-        root.applyAppBarContentPadding()
-        inner.layout(0, 0, 400, 180)
-        HideUnderBar.onOffsetChanged(inner, -80)
-        assertEquals(Rect(0, 180, 400, 180), inner.clipBounds)
-        HideUnderBar.onOffsetChanged(inner, 0)
-        assertEquals(Rect(0, 100, 400, 180), inner.clipBounds)
+        list.setPadding(0, BAR, 0, 0)
+        list.clipToPadding = false
+        show(root)
+        assertEquals(BAR.toFloat(), header.translationY)
+        assertEquals(BAR + HEADER, list.getChildAt(1).top)
+        list.scrollBy(0, HEADER / 2)
+        settle()
+        assertEquals((BAR - HEADER / 2).toFloat(), header.translationY)
+        list.scrollBy(0, HEIGHT)
+        settle()
+        assertTrue(header.translationY + HEADER <= 0f)
     }
 
     @Test
-    fun blurredGlassKeepsTheContentVisible() {
-        val bar = GlassBarView(themedContext())
-        val alpha = bar.blurredPainter.tintAlpha / OPAQUE
-        assertTrue("tint over blur is $alpha", alpha in FROSTED_MIN..FROSTED_MAX)
-        assertTrue(bar.blurRadius >= bar.resources.displayMetrics.density * MIN_BLUR_DP)
+    fun concatenatedAdaptersExposeTheirSections() {
+        val sections = checkNotNull(ConcatAdapter(Rows(), Footer()).sections())
+        assertTrue(sections.isStickyHeader(0))
+        assertFalse(sections.isStickyHeader(1))
+        assertTrue(sections.isStickyHeader(SECTION))
+        assertFalse("footer never pins", sections.isStickyHeader(SECTION * 2))
+        assertTrue("footer is outside every group", sections.isSectionHeader(SECTION * 2))
     }
 
     @Test
-    fun pinnedHeaderExtendsTheGlassSurface() {
-        val context = themedContext()
-        val bar = GlassBarView(context)
-        bar.setBarHeight(120, 40)
-        val header = TextView(context).apply { layout(0, 0, 400, 60) }
-        bar.setPinnedHeader(PinnedBarHeader(header, 0, -20))
-        assertEquals(160, bar.surfaceBottom)
-        bar.setPinnedHeader(null)
-        assertEquals(120, bar.surfaceBottom)
+    fun glassTintIsFrostedAndTheFallbackIsTranslucent() {
+        val style = GlassStyle(context)
+        val blurred = style.blurredTintAlpha / OPAQUE
+        val fallback = style.fallbackTintAlpha / OPAQUE
+        assertTrue("tint over blur is $blurred", blurred in FROSTED_MIN..FROSTED_MAX)
+        assertTrue("fallback tint is $fallback", fallback > blurred && fallback < 1f)
     }
 
-    @Test
-    fun scrolledContentInvalidatesTheBlurSnapshot() {
-        val bar = GlassBarView(themedContext())
-        val tracker = AppBarHeightTracker().apply { backdropListener = bar::requestSnapshot }
-        bar.draw(Canvas(Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)))
-        tracker.backdropChanged()
-        assertTrue(bar.snapshotDirty)
+    private fun show(view: View) {
+        activity.setContentView(FrameLayout(activity).apply { addView(view, ViewGroup.LayoutParams(WIDTH, HEIGHT)) })
+        settle()
+        repeat(2) {
+            ViewCompat.dispatchApplyWindowInsets(view, insets())
+            settle()
+        }
     }
 
-    private fun themedContext() = ContextThemeWrapper(RuntimeEnvironment.getApplication(), MaterialR.style.Theme_Material3_DayNight_NoActionBar)
+    private fun insets(): WindowInsetsCompat = WindowInsetsCompat.Builder()
+        .setInsets(WindowInsetsCompat.Type.statusBars(), Insets.of(0, BAR, 0, 0))
+        .setInsets(WindowInsetsCompat.Type.navigationBars(), Insets.of(0, 0, 0, NAV))
+        .build()
+
+    private fun settle() {
+        activity.window.decorView.requestLayout()
+        shadowOf(Looper.getMainLooper()).idle()
+    }
+
+    private class InsetProbe(context: Context) : View(context) {
+        var insetTop = -1
+        var insetBottom = -1
+
+        init {
+            ViewCompat.setOnApplyWindowInsetsListener(this) { _, insets -> record(insets) }
+        }
+
+        private fun record(insets: WindowInsetsCompat): WindowInsetsCompat {
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            insetTop = bars.top
+            insetBottom = bars.bottom
+            return insets
+        }
+    }
+
+    private class Rows : RecyclerView.Adapter<RecyclerView.ViewHolder>(), SectionedAdapter {
+        override fun isSectionHeader(position: Int): Boolean = position % SECTION == 0
+
+        override fun getItemCount(): Int = SECTION * 2
+
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) =
+            object : RecyclerView.ViewHolder(View(parent.context).apply { layoutParams = RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ROW) }) {}
+
+        override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) = Unit
+    }
+
+    private class Footer : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
+        override fun getItemCount(): Int = 1
+
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) = object : RecyclerView.ViewHolder(View(parent.context)) {}
+
+        override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) = Unit
+    }
 
     private companion object {
+        const val WIDTH = 400
+        const val HEIGHT = 800
+        const val BAR = 120
+        const val NAV = 90
+        const val HEADER = 80
+        const val SECTION = 4
+        const val ROW = 100
         const val OPAQUE = 255f
         const val FROSTED_MIN = 0.6f
         const val FROSTED_MAX = 0.75f
-        const val MIN_BLUR_DP = 16
     }
-
-    private class SourceContext(
-        base: Context,
-        private val source: AppBarHost,
-    ) : ContextWrapper(base), AppBarHost by source
 }

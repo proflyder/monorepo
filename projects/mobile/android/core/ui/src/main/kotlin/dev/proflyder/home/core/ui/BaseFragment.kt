@@ -12,8 +12,6 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.google.android.material.color.MaterialColors
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import dev.proflyder.home.core.designsystem.glass.applyAppBarContentPadding
-import dev.proflyder.home.core.designsystem.glass.trackGlassBackdrop
 import dev.proflyder.home.core.model.RemoteFailure
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
@@ -36,8 +34,7 @@ abstract class BaseFragment<VB : ViewBinding>(
     final override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         onBindingCreated(binding, savedInstanceState)
-        view.trackGlassBackdrop()
-        if (parentFragment == null) view.applyAppBarContentPadding()
+        view.contentInsetTarget()?.applyContentInsets(contentInsets())
     }
 
     final override fun onDestroyView() {
@@ -49,6 +46,8 @@ abstract class BaseFragment<VB : ViewBinding>(
     protected abstract fun onBindingCreated(binding: VB, savedInstanceState: Bundle?)
 
     protected open fun onBindingDestroyed() = Unit
+
+    protected open fun contentInsets(): ContentInsets = ContentInsets()
 
     protected fun repeatOnView(
         minState: Lifecycle.State = Lifecycle.State.STARTED,
