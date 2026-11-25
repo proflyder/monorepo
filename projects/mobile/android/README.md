@@ -95,12 +95,17 @@ persistent controls (Time tabs) stay fixed: `GlassScreenHeader` inside a
 `GlassHeaderLayout`, which dispatches `top = header height` to the rest of the
 screen.
 
-Pinned glass blocks (the pinned section header, the Time tabs) have no own
-surface: they register with the activity (`GlassBlockHost`), become invisible
-in place (alpha 0, touches still reach them), and `top_chrome` draws one blur
-and one tint from the top down to the lowest block, the blocks themselves on
-top of it, and one hairline under the combined rect. Sections pin at the
-content top inset (`StickyHeadersLayoutManager`).
+The pinned section header stays a normal, visible list item. While pinned
+(`StickyGlass`) its background is a glass drawable with the bar's style (same
+blur radius, backdrop fill and tint) that blurs the rows behind it, so bar and
+header read as one surface; the header covers the bar edge (`GlassEdgeOwner`)
+and draws the single hairline and fade itself. It does not sample the bar's
+blur node: the header lives inside the content that node records, so the
+reference would form a RenderNode cycle. Never draw one view into another
+view's hardware canvas while it renders with alpha 0: its child RenderNodes
+are culled with the invisible parent, so the copy loses its text (seen on
+device in 0.1.0-82f92c8). Sections pin at the content top inset
+(`StickyHeadersLayoutManager`).
 Geometry is covered by `ChromeInsetsTest`, `ScreenInsetsScreenshotTest`,
 `NotificationHistoryStickyTest` (real history adapter behind `ConcatAdapter`)
 and `HomeScrolledGlassTest` (real Home renderer and adapter: the alarm slot

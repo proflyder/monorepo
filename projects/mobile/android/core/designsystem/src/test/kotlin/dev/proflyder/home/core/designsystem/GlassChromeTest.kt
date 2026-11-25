@@ -76,21 +76,27 @@ class GlassChromeTest {
     }
 
     @Test
-    fun chromeGlassExtendsOverAttachedBlocksAndDrawsThemItself() {
-        val chrome = GlassChromeLayout(context)
-        val block = View(context)
-        val root = FrameLayout(context).apply {
-            addView(chrome, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, BAR))
-            addView(block, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, HEADER).apply { topMargin = BAR })
+    fun coveredEdgeIsReleasedOnlyByItsLastCover() {
+        var changes = 0
+        val covers = EdgeCovers { changes++ }
+        covers.coverEdge("a", true)
+        covers.coverEdge("b", true)
+        covers.coverEdge("a", false)
+        assertTrue(covers.covered)
+        covers.coverEdge("b", false)
+        assertFalse(covers.covered)
+        assertEquals(4, changes)
+    }
+
+    @Test
+    fun edgeOwnerAboveAListIsItsScreenHeader() {
+        val list = RecyclerView(context)
+        val header = GlassScreenHeader(context)
+        GlassHeaderLayout(context).apply {
+            addView(list)
+            addView(header)
         }
-        show(root)
-        assertEquals(BAR, chrome.glassBottom)
-        chrome.attachBlock(block)
-        assertEquals(0f, block.alpha)
-        assertEquals(BAR + HEADER, chrome.glassBottom)
-        chrome.detachBlock(block)
-        assertEquals(1f, block.alpha)
-        assertEquals(BAR, chrome.glassBottom)
+        assertEquals(header, list.glassEdgeAbove())
     }
 
     @Test

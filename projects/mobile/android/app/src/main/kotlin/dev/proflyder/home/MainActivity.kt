@@ -2,7 +2,6 @@ package dev.proflyder.home
 
 import android.content.Intent
 import android.os.Bundle
-import android.view.View
 import androidx.activity.addCallback
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
@@ -13,7 +12,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import dev.proflyder.home.core.access.AppAccessSession
 import dev.proflyder.home.core.access.AppAccessState
 import dev.proflyder.home.core.access.allows
-import dev.proflyder.home.core.designsystem.glass.GlassBlockHost
+import dev.proflyder.home.core.designsystem.glass.GlassEdgeOwner
 import dev.proflyder.home.core.model.AppLogger
 import dev.proflyder.home.core.navigation.AppActivityContribution
 import dev.proflyder.home.core.navigation.AppChromeState
@@ -36,7 +35,7 @@ class MainActivity :
     AppCompatActivity(),
     NavigatorHost,
     FailureNoticePolicyProvider,
-    GlassBlockHost {
+    GlassEdgeOwner {
 
     internal lateinit var router: FragmentRouter
     internal lateinit var actionsMenu: ToolbarChrome
@@ -115,11 +114,7 @@ class MainActivity :
         if (visibleTabs.none { it.id == chrome.tabId }) router.selectTab(visibleTabs.first().id)
     }
 
-    override fun attachBlock(block: View) = binding.topChrome.attachBlock(block)
-
-    override fun detachBlock(block: View) = binding.topChrome.detachBlock(block)
-
-    override fun blockMoved() = binding.topChrome.blockMoved()
+    override fun coverEdge(cover: Any, covered: Boolean) = binding.topChrome.coverEdge(cover, covered)
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)

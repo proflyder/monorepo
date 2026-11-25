@@ -21,6 +21,8 @@ class GlassHeaderLayout @JvmOverloads constructor(
         clipChildren = false
     }
 
+    internal val edgeOwner: GlassEdgeOwner? get() = header()
+
     override fun dispatchApplyWindowInsets(insets: WindowInsets): WindowInsets {
         received = insets
         val compat = WindowInsetsCompat.toWindowInsetsCompat(insets, this)

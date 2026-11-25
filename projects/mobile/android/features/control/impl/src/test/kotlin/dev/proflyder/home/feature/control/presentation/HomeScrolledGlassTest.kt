@@ -17,7 +17,7 @@ import androidx.core.graphics.Insets
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.recyclerview.widget.ConcatAdapter
-import dev.proflyder.home.core.designsystem.glass.GlassBlockHost
+import dev.proflyder.home.core.designsystem.glass.GlassEdgeOwner
 import dev.proflyder.home.core.designsystem.glass.GlassChromeLayout
 import dev.proflyder.home.core.designsystem.list.StickyHeadersLayoutManager
 import dev.proflyder.home.core.theme.AppTheme
@@ -53,7 +53,7 @@ class HomeScrolledGlassTest {
         assertEquals("alarm slot is the first list item", BAR.toFloat(), home.binding.controlHeader.translationY)
         assertEquals(BAR, home.binding.controlList.paddingTop)
         assertNull(manager.stickyHeaderView)
-        assertEquals("nothing pinned: the glass is the bar", BAR, home.chrome.glassBottom)
+        assertTrue("nothing pinned: the bar draws the edge", home.chrome.edgeVisible)
         shoot(home, "home-glass-rest.png")
 
         home.scroll(home.binding.controlHeader.height + ROOM_SCROLL)
@@ -61,8 +61,9 @@ class HomeScrolledGlassTest {
         val slot = home.binding.controlHeader
         assertTrue("alarm slot went under the bar", slot.translationY + slot.height <= BAR)
         assertEquals("pinned room sits on the bar edge", BAR, pinned.top)
-        assertEquals("pinned room has no own surface", 0f, pinned.alpha)
-        assertEquals("bar and pinned room are one glass rect", BAR + pinned.height, home.chrome.glassBottom)
+        assertEquals("pinned room is a visible list item", 1f, pinned.alpha)
+        assertTrue("pinned room continues the bar glass", pinned.background != null)
+        assertTrue("one edge: the pinned room draws it, not the bar", !home.chrome.edgeVisible)
         val shot = shoot(home, "home-glass-pinned.png")
         val title = pinned.findViewById<TextView>(R.id.control_header_title)
         assertTrue("pinned room title is drawn above the glass", textPixels(shot, title) >= MIN_TEXT_PIXELS)
@@ -157,7 +158,7 @@ class HomeScrolledGlassTest {
         }
     }
 
-    private class HostContext(base: Context, private val chrome: GlassChromeLayout) : ContextWrapper(base), GlassBlockHost by chrome
+    private class HostContext(base: Context, private val chrome: GlassChromeLayout) : ContextWrapper(base), GlassEdgeOwner by chrome
 
     private companion object {
         const val BAR = 300
