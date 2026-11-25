@@ -36,6 +36,8 @@ internal fun HermesState.of(panel: HermesPanel): Loaded<*> = when (panel) {
     HermesPanel.AGENTS -> agents
     HermesPanel.REPORTS -> reports
     HermesPanel.VOICE -> voice
+    HermesPanel.TOOLSETS -> toolsets
+    HermesPanel.SKILLS -> skills
 }
 
 @Inject

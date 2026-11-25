@@ -37,6 +37,8 @@ class HttpHermesRepository(
             HermesPanel.AGENTS -> load(HermesState::agents, { copy(agents = it) }, client::agents)
             HermesPanel.REPORTS -> load(HermesState::reports, { copy(reports = it) }, client::reports)
             HermesPanel.VOICE -> load(HermesState::voice, { copy(voice = it) }, client::voice)
+            HermesPanel.TOOLSETS -> load(HermesState::toolsets, { copy(toolsets = it) }, client::toolsets)
+            HermesPanel.SKILLS -> load(HermesState::skills, { copy(skills = it) }, client::skills)
         }
     }
 

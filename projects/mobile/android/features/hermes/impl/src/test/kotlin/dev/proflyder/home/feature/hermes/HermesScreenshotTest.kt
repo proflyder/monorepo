@@ -72,11 +72,11 @@ class HermesScreenshotTest {
     private val report: (HermesRows) -> List<HermesRow> = { it.report(HermesFixtures.reports.reports.first()) }
 
     @Test
-    fun overviewLight() = assertEquals(3, render("hermes-overview-light") { it.overview() }.adapter?.itemCount)
+    fun overviewLight() = assertEquals(5, render("hermes-overview-light") { it.overview() }.adapter?.itemCount)
 
     @Test
     @Config(qualifiers = "ru-w411dp-h891dp-night-xxhdpi")
-    fun overviewDark() = assertEquals(3, render("hermes-overview-dark") { it.overview() }.adapter?.itemCount)
+    fun overviewDark() = assertEquals(5, render("hermes-overview-dark") { it.overview() }.adapter?.itemCount)
 
     @Test
     fun agentsLight() = assertEquals(3, render("hermes-agents-light", section(HermesSection.AGENTS)).adapter?.itemCount)
@@ -105,6 +105,29 @@ class HermesScreenshotTest {
     @Test
     @Config(qualifiers = "ru-w411dp-h891dp-night-xxhdpi")
     fun voiceDark() = assertEquals(7, render("hermes-voice-dark", section(HermesSection.VOICE)).adapter?.itemCount)
+
+    private val toolset: (HermesRows) -> List<HermesRow> = { it.toolset(HermesFixtures.toolsets.named("browser")) }
+
+    @Test
+    fun toolsetsLight() = assertEquals(3, render("hermes-toolsets-light", section(HermesSection.TOOLSETS)).adapter?.itemCount)
+
+    @Test
+    @Config(qualifiers = "ru-w411dp-h891dp-night-xxhdpi")
+    fun toolsetsDark() = assertEquals(3, render("hermes-toolsets-dark", section(HermesSection.TOOLSETS)).adapter?.itemCount)
+
+    @Test
+    fun toolsetLight() = assertEquals(6, render("hermes-toolset-light", toolset).adapter?.itemCount)
+
+    @Test
+    @Config(qualifiers = "ru-w411dp-h891dp-night-xxhdpi")
+    fun toolsetDark() = assertEquals(6, render("hermes-toolset-dark", toolset).adapter?.itemCount)
+
+    @Test
+    fun skillsLight() = assertEquals(7, render("hermes-skills-light", section(HermesSection.SKILLS)).adapter?.itemCount)
+
+    @Test
+    @Config(qualifiers = "ru-w411dp-h891dp-night-xxhdpi")
+    fun skillsDark() = assertEquals(7, render("hermes-skills-dark", section(HermesSection.SKILLS)).adapter?.itemCount)
 
     private companion object {
         const val PADDING = 48

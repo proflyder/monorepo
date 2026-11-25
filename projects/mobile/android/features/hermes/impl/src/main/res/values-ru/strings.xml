@@ -38,4 +38,27 @@
     <string name="hermes_agent_other">Неизвестно</string>
     <string name="hermes_runtime_hours">%1$d ч %2$d мин</string>
     <string name="hermes_runtime_minutes">%1$d мин</string>
+    <string name="hermes_toolsets_title">Наборы инструментов</string>
+    <string name="hermes_toolsets_subtitle">Чем пользуется Hermes: состояние и инструменты</string>
+    <string name="hermes_skills_title">Навыки</string>
+    <string name="hermes_skills_subtitle">Установленные навыки по категориям</string>
+    <string name="hermes_toolset_title">Набор инструментов</string>
+    <string name="hermes_toolset_tools">Инструменты</string>
+    <string name="hermes_counted">%1$s · %2$d</string>
+    <string name="hermes_skills_uncategorized">Без категории</string>
+    <string name="hermes_toolset_enabled">Включён</string>
+    <string name="hermes_toolset_disabled">Выключен</string>
+    <string name="hermes_toolset_unconfigured">Включён, ключи не настроены</string>
+    <string name="hermes_toolset_missing">Hermes больше не сообщает об этом наборе.</string>
+    <string name="hermes_toolsets_unavailable">Hermes не ответил, наборы инструментов недоступны.</string>
+    <string name="hermes_toolsets_empty">Hermes не сообщил ни одного набора инструментов.</string>
+    <string name="hermes_skills_unavailable">Hermes не ответил, навыки недоступны.</string>
+    <string name="hermes_skills_empty">Навыки не установлены.</string>
+    <string name="hermes_tools_empty">В этом наборе нет инструментов.</string>
+    <plurals name="hermes_tool_count">
+        <item quantity="one">%d инструмент</item>
+        <item quantity="few">%d инструмента</item>
+        <item quantity="many">%d инструментов</item>
+        <item quantity="other">%d инструмента</item>
+    </plurals>
 </resources>

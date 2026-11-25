@@ -356,6 +356,8 @@ fn route_of(path: &str) -> &str {
         "/v1/hermes/agents" => "/v1/hermes/agents",
         "/v1/hermes/reports" => "/v1/hermes/reports",
         "/v1/hermes/voice" => "/v1/hermes/voice",
+        "/v1/hermes/skills" => "/v1/hermes/skills",
+        "/v1/hermes/toolsets" => "/v1/hermes/toolsets",
         "/healthz" => "/healthz",
         "/readyz" => "/readyz",
         "/metrics" => "/metrics",

@@ -182,6 +182,7 @@ own sessions: `HERMES_CHAT_RELAY_SESSION` (`home-app`) and ids starting with
 | `DELETE` | `/api/sessions/<session>` | delete the session |
 | `POST` | `/api/sessions/<session>/chat/stream` | the SSE body is passed through unchanged |
 | `GET` | `/v1/health` | Hermes health, read-only |
+| `GET` | `/v1/skills`, `/v1/toolsets` | installed skills and `api_server` toolsets for the app Hermes screen, read-only |
 | `GET` | `/api/sessions?source=<telegram\|api_server>` | read-only list; the relay rewrites the query to `source` + `limit=30`, any other source is `403` |
 | `GET` | `/api/sessions/<session>/messages` | read-only; allowed only when Hermes reports the session `source` as `telegram` or `api_server`; the relay asks for `order=latest&limit=40` |
 

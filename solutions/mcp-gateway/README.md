@@ -370,7 +370,27 @@ Read-only экран «Hermes» Android-приложения (вход стро�
 | `GET /v1/hermes/reports` | relay → Hermes `GET /api/sessions?source=telegram`, 5 последних сессий → `GET /api/sessions/<id>/messages` | ответы на `/report`: сообщение пользователя, которое начинается с маркера вызова скилла `report` (или `/report`), и последний непустой ответ ассистента до следующего сообщения; `requestedAt`, `completedAt`, `text` (через `redact`), `failed` |
 | `GET /v1/hermes/voice` | relay `GET /v1/health`; сессии `source=api_server` с id `api-…` (голосовые ходы HA без `X-Hermes-Session-Id`), 10 последних | `relayUp` (ответил voice-proxy), `hermesUp`/`hermesVersion`, `agentMode` (голосовой режим агента шлюза), `requests[]`: `at`, `text`, `reply`, `latencyMs` (между временем сообщения пользователя и ответа), `failed` |
 
+| `GET /v1/hermes/toolsets` | relay → Hermes `GET /v1/toolsets` | наборы платформы `api_server`: `name`, `label` (пустой → `name`), `description`, `enabled`, `configured` (ключи заданы), `toolCount`, `tools[]`; включённые первыми; `available` |
+| `GET /v1/hermes/skills` | relay → Hermes `GET /v1/skills` | установленные навыки: `name`, `description`, `category?`; по категории, затем по имени; `available` |
+
+Эталоны навыков и наборов — `crates/mcp-gateway/src/hermes/testdata/contract/*.json`
+(их же читает Android-тест `core/network`); пересборка —
+`UPDATE_HERMES_GOLDEN=1 cargo test -p mcp-gateway --lib hermes`, затем
+скопировать в `projects/mobile/android/core/network/impl/src/test/resources/fixtures/hermes/`.
+
 Чего нет и почему:
+
+- **Память агента** (просмотр, поиск, правка, удаление, ручная заметка).
+  Hermes API на закреплённой ревизии не отдаёт память; она живёт файлами в
+  `/opt/data` пода Hermes. Нужен эндпоинт памяти в Hermes API (или
+  read-only sidecar над файлами) плюс маршрут relay и аудит мутаций в шлюзе.
+- **Включение/выключение наборов и навыков.** В API только чтение; набор
+  платформы задаётся `config.yaml`, который рендерится из Git
+  (`projects/home-assistant/hermes/`), поэтому переключатель в приложении
+  разошёлся бы с GitOps. Нужен PATCH в Hermes и решение, кто владеет конфигом.
+- **MCP-подключения: число инструментов и последние ошибки.** `/v1/toolsets`
+  не включает MCP-серверы (`include_default_mcp_servers=False`), а их статус и
+  ошибки API не публикует. Нужен эндпоинт статуса MCP в Hermes.
 
 - **Отмена агента.** У bb-диспетчера нет метода остановки треда (семь
   операций, см. `solutions/bb-home-dispatcher/README.md`). Нужен новый метод

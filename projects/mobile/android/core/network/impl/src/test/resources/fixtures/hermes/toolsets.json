@@ -1,0 +1,40 @@
+{
+  "available": true,
+  "toolsets": [
+    {
+      "configured": true,
+      "description": "Search and fetch pages",
+      "enabled": true,
+      "label": "Web search",
+      "name": "web",
+      "toolCount": 2,
+      "tools": [
+        "web_extract",
+        "web_search"
+      ]
+    },
+    {
+      "configured": true,
+      "description": "Persistent memory",
+      "enabled": true,
+      "label": "memory",
+      "name": "memory",
+      "toolCount": 1,
+      "tools": [
+        "memory"
+      ]
+    },
+    {
+      "configured": false,
+      "description": "Headless browser",
+      "enabled": false,
+      "label": "Browser",
+      "name": "browser",
+      "toolCount": 2,
+      "tools": [
+        "browser_click",
+        "browser_open"
+      ]
+    }
+  ]
+}

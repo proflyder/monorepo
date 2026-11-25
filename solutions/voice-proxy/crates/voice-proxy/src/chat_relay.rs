@@ -16,6 +16,7 @@ use crate::services::TokenProvider;
 pub const MAX_RELAY_BODY: usize = 12 << 20;
 pub const MAX_SESSION_ID: usize = 96;
 pub const PATCHABLE_FIELDS: [&str; 1] = ["title"];
+pub const READABLE_PATHS: [&str; 3] = ["/v1/health", "/v1/skills", "/v1/toolsets"];
 pub const READABLE_SOURCES: [&str; 2] = ["telegram", "api_server"];
 pub const SESSION_LIST_LIMIT: usize = 30;
 pub const MESSAGE_PAGE_LIMIT: usize = 40;
@@ -87,7 +88,9 @@ impl ChatRelay {
 
     pub fn router(self) -> Router {
         Router::new()
-            .route("/v1/health", get(health))
+            .route(READABLE_PATHS[0], get(read_fixed))
+            .route(READABLE_PATHS[1], get(read_fixed))
+            .route(READABLE_PATHS[2], get(read_fixed))
             .route("/api/sessions", post(create_session).get(list_sessions))
             .route("/api/sessions/{id}/messages", get(session_messages))
             .route(
@@ -244,13 +247,19 @@ async fn delete_session(
         .await
 }
 
-async fn health(State(relay): State<Arc<ChatRelay>>, headers: HeaderMap) -> Response<Body> {
+async fn read_fixed(
+    State(relay): State<Arc<ChatRelay>>,
+    uri: axum::http::Uri,
+    headers: HeaderMap,
+) -> Response<Body> {
     if !relay.authorized(&headers) {
         return status(StatusCode::UNAUTHORIZED);
     }
-    relay
-        .forward(reqwest::Method::GET, "/v1/health", None)
-        .await
+    let path = uri.path();
+    if !READABLE_PATHS.contains(&path) {
+        return status(StatusCode::NOT_FOUND);
+    }
+    relay.forward(reqwest::Method::GET, path, None).await
 }
 
 async fn list_sessions(
@@ -696,6 +705,62 @@ mod tests {
                 "/api/sessions/tg_1 Bearer hermes-key".to_owned(),
                 "/api/sessions/tg_1/messages?order=latest&limit=40 Bearer hermes-key".to_owned(),
                 "/api/sessions/cli_1 Bearer hermes-key".to_owned(),
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn the_agent_catalog_is_read_only_and_needs_the_caller_token() {
+        let seen = Seen::default();
+        let upstream = {
+            let seen = seen.clone();
+            move |headers: HeaderMap, uri: axum::http::Uri| {
+                let seen = seen.clone();
+                async move {
+                    record(&seen, &headers, uri.path());
+                    "{\"object\":\"list\",\"data\":[]}"
+                }
+            }
+        };
+        let hermes = serve(
+            Router::new()
+                .route(
+                    "/v1/skills",
+                    axum::routing::get(upstream.clone()).post(upstream.clone()),
+                )
+                .route("/v1/toolsets", axum::routing::get(upstream)),
+        )
+        .await;
+        let relay = relay_for(&hermes).await;
+        let client = reqwest::Client::new();
+        for path in ["/v1/skills", "/v1/toolsets"] {
+            let read = client
+                .get(format!("{relay}{path}"))
+                .bearer_auth("caller")
+                .send()
+                .await
+                .expect("read");
+            assert_eq!(read.status(), 200);
+        }
+        let wrong = client
+            .get(format!("{relay}/v1/skills"))
+            .bearer_auth("nope")
+            .send()
+            .await
+            .expect("wrong");
+        assert_eq!(wrong.status(), 401);
+        let write = client
+            .post(format!("{relay}/v1/skills"))
+            .bearer_auth("caller")
+            .send()
+            .await
+            .expect("write");
+        assert_eq!(write.status(), 405);
+        assert_eq!(
+            seen.0.lock().expect("lock").clone(),
+            vec![
+                "/v1/skills Bearer hermes-key".to_owned(),
+                "/v1/toolsets Bearer hermes-key".to_owned(),
             ]
         );
     }

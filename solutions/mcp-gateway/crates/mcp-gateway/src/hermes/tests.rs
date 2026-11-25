@@ -2,11 +2,12 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use axum::body::Body;
-use axum::http::{Request, StatusCode};
+use axum::http::{HeaderMap, Request, StatusCode};
 use serde_json::{Value, json};
 use tower::ServiceExt;
 
-use super::history::{Health, HistoryApi, HistoryError};
+use super::catalog::{CatalogApi, Skill, UpstreamList, UpstreamToolset};
+use super::history::{Health, HistoryApi, HistoryError, RelayClient};
 use super::model::{self, MessagePage, MessageRow, SessionList};
 use super::{Panel, Sources};
 use crate::bb::{BbApi, BbFuture, Dispatcher, Runner};
@@ -78,6 +79,7 @@ fn panel(bb: Option<Arc<dyn BbApi>>, history: Option<FakeHistory>) -> Panel {
     Panel::new(Sources {
         bb,
         history: history.map(|history| Arc::new(history) as Arc<dyn HistoryApi>),
+        catalog: None,
         mode: Arc::new(AgentMode::new()),
     })
 }
@@ -267,5 +269,162 @@ async fn the_routes_need_the_chat_module() {
         assert_eq!(status("owner", path).await, StatusCode::OK);
         assert_eq!(status("member", path).await, StatusCode::FORBIDDEN);
         assert_eq!(status("nope", path).await, StatusCode::UNAUTHORIZED);
+    }
+}
+
+struct FixtureCatalog {
+    available: bool,
+}
+
+fn upstream<T: serde::de::DeserializeOwned>(raw: &str) -> Vec<T> {
+    serde_json::from_str::<UpstreamList<T>>(raw)
+        .expect("fixture")
+        .data
+}
+
+impl CatalogApi for FixtureCatalog {
+    fn skills(&self) -> BoxFuture<'_, Result<Vec<Skill>, HistoryError>> {
+        let result = self
+            .available
+            .then(|| upstream(SKILLS))
+            .ok_or(HistoryError::HermesFailed);
+        Box::pin(async move { result })
+    }
+
+    fn toolsets(&self) -> BoxFuture<'_, Result<Vec<UpstreamToolset>, HistoryError>> {
+        let result = self
+            .available
+            .then(|| upstream(TOOLSETS))
+            .ok_or(HistoryError::RelayUnreachable);
+        Box::pin(async move { result })
+    }
+}
+
+const SKILLS: &str = include_str!("testdata/skills.json");
+const TOOLSETS: &str = include_str!("testdata/toolsets.json");
+
+fn catalog_panel(catalog: Option<FixtureCatalog>) -> Arc<Panel> {
+    Arc::new(Panel::new(Sources {
+        bb: None,
+        history: None,
+        catalog: catalog.map(|catalog| Arc::new(catalog) as Arc<dyn CatalogApi>),
+        mode: Arc::new(AgentMode::new()),
+    }))
+}
+
+async fn read(panel: Arc<Panel>, path: &str) -> (StatusCode, Value) {
+    let response = super::router::<()>(panel)
+        .oneshot(Request::get(path).body(Body::empty()).expect("request"))
+        .await
+        .expect("response");
+    let status = response.status();
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("body");
+    (status, serde_json::from_slice(&bytes).expect("json"))
+}
+
+fn catalog_golden(name: &str, value: &Value) {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("src/hermes/testdata/contract")
+        .join(format!("{name}.json"));
+    let rendered = format!("{}\n", serde_json::to_string_pretty(value).expect("render"));
+    if std::env::var_os("UPDATE_HERMES_GOLDEN").is_some() {
+        std::fs::write(&path, &rendered).expect("write golden");
+    }
+    let expected = match name {
+        "skills" => include_str!("testdata/contract/skills.json"),
+        _ => include_str!("testdata/contract/toolsets.json"),
+    };
+    assert_eq!(rendered, expected, "{name} golden differs");
+}
+
+#[tokio::test]
+async fn skills_are_grouped_by_category_then_name() {
+    let (status, body) = read(
+        catalog_panel(Some(FixtureCatalog { available: true })),
+        "/v1/hermes/skills",
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["available"], true);
+    let names: Vec<&str> = body["skills"]
+        .as_array()
+        .expect("skills")
+        .iter()
+        .filter_map(|skill| skill["name"].as_str())
+        .collect();
+    assert_eq!(names, ["notes", "alarm-helper", "report", "arxiv"]);
+    assert!(body["skills"][0].get("category").is_none());
+    catalog_golden("skills", &body);
+}
+
+#[tokio::test]
+async fn toolsets_put_enabled_first_with_tool_counts_and_label_fallback() {
+    let (_, body) = read(
+        catalog_panel(Some(FixtureCatalog { available: true })),
+        "/v1/hermes/toolsets",
+    )
+    .await;
+    let toolsets = body["toolsets"].as_array().expect("toolsets");
+    assert_eq!(toolsets[0]["name"], "web");
+    assert_eq!(toolsets[0]["toolCount"], 2);
+    assert_eq!(toolsets[1]["label"], "memory");
+    assert_eq!(toolsets[2]["enabled"], false);
+    catalog_golden("toolsets", &body);
+}
+
+#[tokio::test]
+async fn an_unavailable_catalog_is_reported_without_a_server_error() {
+    for catalog in [None, Some(FixtureCatalog { available: false })] {
+        let panel = catalog_panel(catalog);
+        let (status, skills) = read(Arc::clone(&panel), "/v1/hermes/skills").await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(skills, json!({"available": false, "skills": []}));
+        let (_, toolsets) = read(panel, "/v1/hermes/toolsets").await;
+        assert_eq!(toolsets, json!({"available": false, "toolsets": []}));
+    }
+}
+
+#[tokio::test]
+async fn the_catalog_is_read_only() {
+    let response = super::router::<()>(catalog_panel(None))
+        .oneshot(
+            Request::post("/v1/hermes/toolsets")
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    assert_eq!(response.status(), StatusCode::METHOD_NOT_ALLOWED);
+}
+
+#[tokio::test]
+async fn the_relay_client_reads_the_catalog_with_the_relay_token() {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind");
+    let address = listener.local_addr().expect("address");
+    let upstream = axum::Router::new()
+        .route("/v1/skills", axum::routing::get(authorized_skills))
+        .route(
+            "/v1/toolsets",
+            axum::routing::get(|| async { StatusCode::BAD_GATEWAY }),
+        );
+    tokio::spawn(async move { axum::serve(listener, upstream).await.expect("serve") });
+    let client =
+        RelayClient::new(&format!("http://{address}/"), "relay".to_owned()).expect("client");
+    assert_eq!(client.skills().await.expect("skills").len(), 4);
+    assert_eq!(client.toolsets().await, Err(HistoryError::HermesFailed));
+}
+
+async fn authorized_skills(headers: HeaderMap) -> (StatusCode, &'static str) {
+    let authorized = headers
+        .get("authorization")
+        .is_some_and(|value| value == "Bearer relay");
+    if authorized {
+        (StatusCode::OK, SKILLS)
+    } else {
+        (StatusCode::UNAUTHORIZED, "")
     }
 }

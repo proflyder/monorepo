@@ -1,0 +1,5 @@
+{"object":"list","platform":"api_server","data":[
+{"name":"browser","label":"Browser","description":"Headless browser","enabled":false,"configured":false,"tools":["browser_click","browser_open"]},
+{"name":"web","label":"Web search","description":"Search and fetch pages","enabled":true,"configured":true,"tools":["web_extract","web_search"]},
+{"name":"memory","label":"","description":"Persistent memory","enabled":true,"configured":true,"tools":["memory"]}
+]}

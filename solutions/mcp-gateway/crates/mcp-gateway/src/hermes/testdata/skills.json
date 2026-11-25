@@ -1,0 +1,6 @@
+{"object":"list","data":[
+{"name":"report","description":"Full house report to Telegram","category":"home"},
+{"name":"arxiv","description":"Search arXiv papers","category":"research"},
+{"name":"alarm-helper","description":"Explain alarm options","category":"home"},
+{"name":"notes","description":"Plain notes without a category"}
+]}

@@ -283,10 +283,12 @@ pub async fn run() -> anyhow::Result<()> {
             config.chat_hermes_token.clone(),
         )
         .map_err(anyhow::Error::msg)?;
+        let relay = Arc::new(relay);
         Some(Arc::new(crate::hermes::Panel::new(
             crate::hermes::Sources {
                 bb: deps.bb.clone(),
-                history: Some(Arc::new(relay)),
+                history: Some(Arc::clone(&relay) as Arc<dyn crate::hermes::history::HistoryApi>),
+                catalog: Some(relay as Arc<dyn crate::hermes::catalog::CatalogApi>),
                 mode: Arc::clone(&deps.bb_mode),
             },
         )))

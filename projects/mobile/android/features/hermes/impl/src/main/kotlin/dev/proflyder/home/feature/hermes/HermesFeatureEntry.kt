@@ -12,6 +12,7 @@ import dev.proflyder.home.feature.hermes.presentation.HermesOverviewFragment
 import dev.proflyder.home.feature.hermes.presentation.HermesReportFragment
 import dev.proflyder.home.feature.hermes.presentation.HermesSection
 import dev.proflyder.home.feature.hermes.presentation.HermesSectionFragment
+import dev.proflyder.home.feature.hermes.presentation.HermesToolsetFragment
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesIntoSet
 import dev.zacsweers.metro.Inject
@@ -44,6 +45,19 @@ internal data class HermesReportDestination(val id: String) : Destination {
     }
 }
 
+internal data class HermesToolsetDestination(val name: String) : Destination {
+    override val featureId: String = HermesRoutes.FEATURE_ID
+    override val route: String = "${HermesRoutes.TOOLSET_PREFIX}/${Uri.encode(name)}"
+
+    companion object : RouteCodec<HermesToolsetDestination> {
+        override fun decode(path: RoutePath): HermesToolsetDestination? =
+            path.tail(HermesRoutes.FEATURE_ID, "toolset")
+                ?.let(Uri::decode)
+                ?.takeIf(String::isNotBlank)
+                ?.let(::HermesToolsetDestination)
+    }
+}
+
 @ContributesIntoSet(AppScope::class)
 @Inject
 class HermesFeatureEntry : FeatureEntry {
@@ -59,17 +73,20 @@ class HermesFeatureEntry : FeatureEntry {
         RouteCodec.fixed(HermesOverviewDestination),
         HermesSectionDestination,
         HermesReportDestination,
+        HermesToolsetDestination,
     )
 
     override fun titleRes(destination: Destination): Int = when (destination) {
         is HermesSectionDestination -> destination.section.titleRes
         is HermesReportDestination -> R.string.hermes_report_title
+        is HermesToolsetDestination -> R.string.hermes_toolset_title
         else -> titleRes
     }
 
     override fun createFragment(destination: Destination): Fragment = when (destination) {
         is HermesSectionDestination -> HermesSectionFragment()
         is HermesReportDestination -> HermesReportFragment()
+        is HermesToolsetDestination -> HermesToolsetFragment()
         else -> HermesOverviewFragment()
     }
 }
