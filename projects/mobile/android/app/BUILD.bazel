@@ -167,6 +167,7 @@ home_android_local_test(
         "dev.proflyder.home.AppSmokeTestSuite",
         "dev.proflyder.home.ChatAttachMenuTest",
         "dev.proflyder.home.FabStyleScreenshotTest",
+        "dev.proflyder.home.GlassToolbarScreenshotTest",
         "dev.proflyder.home.HomeFabActivityTest",
         "dev.proflyder.home.KeyScreensScreenshotTest",
         "dev.proflyder.home.LauncherAliasesTest",

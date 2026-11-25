@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <integer name="ds_glass_tint_alpha">235</integer>
+    <integer name="ds_glass_tint_alpha_fallback">250</integer>
+    <integer name="ds_glass_fade_alpha">160</integer>
+    <integer name="ds_pinned_header_tint_alpha">255</integer>
+    <dimen name="ds_glass_blur_radius">24dp</dimen>
+    <dimen name="ds_glass_fade_height">12dp</dimen>
+    <dimen name="ds_glass_divider_height">0.5dp</dimen>
+</resources>
