@@ -1,5 +1,3 @@
-@file:Suppress("NoTry")
-
 package dev.proflyder.home.feature.secrets.presentation
 
 import android.content.Intent
