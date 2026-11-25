@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="DuplicateStrings">
     <string name="system_title">Система</string>
+    <string name="system_health_title">Состояние системы</string>
     <string name="system_card_host">Неттоп (Proxmox)</string>
     <string name="system_card_guests">Гости (VM/CT)</string>
     <string name="system_card_cluster">Кластер</string>
