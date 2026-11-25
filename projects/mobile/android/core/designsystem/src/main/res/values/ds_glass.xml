@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <integer name="ds_glass_tint_alpha">235</integer>
+    <integer name="ds_glass_tint_alpha">176</integer>
     <integer name="ds_glass_tint_alpha_fallback">250</integer>
     <integer name="ds_glass_fade_alpha">160</integer>
     <integer name="ds_pinned_header_tint_alpha">255</integer>

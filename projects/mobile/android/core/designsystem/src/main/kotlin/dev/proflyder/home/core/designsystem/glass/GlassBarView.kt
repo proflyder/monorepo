@@ -7,22 +7,29 @@ import android.util.AttributeSet
 import android.view.View
 import android.view.ViewTreeObserver
 import androidx.annotation.RequiresApi
+import androidx.core.graphics.withClip
+import androidx.core.graphics.withTranslation
 import dev.proflyder.home.core.designsystem.R
 
 class GlassBarView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
 ) : View(context, attrs) {
-    private val blurredPainter = GlassPainter(context, R.integer.ds_glass_tint_alpha)
+    internal val blurredPainter = GlassPainter(context, R.integer.ds_glass_tint_alpha)
     private val opaquePainter = GlassPainter(context, R.integer.ds_glass_tint_alpha_fallback)
-    private val blurRadius = context.resources.getDimension(R.dimen.ds_glass_blur_radius)
+    internal val blurRadius = context.resources.getDimension(R.dimen.ds_glass_blur_radius)
     private val scrollListener = ViewTreeObserver.OnScrollChangedListener { requestSnapshot() }
     private var backdrop: View? = null
     private var blur: BlurBackdrop? = null
     private var barHeight = 0
     private var statusInset = 0
-    private var snapshotDirty = true
-    private var edgeVisible = true
+    private var pinned: PinnedBarHeader? = null
+    private var recording = false
+    private var blurring = true
+    internal var snapshotDirty = true
+        private set
+
+    internal val surfaceBottom: Int get() = barHeight + (pinned?.visibleHeight ?: 0)
 
     init {
         setWillNotDraw(false)
@@ -35,22 +42,22 @@ class GlassBarView @JvmOverloads constructor(
     }
 
     fun requestSnapshot() {
+        if (recording) return
         snapshotDirty = true
-        postInvalidateOnAnimation()
+        if (blurring) postInvalidateOnAnimation()
     }
 
-    fun setEdgeVisible(visible: Boolean) {
-        if (visible == edgeVisible) return
-        edgeVisible = visible
-        invalidate()
+    fun setPinnedHeader(header: PinnedBarHeader?) {
+        if (header == pinned) return
+        pinned = header
+        refreshSurface()
     }
 
     fun setBarHeight(height: Int, topInset: Int) {
         if (height == barHeight && topInset == statusInset) return
         barHeight = height
         statusInset = topInset
-        updateOwnHeight()
-        requestSnapshot()
+        refreshSurface()
     }
 
     override fun onAttachedToWindow() {
@@ -67,30 +74,35 @@ class GlassBarView @JvmOverloads constructor(
 
     override fun onDraw(canvas: Canvas) {
         if (barHeight <= 0 || width <= 0) return
-        val content = backdrop
-        val painter = when {
-            content != null && canBlur(canvas) -> blurredPainter.also { drawBlurred(canvas, content) }
-            else -> opaquePainter
-        }
+        val bottom = surfaceBottom
+        val content = backdrop?.takeIf { canvas.isHardwareAccelerated }
+        blurring = content != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+        val painter = if (blurring) blurredPainter else opaquePainter
+        if (content != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) drawBlurred(canvas, content, bottom)
         opaquePainter.drawSurface(canvas, width, 0, statusInset)
-        painter.drawSurface(canvas, width, statusInset, barHeight)
-        if (edgeVisible) painter.drawEdge(canvas, width, barHeight)
+        painter.drawSurface(canvas, width, statusInset, bottom)
+        pinned?.let { drawPinned(canvas, it) }
+        painter.drawEdge(canvas, width, bottom)
         snapshotDirty = false
     }
 
-    private fun canBlur(canvas: Canvas) = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && canvas.isHardwareAccelerated
-
-    @RequiresApi(Build.VERSION_CODES.S)
-    private fun drawBlurred(canvas: Canvas, content: View) {
-        val snapshot = blur ?: BlurBackdrop(blurRadius).also { blur = it }
-        snapshot.draw(canvas, content, width, barHeight, snapshotDirty)
+    private fun drawPinned(canvas: Canvas, header: PinnedBarHeader) {
+        canvas.withClip(0, barHeight, width, surfaceBottom) {
+            withTranslation(header.left.toFloat(), (barHeight + header.offset).toFloat()) { header.view.draw(this) }
+        }
     }
 
-    private fun updateOwnHeight() {
-        val wanted = barHeight + opaquePainter.fadeHeight
-        val params = layoutParams ?: return
-        if (params.height == wanted) return
-        params.height = wanted
-        layoutParams = params
+    @RequiresApi(Build.VERSION_CODES.S)
+    private fun drawBlurred(canvas: Canvas, content: View, bottom: Int) {
+        val snapshot = blur ?: BlurBackdrop(blurRadius).also { blur = it }
+        recording = true
+        runCatching { snapshot.draw(canvas, content, width, bottom, snapshotDirty) }
+            .also { recording = false }
+            .getOrThrow()
+    }
+
+    private fun refreshSurface() {
+        snapshotDirty = true
+        invalidate()
     }
 }

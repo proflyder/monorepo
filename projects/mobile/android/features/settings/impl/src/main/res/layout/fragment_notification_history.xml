@@ -1,13 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
     tools:ignore="SelectableText">
 
+    <com.google.android.material.appbar.AppBarLayout
+        android:id="@+id/history_appbar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@android:color/transparent"
+        app:elevation="0dp"
+        app:liftOnScroll="false">
+
     <LinearLayout
+        android:id="@+id/history_header"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:gravity="center_vertical"
@@ -15,7 +23,8 @@
         android:paddingStart="@dimen/ds_space_l"
         android:paddingTop="@dimen/ds_space_s"
         android:paddingEnd="@dimen/ds_space_s"
-        android:paddingBottom="@dimen/ds_space_s">
+        android:paddingBottom="@dimen/ds_space_m"
+        app:layout_scrollFlags="scroll|enterAlways">
 
         <TextView
             android:id="@+id/history_count"
@@ -41,11 +50,12 @@
             android:layout_width="wrap_content"
             android:text="@string/history_clear" />
     </LinearLayout>
+    </com.google.android.material.appbar.AppBarLayout>
 
     <FrameLayout
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1">
+        android:layout_height="match_parent"
+        app:layout_behavior="@string/appbar_scrolling_view_behavior">
 
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/history_list"
@@ -53,7 +63,6 @@
             android:layout_height="match_parent"
             android:clipToPadding="false"
             android:paddingStart="@dimen/ds_space_l"
-            android:paddingTop="@dimen/ds_space_xs"
             android:paddingEnd="@dimen/ds_space_l"
             android:paddingBottom="@dimen/ds_space_xl"
             app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
@@ -127,4 +136,4 @@
                 android:textColor="?attr/colorOnSurfaceVariant" />
         </LinearLayout>
     </FrameLayout>
-</LinearLayout>
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

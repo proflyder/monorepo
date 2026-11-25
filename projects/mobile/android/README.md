@@ -68,13 +68,28 @@ a typed router. Device acceptance and open work: [STATE](../../../docs/STATE.md)
 (`core/designsystem/glass`). The fragment container draws edge to edge under
 it: the bar renders a blurred `RenderNode` snapshot of the content on API 31+
 and a near-opaque surface tint on older devices and in software rendering (`GlassPainter` draws tint, hairline and fade for both the bar and pinned section headers). Screens without a vertical scroller get the bar height as root padding, with an `colorOutlineVariant` hairline and a
-12 dp fade into the content. `BaseFragment` pads the primary vertical scroller
-of every screen by the live `AppBarHeightSource.appBarHeight`, so the first
-row rests below the bar while scrolling content passes under it. A screen whose scroller sits under its own `AppBarLayout` pads that app bar
-instead, so its content also rests below the bar. The status bar band is
-always opaque. Sticky section headers pin at the bar edge with the same
-`GlassPainter`; while one is pinned there, the bar hides its own hairline and
-fade (`AppBarHost.mergeBarEdge`) so bar and header read as one block; the Home room header is a single compact line.
+12 dp fade into the content. `BaseFragment` of a top-level screen applies the
+live `AppBarHost.appBarHeight` once, to exactly one view (`appBarInsetTarget`):
+the screen's own `AppBarLayout` if it has one, else the primary vertical
+scroller, else the screen root. Nested fragments (pager pages, sections) never
+pad themselves, and a scroller below fixed views in a vertical stack falls back
+to the root, so there is never a double gap or content hidden under the bar.
+Screens with a fixed header (history counters, secrets search, Time tabs) put
+it in their own `AppBarLayout` with `scroll|enterAlways`, like Home. A
+scrolled-away inner app bar is clipped at the bar edge (`HideUnderBar`), so it
+is never drawn or jittering under the glass. The padding binding follows the
+view's attach state, so re-attached views pick up the current height.
+
+The blur snapshot is re-recorded when the backdrop changes: scroll events and
+every redraw of a screen's vertical list (`trackGlassBackdrop`), skipping the
+bar's own recording pass. The tint over blur is about 70 % opaque.
+
+A sticky section header pinned at the bar edge is handed to the bar
+(`AppBarHost.pinUnderBar`): `GlassBarView` extends its surface over the header
+(same blur and tint), draws the header content and puts the single hairline
+and fade under the combined block. Elsewhere (below an expanded inner header)
+the header draws its own opaque surface. Every screen's resting geometry and
+the pinned history header are covered by `ScreenInsetsScreenshotTest`.
 
 ## Build and test
 
