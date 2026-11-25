@@ -5,12 +5,12 @@ metadata:
   namespace: flux-system
   annotations:
     proflyder.dev/source: "initial pin from live cluster 2026-11-10"
-    proflyder.dev/source-commit: "ba0abcc48f8e1409e712608df72c5d4d307df64a"
-    proflyder.dev/source-tree: "22a446e4448d0ccbbd41640b4fdba38f8653114f"
-    proflyder.dev/verified-at: "2026-11-25T01:22:27Z"
-    proflyder.dev/run: "https://github.com/proflyder/monorepo/actions/runs/45525160368"
+    proflyder.dev/source-commit: "206d42ec28054eaab040aa146330e57084cb2ca8"
+    proflyder.dev/source-tree: "292aa6c6db7a74b65b2dacc046aed96b4930a221"
+    proflyder.dev/verified-at: "2026-11-25T15:19:14Z"
+    proflyder.dev/run: "https://github.com/proflyder/monorepo/actions/runs/45643586756"
 data:
-  BUILD_ID: "ba0abcc48f8e"
+  BUILD_ID: "206d42ec2805"
   CURRENCY_BOT_IMAGE: "ghcr.io/proflyder/currency-bot@sha256:17ef9272818cb64e1047b63f111c2debac4162f8eec16627f57d2803c7a19ace"
   HA_BRIDGE_IMAGE: "ghcr.io/proflyder/ha-bridge@sha256:8b39dd6bf19b0bd394bcaa8604c01d8a918d491a3ece6f24d31f0d6cafaf7582"
   HA_CONFIG_SYNC_IMAGE: "ghcr.io/proflyder/ha-config-sync@sha256:ed946277931faa385f957730d991587dc8fea397824a794b92a99dda3ddf09f9"
@@ -21,7 +21,7 @@ data:
   HERMES_IMAGE: "ghcr.io/proflyder/hermes@sha256:d07c039eb5a02b567a115b08e308d08d872512ef55b8895ecc0a7783be64b466"
   HOME_DEPLOY_IMAGE: "ghcr.io/proflyder/home-deploy@sha256:1dc177dfc2c40f04d21384974a4a4dbd81b9712b3df446cd7dea82e8a5848150"
   INTERCOM_IMAGE: "ghcr.io/proflyder/intercom@sha256:566aa3e9efef900ec1536632036333917bbc344f0d8eb3a281af50f2c7720179"
-  MCP_GATEWAY_IMAGE: "ghcr.io/proflyder/mcp-gateway@sha256:93769c55e0412824944ee82c679d65b923018261f8d3d2df24066779534d762d"
+  MCP_GATEWAY_IMAGE: "ghcr.io/proflyder/mcp-gateway@sha256:08b286d930056b0a31c495e2dd1366cb5a3323be94cc413ec84db86ff93b782f"
   PHONE_PUSH_IMAGE: "ghcr.io/proflyder/phone-push@sha256:9b9e529efb18f387c1d7a61964a2344bb155814156b96153334867a00d41e976"
   SCHEDULER_IMAGE: "ghcr.io/proflyder/scheduler@sha256:0e5b6ff95218e5ed105d716f3995425720aa1f50020c1b5ce9f2f2fb5fd50654"
   SECRETS_GATEWAY_IMAGE: "ghcr.io/proflyder/secrets-gateway@sha256:f7c020874ab7a4fdc8e907d9a4a00edd4170dc91bf8a478aa22f1a28c14a3b4d"
