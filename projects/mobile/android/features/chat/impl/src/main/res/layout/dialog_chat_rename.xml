@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:paddingStart="@dimen/ds_space_xl"
+    android:paddingTop="@dimen/ds_space_s"
+    android:paddingEnd="@dimen/ds_space_xl">
+
+    <com.google.android.material.textfield.TextInputLayout
+        android:id="@+id/chat_rename_layout"
+        style="@style/Widget.Home.TextInput"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="@string/chat_session_rename_hint">
+
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/chat_rename_input"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:imeOptions="actionDone"
+            android:inputType="textCapSentences"
+            android:maxLength="@integer/chat_session_title_max_length"
+            android:maxLines="1" />
+    </com.google.android.material.textfield.TextInputLayout>
+</FrameLayout>

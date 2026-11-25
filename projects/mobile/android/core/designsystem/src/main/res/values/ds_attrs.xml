@@ -37,6 +37,10 @@
         <attr name="tileColumns" format="integer" />
     </declare-styleable>
 
+    <declare-styleable name="GlassPillLayout">
+        <attr name="glassCornerRadius" format="dimension" />
+    </declare-styleable>
+
     <declare-styleable name="GlassChromeLayout">
         <attr name="glassEdge" format="enum">
             <enum name="top" value="0" />

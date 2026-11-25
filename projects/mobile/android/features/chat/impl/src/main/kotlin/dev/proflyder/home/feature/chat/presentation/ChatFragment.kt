@@ -26,7 +26,13 @@ import dev.proflyder.home.core.designsystem.Components
 import dev.proflyder.home.core.designsystem.HomePopupMenu
 import dev.proflyder.home.core.model.ChatAttachmentKind
 import dev.proflyder.home.core.presentation.ScreenFragment
-import dev.proflyder.home.core.presentation.tabViewModels
+import dev.proflyder.home.core.presentation.screenViewModel
+import dev.proflyder.home.core.designsystem.glass.bindGlassBackdrop
+import dev.proflyder.home.core.model.ChatSession
+import dev.proflyder.home.core.navigation.Route
+import dev.proflyder.home.feature.chat.presentation.sessions.SessionMenu
+import dev.proflyder.home.feature.chat.presentation.sessions.displayTitle
+import android.view.Gravity
 import dev.proflyder.home.core.ui.ContentInsets
 import dev.proflyder.home.core.ui.pinAboveKeyboard
 import dev.proflyder.home.core.ui.setVisible
@@ -43,7 +49,7 @@ import kotlinx.coroutines.launch
 internal class ChatFragment : ScreenFragment<FragmentChatBinding, ChatUiState, ChatIntent, ChatEvent>(
     FragmentChatBinding.Companion::inflate,
 ) {
-    override val viewModel: ChatViewModel by tabViewModels()
+    override val viewModel: ChatViewModel by screenViewModel()
 
     private val adapter = ChatAdapter(Callbacks())
     internal val layoutManager: LinearLayoutManager get() = binding.chatList.layoutManager as LinearLayoutManager
@@ -68,6 +74,11 @@ internal class ChatFragment : ScreenFragment<FragmentChatBinding, ChatUiState, C
         chatList.addOnScrollListener(ScrollWatcher())
         ItemTouchHelper(SwipeToReply(::onSwipeReply)).attachToRecyclerView(chatList)
         chatPanel.pinAboveKeyboard(chatList)
+        chatHeader.bindGlassBackdrop(chatList)
+        chatPanel.bindGlassBackdrop(chatList)
+        chatBack.setOnClickListener { navigate(Route.Back) }
+        chatActions.setOnClickListener { showSessionMenu() }
+        chatStop.setOnClickListener { dispatch(ChatIntent.Stop) }
         chatList.addOnLayoutChangeListener(StatesFollowList(chatStates))
         chatInput.doAfterTextChanged { dispatch(ChatIntent.InputChanged(it?.toString().orEmpty())) }
         chatSend.setOnClickListener { dispatch(ChatIntent.Send) }
@@ -77,9 +88,12 @@ internal class ChatFragment : ScreenFragment<FragmentChatBinding, ChatUiState, C
         chatScrollDown.setOnClickListener { scrollToEnd(smooth = true) }
         chatErrorRetry.setOnClickListener { dispatch(ChatIntent.Refresh) }
         render({ ChatStatus(it.loaded, it.failure, it.items.isEmpty()) }, ::renderStatus)
-        render({ it.draft to it.canSend }) { (draft, canSend) -> renderComposer(draft, canSend) }
+        render({ Composer(it.draft, it.canSend, it.stoppableReplyId != null) }, ::renderComposer)
         render(ChatUiState::replyTo, ::renderReply)
         render(ChatUiState::pending, ::renderPending)
+        render({ it.replyTo != null || it.pending.isNotEmpty() }, chatExtras::setVisible)
+        render(ChatUiState::session, ::renderSession)
+        render({ HeaderStatus(it.activeTool, it.stoppableReplyId != null) }, ::renderStatusLine)
         render(ChatUiState::recording, ::renderRecording)
         render(ChatUiState::items, ::renderItems)
     }
@@ -105,17 +119,38 @@ internal class ChatFragment : ScreenFragment<FragmentChatBinding, ChatUiState, C
         when (event) {
             is ChatEvent.Failure -> showFailure(event.failure)
             is ChatEvent.Rejected -> showError(chatErrorText(event.key))
+            ChatEvent.Closed -> navigate(Route.Back)
         }
     }
 
     override fun onStart() {
         super.onStart()
-        ChatFocus.setVisible(true)
+        ChatFocus.setVisibleSession(viewModel.sessionId)
     }
 
     override fun onStop() {
-        ChatFocus.setVisible(false)
+        ChatFocus.setVisibleSession(null)
         super.onStop()
+    }
+
+    private fun renderSession(session: ChatSession?) {
+        binding.chatTitle.text = session?.displayTitle(requireContext()) ?: getString(R.string.chat_session_untitled)
+        binding.chatActions.isEnabled = session != null
+    }
+
+    private fun renderStatusLine(status: HeaderStatus) {
+        val text = when {
+            status.tool != null -> getString(R.string.chat_tool_running, status.tool)
+            status.answering -> getString(R.string.chat_session_preview_typing)
+            else -> null
+        }
+        binding.chatSubtitle.text = text
+        binding.chatSubtitle.setVisible(text != null)
+    }
+
+    private fun showSessionMenu() {
+        val session = viewModel.state.value.session ?: return
+        SessionMenu(binding.chatActions, session) { dispatch(ChatIntent.Act(it)) }.show(Gravity.END)
     }
 
     private fun afterSubmit(follow: Boolean) {
@@ -131,10 +166,11 @@ internal class ChatFragment : ScreenFragment<FragmentChatBinding, ChatUiState, C
         (it as? ChatItem.Bubble)?.messageId == messageId || (it as? ChatItem.Alert)?.messageId == messageId
     }.takeIf { it >= 0 }
 
-    private fun renderComposer(draft: String, canSend: Boolean) = with(binding) {
-        if (chatInput.text?.toString() != draft) chatInput.setText(draft)
-        chatSend.setVisible(canSend)
-        chatMic.setVisible(!canSend)
+    private fun renderComposer(composer: Composer) = with(binding) {
+        if (chatInput.text?.toString() != composer.draft) chatInput.setText(composer.draft)
+        chatSend.setVisible(composer.canSend)
+        chatStop.setVisible(!composer.canSend && composer.answering)
+        chatMic.setVisible(!composer.canSend && !composer.answering)
     }
 
     private fun renderPending(pending: List<LocalAttachment>) {
@@ -297,6 +333,10 @@ internal class ChatFragment : ScreenFragment<FragmentChatBinding, ChatUiState, C
 }
 
 internal data class ChatStatus(val loaded: Boolean, val failure: RemoteFailure?, val empty: Boolean)
+
+internal data class Composer(val draft: String, val canSend: Boolean, val answering: Boolean)
+
+internal data class HeaderStatus(val tool: String?, val answering: Boolean)
 
 internal class StatesFollowList(private val states: View) : View.OnLayoutChangeListener {
     override fun onLayoutChange(

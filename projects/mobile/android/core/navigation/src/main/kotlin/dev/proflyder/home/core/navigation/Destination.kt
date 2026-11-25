@@ -44,9 +44,18 @@ interface FeatureEntry {
     fun supports(destination: Destination): Boolean =
         RoutePath.of(destination.route)?.let(::parse) == destination
 
+    fun screenChrome(destination: Destination): ScreenChrome =
+        if (hidesBottomBar) ScreenChrome.WITHOUT_BOTTOM_BAR else ScreenChrome.FULL
+
     fun createFragment(destination: Destination): Fragment
 
     fun hostedDestination(featureId: String): Destination? = null
+}
+
+enum class ScreenChrome(val showsChrome: Boolean, val showsBottomBar: Boolean) {
+    FULL(showsChrome = true, showsBottomBar = true),
+    WITHOUT_BOTTOM_BAR(showsChrome = true, showsBottomBar = false),
+    IMMERSIVE(showsChrome = false, showsBottomBar = false),
 }
 
 class FeatureRegistry(entries: Collection<FeatureEntry>) {

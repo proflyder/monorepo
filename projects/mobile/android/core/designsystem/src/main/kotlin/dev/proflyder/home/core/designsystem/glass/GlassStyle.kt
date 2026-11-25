@@ -44,6 +44,17 @@ class GlassStyle(context: Context) {
         canvas.drawRect(0f, top.toFloat(), width.toFloat(), bottom.toFloat(), paint)
     }
 
+    private val outline = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = hairline.color
+        style = Paint.Style.STROKE
+        strokeWidth = hairlineHeight * 2
+    }
+
+    fun drawOutline(canvas: Canvas, width: Int, height: Int, radius: Float) {
+        val inset = outline.strokeWidth / 2
+        canvas.drawRoundRect(inset, inset, width - inset, height - inset, radius, radius, outline)
+    }
+
     fun drawBottomEdge(canvas: Canvas, width: Int, bottom: Int) {
         canvas.withTranslation(0f, bottom.toFloat()) {
             drawRect(0f, 0f, width.toFloat(), fadeHeight.toFloat(), fade)

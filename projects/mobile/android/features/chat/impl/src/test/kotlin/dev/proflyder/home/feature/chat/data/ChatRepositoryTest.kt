@@ -37,7 +37,7 @@ class ChatRepositoryTest {
 
     private fun TestScope.repository(): LiveChatRepository {
         val dispatcher = StandardTestDispatcher(testScheduler)
-        return LiveChatRepository(client, store, this, OpenRouteGate).apply {
+        return LiveChatRepository(SESSION, client, store, this, OpenRouteGate).apply {
             clock = ChatClock(now = { 1L }, newClientId = { "c${++ids}" }, io = dispatcher)
         }
     }
@@ -120,7 +120,7 @@ class ChatRepositoryTest {
             emit(ChatEvent.Upsert(message))
             throw IOException("unexpected end of stream")
         }
-        val repository = LiveChatRepository(client, store, backgroundScope, OpenRouteGate).apply {
+        val repository = LiveChatRepository(SESSION, client, store, backgroundScope, OpenRouteGate).apply {
             clock = ChatClock(
                 now = { 1L },
                 newClientId = { "c${++ids}" },
@@ -148,7 +148,7 @@ class ChatRepositoryTest {
             emit(ChatEvent.Upsert(message))
             awaitCancellation()
         }.onCompletion { cancelled.complete(Unit) }
-        val repository = LiveChatRepository(client, store, backgroundScope, OpenRouteGate)
+        val repository = LiveChatRepository(SESSION, client, store, backgroundScope, OpenRouteGate)
         runCurrent()
         assertEquals(0, client.streams)
 
@@ -160,6 +160,22 @@ class ChatRepositoryTest {
         watcher.cancel()
         advanceTimeBy(LIVE_STOP_MILLIS + 1)
         assertTrue(cancelled.isCompleted)
+    }
+
+    @Test
+    fun aConversationTalksToItsOwnSessionAndStopsTheReply() = runTest {
+        val repository = repository()
+        repository.refresh()
+        repository.send("Привет", replyTo = null)
+        advanceUntilIdle()
+        assertEquals(listOf(SESSION), client.pagedSessions)
+        assertEquals(listOf(SESSION), client.sentSessions)
+        assertTrue(repository.stop("a12") is Outcome.Success)
+        assertEquals(listOf("a12"), client.stopped)
+    }
+
+    private companion object {
+        const val SESSION = "s_trip"
     }
 }
 

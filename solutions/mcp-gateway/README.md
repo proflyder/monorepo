@@ -230,11 +230,11 @@ Read-only агрегатор для вкладки «Система» Android-п
 ## Чат приложения (`/v1/chat/*`)
 
 Вкладка «Чат» Android-приложения — тот же агент Hermes, что в Telegram
-(те же память, skills и MCP-инструменты), в одной постоянной беседе
+(те же память, skills и MCP-инструменты), в нескольких беседах (сессиях)
 приложения. Код — `crates/mcp-gateway/src/chat/`.
 
 ```
-Android ──/v1/chat/*──► mcp-gateway ──► chat relay (voice-proxy) ──► Hermes /api/sessions/home-app/chat/stream
+Android ──/v1/chat/*──► mcp-gateway ──► chat relay (voice-proxy) ──► Hermes /api/sessions/<session>[/chat/stream]
                             │ SQLite MCP_CHAT_DB
 ```
 
@@ -242,11 +242,27 @@ Android ──/v1/chat/*──► mcp-gateway ──► chat relay (voice-proxy)
   (`kind=alert`) в `/v1/chat/messages` и `/v1/chat/events` отдаются только
   токену с модулем `alerts`.
 - Hermes API слушает только loopback пода Hermes. Gateway ходит к нему через
-  chat relay в `voice-proxy` (отдельный Bearer), который пропускает ровно
-  `POST /api/sessions` и `POST /api/sessions/home-app/chat/stream` для одной
-  сессии и подставляет `API_SERVER_KEY` — см. [voice-proxy](../voice-proxy/README.md#app-chat-relay).
-- Беседа — сессия Hermes `home-app` (`MCP_CHAT_SESSION`), создаётся при первом
-  ходе (`409` = уже есть). Персона и формат — `system_message` из
+  chat relay в `voice-proxy` (отдельный Bearer), который пропускает только
+  сессии приложения (`home-app` и `app_*`) и подставляет `API_SERVER_KEY` —
+  см. [voice-proxy](../voice-proxy/README.md#app-chat-relay).
+- Беседы — таблица `chat_sessions` (id, название, закреп, архив); каждое
+  сообщение несёт `sessionId`. Сессия Hermes с тем же id создаётся при первом
+  ходе (`409` = уже есть). Новые сессии получают id `app_<uuid>`. Прежняя
+  единственная беседа (`MCP_CHAT_SESSION`, по умолчанию `home-app`) при старте
+  становится сессией «Главный чат»: сообщения без `session_id` переносятся в
+  неё; алерты пишутся туда же.
+- Переименование зеркалируется в Hermes (`PATCH {title}`), удаление — `DELETE`
+  (лучшее усилие, ошибки только в лог). Закреп и архив локальные: архив в
+  Hermes запускает удаление по retention, поэтому туда не передаётся.
+- Название: если не задано, после первого ответа берётся автозаголовок Hermes
+  (`GET /api/sessions/<id>`), иначе первая строка первого сообщения (40
+  символов). Изменение уходит SSE-событием `session`.
+- Остановка: `POST /v1/chat/messages/{id}/stop` обрывает поток к Hermes
+  (Hermes прерывает run при закрытии SSE); ответ становится `failed` с
+  `chat_stopped` и частичным текстом, его можно повторить через `retry`.
+- Инструменты: события Hermes `tool.started/completed/failed` идут в SSE как
+  `tool {id, sessionId, name, done}` без сохранения; `_thinking` скрыт.
+- Персона и формат — `system_message` из
   `MCP_CHAT_PROMPT_FILE`. Память и skills Hermes общие для
   всех платформ, поэтому факты из Telegram доступны и здесь.
 - История — SQLite `MCP_CHAT_DB` с одним писателем (одна реплика). Hermes хранит контекст агента сам; таблица
@@ -260,10 +276,15 @@ Android ──/v1/chat/*──► mcp-gateway ──► chat relay (voice-proxy)
 
 | Маршрут | Назначение |
 |---|---|
-| `GET /v1/chat/messages?before=<seq>&limit=<n>` | Страница истории (по умолчанию 50, максимум 200) в порядке возрастания `seq`; `hasMore`, `cursor` — текущая версия для `events`. |
-| `POST /v1/chat/messages {clientId, text, replyTo?}` | Сообщение и плейсхолдер ответа `pending`. Повтор с тем же `clientId` возвращает ту же пару без нового хода — офлайн-очередь телефона повторяет безопасно. `replyTo` — id цитируемого сообщения; Hermes получает цитату строкой «[Ответ на сообщение (role): «…»]». |
+| `GET /v1/chat/sessions?archived=<bool>` | Сессии: закреплённые, затем по последней активности; `preview` — последнее сообщение (роль, вид, текст до 120 символов, статус). |
+| `POST /v1/chat/sessions {title?}` | Новая сессия `app_<uuid>`. |
+| `PATCH /v1/chat/sessions/{id} {title?, pinned?, archived?}` | Название 1–80 символов, иначе `400 chat_title_invalid`. |
+| `DELETE /v1/chat/sessions/{id}` | Сессия, её сообщения и файлы вложений; идущий ход останавливается. SSE `session_removed`. |
+| `POST /v1/chat/messages/{id}/stop` | Остановить `pending`/`streaming` ответ, иначе `409 chat_not_stoppable`. |
+| `GET /v1/chat/messages?session=<id>&before=<seq>&limit=<n>` | Без `session` — `MCP_CHAT_SESSION`; неизвестная — `404 chat_session_not_found`. | Страница истории (по умолчанию 50, максимум 200) в порядке возрастания `seq`; `hasMore`, `cursor` — текущая версия для `events`. |
+| `POST /v1/chat/messages {clientId, sessionId?, text, replyTo?}` | Сообщение и плейсхолдер ответа `pending`. Повтор с тем же `clientId` возвращает ту же пару без нового хода — офлайн-очередь телефона повторяет безопасно. `replyTo` — id цитируемого сообщения; Hermes получает цитату строкой «[Ответ на сообщение (role): «…»]». |
 | `POST /v1/chat/messages/{id}/retry` | Повтор упавшего ответа (`assistant` + `failed`), иначе `409 chat_not_retryable`. |
-| `GET /v1/chat/events?after=<version>` | SSE. Сначала все сообщения с `version > after`, затем живые события: `message` (полная версия сообщения, `id:` = `version`) и `delta` `{id, offset, text}`. `offset` — длина уже показанного текста в UTF-16 (как `String.length` в Kotlin): клиент применяет дельту, только если она продолжает его текст, иначе ждёт следующего `message`. Keepalive 15 с; при отставании подписчика поток закрывается, клиент переподключается со своим `after`. |
+| `GET /v1/chat/events?after=<version>&session=<id>` | SSE; с `session` — только события этой сессии, без — все (экран списка слушает `message`, `session`, `session_removed`). Сначала все сообщения с `version > after`, затем живые события: `message` (полная версия сообщения, `id:` = `version`) и `delta` `{id, offset, text}`. `offset` — длина уже показанного текста в UTF-16 (как `String.length` в Kotlin): клиент применяет дельту, только если она продолжает его текст, иначе ждёт следующего `message`. Keepalive 15 с; при отставании подписчика поток закрывается, клиент переподключается со своим `after`. |
 
 ### Голос и вложения
 

@@ -11,4 +11,20 @@
     <dimen name="chat_image_radius">12dp</dimen>
     <dimen name="chat_alert_button_gap">20dp</dimen>
     <dimen name="chat_fab_gap">8dp</dimen>
+    <dimen name="chat_floating_control">44dp</dimen>
+    <dimen name="chat_floating_margin">8dp</dimen>
+    <dimen name="chat_floating_gap">6dp</dimen>
+    <dimen name="chat_floating_icon_padding">10dp</dimen>
+    <dimen name="chat_input_padding_horizontal">16dp</dimen>
+    <dimen name="chat_input_padding_vertical">11dp</dimen>
+    <dimen name="chat_send_size">48dp</dimen>
+    <dimen name="chat_list_header_gap">8dp</dimen>
+    <dimen name="chat_title_pill_padding">16dp</dimen>
+    <dimen name="chat_extras_padding">10dp</dimen>
+    <dimen name="chat_session_avatar">48dp</dimen>
+    <dimen name="chat_session_row_padding">12dp</dimen>
+    <dimen name="chat_session_row_gap">12dp</dimen>
+    <dimen name="chat_session_meta_icon">16dp</dimen>
+    <dimen name="chat_session_search_margin">8dp</dimen>
+    <dimen name="chat_session_divider_inset">72dp</dimen>
 </resources>

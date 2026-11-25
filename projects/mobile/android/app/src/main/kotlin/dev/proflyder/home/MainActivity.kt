@@ -41,6 +41,7 @@ class MainActivity :
     internal lateinit var actionsMenu: ToolbarChrome
     private lateinit var binding: ActivityMainBinding
     private lateinit var tabs: BottomTabs
+    private lateinit var chromeSizes: ChromeSizes
 
     @Inject
     internal lateinit var features: FeatureRegistry
@@ -86,7 +87,7 @@ class MainActivity :
         lifecycle.addObserver(router)
         actionsMenu = ToolbarChrome(binding, router, toolbarActions) { onBackPressedDispatcher.onBackPressed() }
         tabs = BottomTabs(binding.homeNoticeAnchor, features, router)
-        binding.applySystemBarInsets(tabs)
+        chromeSizes = binding.applySystemBarInsets(tabs)
         attachContributions()
         onBackPressedDispatcher.addCallback(this) { if (!router.back()) finish() }
         deepLinks.open(intent, router)
@@ -108,6 +109,7 @@ class MainActivity :
         val withoutSections = accessState is AppAccessState.Ready && visibleTabs.isEmpty()
         binding.fragmentContainer.isVisible = !withoutSections
         binding.homeNoAccess.isVisible = withoutSections
+        binding.showChrome(!chrome.hidesChrome, chromeSizes)
         actionsMenu.render(chrome, accessState)
         tabs.render(chrome, accessState)
         if (withoutSections) return

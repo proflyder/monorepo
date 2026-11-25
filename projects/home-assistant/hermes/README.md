@@ -274,9 +274,12 @@ to quote its fingerprint into the model, then ask `infra_alert` about it.
 ## App chat
 
 The Android «Чат» tab talks to this same agent through Hermes' sessions API
-(`/api/sessions/home-app/chat/stream`): same memory, skills and MCP toolsets
-as Telegram (`platform_toolsets.api_server` equals `telegram`). The app
-session has its own transcript; Telegram is unaffected. The prompt is
+(`/api/sessions/<session>/chat/stream`): same memory, skills and MCP toolsets
+as Telegram (`platform_toolsets.api_server` equals `telegram`). The app keeps
+several conversations: the original `home-app` session plus `app_*` sessions
+created on the phone, each with its own transcript; Telegram is unaffected.
+Titles come from Hermes auto titles or the first message; rename and delete
+are mirrored to Hermes. The prompt is
 `projects/home/kubernetes/mcp-gateway/manifests/chat-prompt.txt` (the
 Telegram prompt adapted to the app), passed per turn as `system_message` by
 `mcp-gateway`. Transport and storage — `solutions/mcp-gateway/README.md`

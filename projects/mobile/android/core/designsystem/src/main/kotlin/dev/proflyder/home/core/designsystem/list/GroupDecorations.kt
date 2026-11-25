@@ -16,10 +16,20 @@ class GroupDividers(@Px private val insetStart: Int = 0) : RecyclerView.ItemDeco
     override fun onDrawOver(canvas: Canvas, parent: RecyclerView, state: RecyclerView.State) {
         paint.color = MaterialColors.getColor(parent, com.google.android.material.R.attr.colorOutlineVariant)
         val thickness = parent.resources.displayMetrics.density.coerceAtLeast(1f)
+        val hidden = parent.pinnedHeaderBottom()?.plus(thickness * PINNED_CLEARANCE_LINES)
         parent.children().filter { parent.slotOfChild(it)?.last == false }.forEach { child ->
             val bottom = child.bottom + child.translationY
-            canvas.drawRect(child.left + insetStart.toFloat(), bottom - thickness, child.right.toFloat(), bottom, paint)
+            if (hidden == null || bottom > hidden) {
+                canvas.drawRect(child.left + insetStart.toFloat(), bottom - thickness, child.right.toFloat(), bottom, paint)
+            }
         }
+    }
+
+    private fun RecyclerView.pinnedHeaderBottom(): Float? =
+        (layoutManager as? StickyHeadersLayoutManager)?.stickyHeaderView?.let { it.bottom + it.translationY }
+
+    private companion object {
+        const val PINNED_CLEARANCE_LINES = 2
     }
 }
 

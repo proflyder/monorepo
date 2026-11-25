@@ -29,6 +29,7 @@ pub const DEFAULT_MEDIA_PLAYER: &str = "media_player.iandeks_stantsiia_midi_medi
 pub const DEFAULT_QUEUE_CONSUMER: &str = "voice-proxy-home";
 pub const DEFAULT_ANNOUNCE_TTL: i64 = 10_800;
 pub const DEFAULT_CHAT_RELAY_SESSION: &str = "home-app";
+pub const DEFAULT_CHAT_RELAY_PREFIX: &str = "app_";
 
 #[derive(Debug, Clone, Parser)]
 #[command(name = "voice-proxy", version, disable_help_subcommand = true)]
@@ -209,6 +210,13 @@ pub struct Settings {
     pub chat_relay_session: String,
     #[arg(
         long,
+        env = "HERMES_CHAT_RELAY_PREFIX",
+        default_value = DEFAULT_CHAT_RELAY_PREFIX,
+        hide = true
+    )]
+    pub chat_relay_prefix: String,
+    #[arg(
+        long,
         env = "HERMES_CHAT_RELAY_TOKEN_FILE",
         default_value = "",
         hide = true
@@ -292,6 +300,7 @@ pub struct Config {
     pub scheduler_token: std::sync::Arc<SecretSource>,
     pub chat_relay_listen: String,
     pub chat_relay_session: String,
+    pub chat_relay_prefix: String,
     pub chat_relay_token: std::sync::Arc<SecretSource>,
     pub api_key: std::sync::Arc<SecretSource>,
     pub log_level: LogLevel,
@@ -357,6 +366,7 @@ impl Config {
             )),
             chat_relay_listen: settings.chat_relay_listen.trim().to_owned(),
             chat_relay_session: settings.chat_relay_session.trim().to_owned(),
+            chat_relay_prefix: settings.chat_relay_prefix.trim().to_owned(),
             chat_relay_token: std::sync::Arc::new(SecretSource::new(
                 &settings.chat_relay_token_file,
                 &settings.chat_relay_token,

@@ -118,7 +118,11 @@ class WindowInsetsScreenshotTest {
         val activity = launch(theme)
         activity.router.selectTab(ChatRoute.FEATURE_ID)
         idle(activity)
+        activity.router.openRoute(ChatRoute.session(ChatRoute.LEGACY_SESSION_ID))
+        idle(activity)
         val root = activity.window.decorView
+        assertFalse("the conversation hides the app bar", root.findViewById<View>(R.id.top_chrome).isShown)
+        assertFalse("the conversation hides the bottom chrome", root.findViewById<View>(R.id.bottom_chrome).isShown)
         root.findViewById<View>(ChatR.id.chat_input).requestFocus()
         val keyboard = dp(root, KEYBOARD_DP)
         applyInsets(activity, keyboard)
@@ -127,7 +131,8 @@ class WindowInsetsScreenshotTest {
         assertEquals("chat panel is not on the keyboard", root.height - keyboard, panel.windowBottom())
         val nav = root.findViewById<View>(R.id.home_notice_anchor)
         assertFalse("bottom navigation stays above the keyboard", nav.isShown)
-        assertComposerStyle(root.findViewById(ChatR.id.chat_input_layout))
+        val header = root.findViewById<View>(ChatR.id.chat_header)
+        assertTrue("the floating header clears the status bar", header.paddingTop >= dp(root, STATUS_BAR_DP))
         shoot(activity, "insets-${theme.key}-chat-keyboard.png", keyboard)
     }
 
@@ -243,15 +248,6 @@ class WindowInsetsScreenshotTest {
         val view = LayoutInflater.from(activity).inflate(layoutRes, FrameLayout(activity), false)
         val width = (WIDTH_DP * activity.resources.displayMetrics.density).toInt()
         return view.fields().onEach { it.measureAlone(width) }
-    }
-
-    private fun assertComposerStyle(field: TextInputLayout) {
-        assertEquals(TextInputLayout.BOX_BACKGROUND_OUTLINE, field.boxBackgroundMode)
-        assertEquals("no underline at rest", 0, field.boxStrokeWidth)
-        assertTrue("thin accent outline in focus", field.boxStrokeWidthFocused > 0)
-        assertEquals(field.boxCornerRadiusTopStart, field.boxCornerRadiusBottomEnd)
-        assertFalse("the composer uses a placeholder, not a floating label", field.isHintEnabled)
-        assertFalse(checkNotNull(field.editText).hint.isNullOrBlank())
     }
 
     private fun assertHomeStyle(field: TextInputLayout) {

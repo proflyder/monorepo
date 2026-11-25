@@ -16,6 +16,7 @@
   "kind": "alert",
   "role": "system",
   "seq": 1,
+  "sessionId": "home-app",
   "status": "done",
   "text": "✅ KubePodCrashLooping · critical\n▸ scheduler перезапускается\n📍 home-assistant / scheduler-7d9\n🕒 с 20.11 13:00\n✅ решено 20.11 13:30\n🔎 a1b2c3d4e5f6",
   "updatedAt": 1795129665000,

@@ -1,0 +1,25 @@
+{
+  "sessions": [
+    {
+      "id": "s_1",
+      "title": "Отпуск",
+      "pinned": true,
+      "archived": false,
+      "preview": {
+        "role": "assistant",
+        "kind": "text",
+        "text": "Готово.",
+        "status": "done"
+      },
+      "createdAt": 1,
+      "updatedAt": 2
+    },
+    {
+      "id": "home-app",
+      "pinned": false,
+      "archived": false,
+      "createdAt": 1,
+      "updatedAt": 1
+    }
+  ]
+}

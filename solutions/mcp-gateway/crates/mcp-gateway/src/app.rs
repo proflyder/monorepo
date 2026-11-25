@@ -243,7 +243,6 @@ pub async fn run() -> anyhow::Result<()> {
         let hermes = crate::chat::hermes::Client::new(
             &config.chat_hermes_url,
             config.chat_hermes_token.clone(),
-            &config.chat_session,
             config.chat_prompt.clone(),
         )
         .map_err(anyhow::Error::msg)?;
@@ -259,6 +258,7 @@ pub async fn run() -> anyhow::Result<()> {
             });
         Some(
             crate::chat::Chat::start(crate::chat::Options {
+                default_session: config.chat_session.clone(),
                 store: Arc::new(store),
                 hermes: Arc::new(hermes),
                 media: Some(Arc::new(media)),

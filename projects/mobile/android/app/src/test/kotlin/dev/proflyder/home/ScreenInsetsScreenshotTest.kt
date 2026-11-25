@@ -173,7 +173,7 @@ class ScreenInsetsScreenshotTest(private val screen: InsetScreen) {
             tab("control", null),
             tab("scenarios", DesignR.dimen.ds_space_m),
             tab("time", DesignR.dimen.ds_space_m),
-            tab("chat", DesignR.dimen.ds_space_s),
+            tab("chat", null),
             tab("system", DesignR.dimen.ds_space_m),
         )
 

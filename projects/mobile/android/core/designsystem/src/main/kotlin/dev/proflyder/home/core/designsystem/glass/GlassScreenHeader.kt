@@ -12,7 +12,7 @@ import androidx.core.view.updatePadding
 class GlassScreenHeader @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
-) : LinearLayout(context, attrs), GlassEdgeOwner {
+) : LinearLayout(context, attrs), GlassEdgeOwner, GlassHeader {
     private val surface = GlassSurface(context)
     private val covers = EdgeCovers(::invalidate)
     private val redraw = ViewTreeObserver.OnScrollChangedListener(::invalidate)

@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<dev.proflyder.home.core.designsystem.glass.GlassHeaderLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/chat_root"
@@ -13,9 +13,9 @@
         android:layout_height="match_parent"
         android:clipToPadding="false"
         android:paddingStart="@dimen/chat_screen_margin"
-        android:paddingTop="8dp"
+        android:paddingTop="@dimen/chat_list_header_gap"
         android:paddingEnd="@dimen/chat_screen_margin"
-        android:paddingBottom="8dp"
+        android:paddingBottom="@dimen/chat_list_header_gap"
         app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
         app:stackFromEnd="true"
         tools:itemCount="3"
@@ -39,7 +39,7 @@
             android:layout_height="wrap_content"
             android:layout_gravity="center"
             android:gravity="center"
-            android:padding="32dp"
+            android:padding="@dimen/ds_space_xl"
             android:text="@string/chat_empty"
             android:textAppearance="?attr/textAppearanceBodyLarge"
             android:textColor="?attr/colorOnSurfaceVariant"
@@ -52,7 +52,7 @@
             android:layout_gravity="center"
             android:gravity="center"
             android:orientation="vertical"
-            android:padding="32dp"
+            android:padding="@dimen/ds_space_xl"
             android:visibility="gone">
 
             <TextView
@@ -64,20 +64,100 @@
                 android:textColor="?attr/colorOnSurface" />
 
             <com.google.android.material.button.MaterialButton
-            style="@style/Widget.Home.Button.Filled.M"
                 android:id="@+id/chat_error_retry"
+                style="@style/Widget.Home.Button.Filled.M"
                 android:layout_width="wrap_content"
-                android:layout_marginTop="12dp"
+                android:layout_marginTop="@dimen/ds_space_m"
                 android:text="@string/ds_action_retry" />
         </LinearLayout>
     </FrameLayout>
+
+    <dev.proflyder.home.core.designsystem.glass.FloatingGlassHeader
+        android:id="@+id/chat_header"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top"
+        android:gravity="center_vertical"
+        android:paddingStart="@dimen/chat_floating_margin"
+        android:paddingTop="@dimen/chat_floating_margin"
+        android:paddingEnd="@dimen/chat_floating_margin"
+        android:paddingBottom="@dimen/chat_floating_margin">
+
+        <dev.proflyder.home.core.designsystem.glass.GlassPillLayout
+            android:layout_width="@dimen/chat_floating_control"
+            android:layout_height="@dimen/chat_floating_control">
+
+            <ImageButton
+                android:id="@+id/chat_back"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/chat_back"
+                android:padding="@dimen/chat_floating_icon_padding"
+                android:src="@drawable/chat_ic_back" />
+        </dev.proflyder.home.core.designsystem.glass.GlassPillLayout>
+
+        <dev.proflyder.home.core.designsystem.glass.GlassPillLayout
+            android:id="@+id/chat_title_pill"
+            android:layout_width="0dp"
+            android:layout_height="@dimen/chat_floating_control"
+            android:layout_marginStart="@dimen/chat_floating_gap"
+            android:layout_marginEnd="@dimen/chat_floating_gap"
+            android:layout_weight="1">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:gravity="center"
+                android:orientation="vertical"
+                android:paddingStart="@dimen/chat_title_pill_padding"
+                android:paddingEnd="@dimen/chat_title_pill_padding">
+
+                <TextView
+                    android:id="@+id/chat_title"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:textAppearance="?attr/textAppearanceTitleSmall"
+                    android:textColor="?attr/colorOnSurface" />
+
+                <TextView
+                    android:id="@+id/chat_subtitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:textAppearance="?attr/textAppearanceLabelSmall"
+                    android:textColor="?attr/colorPrimary"
+                    android:visibility="gone" />
+            </LinearLayout>
+        </dev.proflyder.home.core.designsystem.glass.GlassPillLayout>
+
+        <dev.proflyder.home.core.designsystem.glass.GlassPillLayout
+            android:layout_width="@dimen/chat_floating_control"
+            android:layout_height="@dimen/chat_floating_control">
+
+            <ImageButton
+                android:id="@+id/chat_actions"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/chat_session_actions"
+                android:padding="@dimen/chat_floating_icon_padding"
+                android:src="@drawable/chat_ic_more" />
+        </dev.proflyder.home.core.designsystem.glass.GlassPillLayout>
+    </dev.proflyder.home.core.designsystem.glass.FloatingGlassHeader>
 
     <LinearLayout
         android:id="@+id/chat_panel"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom"
-        android:orientation="vertical">
+        android:orientation="vertical"
+        android:paddingStart="@dimen/chat_floating_margin"
+        android:paddingEnd="@dimen/chat_floating_margin"
+        android:paddingBottom="@dimen/chat_floating_margin">
 
         <dev.proflyder.home.core.designsystem.OutlinedFloatingActionButton
             android:id="@+id/chat_scroll_down"
@@ -85,184 +165,209 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="end"
-            android:layout_marginEnd="@dimen/chat_screen_margin"
             android:layout_marginBottom="@dimen/chat_fab_gap"
             android:contentDescription="@string/chat_scroll_down"
             android:visibility="gone"
             app:srcCompat="@drawable/chat_ic_down" />
 
-        <LinearLayout
-            android:id="@+id/chat_body"
+        <dev.proflyder.home.core.designsystem.glass.GlassPillLayout
+            android:id="@+id/chat_extras"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="?attr/colorSurface"
-            android:orientation="vertical"
-            android:paddingStart="@dimen/chat_screen_margin"
-            android:paddingTop="6dp"
-            android:paddingEnd="@dimen/chat_screen_margin"
-            android:paddingBottom="8dp">
+            android:layout_marginBottom="@dimen/chat_floating_gap"
+            android:visibility="gone"
+            app:glassCornerRadius="@dimen/ds_radius_l">
 
             <LinearLayout
-                android:id="@+id/chat_reply_bar"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:gravity="center_vertical"
-                android:orientation="horizontal"
-                android:paddingBottom="6dp"
-                android:visibility="gone">
-
-                <ImageView
-                    android:layout_width="20dp"
-                    android:layout_height="20dp"
-                    android:layout_marginEnd="8dp"
-                    android:importantForAccessibility="no"
-                    android:src="@drawable/chat_ic_reply" />
-
-                <View
-                    android:layout_width="3dp"
-                    android:layout_height="match_parent"
-                    android:layout_marginEnd="8dp"
-                    android:background="@drawable/chat_bg_quote_bar" />
+                android:orientation="vertical"
+                android:padding="@dimen/chat_extras_padding">
 
                 <LinearLayout
-                    android:layout_width="0dp"
+                    android:id="@+id/chat_reply_bar"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:visibility="gone">
+
+                    <ImageView
+                        android:layout_width="@dimen/chat_session_meta_icon"
+                        android:layout_height="@dimen/chat_session_meta_icon"
+                        android:layout_marginEnd="@dimen/ds_space_s"
+                        android:importantForAccessibility="no"
+                        android:src="@drawable/chat_ic_reply" />
+
+                    <View
+                        android:layout_width="@dimen/ds_space_xs"
+                        android:layout_height="match_parent"
+                        android:layout_marginEnd="@dimen/ds_space_s"
+                        android:background="@drawable/chat_bg_quote_bar" />
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:id="@+id/chat_reply_author"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:maxLines="1"
+                            android:textAppearance="?attr/textAppearanceLabelMedium"
+                            android:textColor="?attr/colorPrimary" />
+
+                        <TextView
+                            android:id="@+id/chat_reply_text"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:ellipsize="end"
+                            android:maxLines="1"
+                            android:textAppearance="?attr/textAppearanceBodySmall"
+                            android:textColor="?attr/colorOnSurfaceVariant" />
+                    </LinearLayout>
+
+                    <ImageButton
+                        android:id="@+id/chat_reply_cancel"
+                        android:layout_width="@dimen/chat_floating_control"
+                        android:layout_height="@dimen/chat_floating_control"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:contentDescription="@string/chat_reply_cancel"
+                        android:src="@drawable/chat_ic_close" />
+                </LinearLayout>
+
+                <HorizontalScrollView
+                    android:id="@+id/chat_pending_scroll"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:scrollbars="none"
+                    android:visibility="gone">
+
+                    <com.google.android.material.chip.ChipGroup
+                        android:id="@+id/chat_pending"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        app:singleLine="true" />
+                </HorizontalScrollView>
+            </LinearLayout>
+        </dev.proflyder.home.core.designsystem.glass.GlassPillLayout>
+
+        <LinearLayout
+            android:id="@+id/chat_compose_row"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:baselineAligned="false"
+            android:gravity="bottom"
+            android:orientation="horizontal">
+
+            <dev.proflyder.home.core.designsystem.glass.GlassPillLayout
+                android:id="@+id/chat_input_pill"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:minHeight="@dimen/chat_send_size"
+                app:glassCornerRadius="@dimen/ds_radius_xl">
+
+                <LinearLayout
+                    android:id="@+id/chat_compose"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="bottom"
+                    android:orientation="horizontal">
+
+                    <EditText
+                        android:id="@+id/chat_input"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:background="@null"
+                        android:hint="@string/chat_input_hint"
+                        android:imeOptions="flagNoExtractUi"
+                        android:importantForAutofill="no"
+                        android:inputType="textCapSentences|textMultiLine"
+                        android:maxLines="@integer/chat_input_max_lines"
+                        android:minHeight="@dimen/chat_send_size"
+                        android:paddingStart="@dimen/chat_input_padding_horizontal"
+                        android:paddingTop="@dimen/chat_input_padding_vertical"
+                        android:paddingEnd="@dimen/ds_space_xs"
+                        android:paddingBottom="@dimen/chat_input_padding_vertical"
+                        android:textAppearance="?attr/textAppearanceBodyLarge"
+                        android:textColor="?attr/colorOnSurface"
+                        android:textColorHint="?attr/colorOnSurfaceVariant" />
+
+                    <ImageButton
+                        android:id="@+id/chat_attach"
+                        android:layout_width="@dimen/chat_send_size"
+                        android:layout_height="@dimen/chat_send_size"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:contentDescription="@string/chat_attach"
+                        android:src="@drawable/chat_ic_attach" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/chat_recording"
+                    android:layout_width="match_parent"
+                    android:layout_height="@dimen/chat_send_size"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingStart="@dimen/chat_input_padding_horizontal"
+                    android:paddingEnd="@dimen/chat_input_padding_horizontal"
+                    android:visibility="gone">
+
+                    <View
+                        android:layout_width="@dimen/ds_space_s"
+                        android:layout_height="@dimen/ds_space_s"
+                        android:background="@drawable/chat_bg_record_dot" />
 
                     <TextView
-                        android:id="@+id/chat_reply_author"
-                        android:layout_width="match_parent"
+                        android:id="@+id/chat_recording_time"
+                        android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:maxLines="1"
-                        android:textAppearance="?attr/textAppearanceLabelMedium"
-                        android:textColor="?attr/colorPrimary" />
+                        android:layout_marginStart="@dimen/ds_space_s"
+                        android:fontFeatureSettings="tnum"
+                        android:textAppearance="?attr/textAppearanceTitleMedium"
+                        android:textColor="?attr/colorOnSurface" />
 
                     <TextView
-                        android:id="@+id/chat_reply_text"
-                        android:layout_width="match_parent"
+                        android:layout_width="0dp"
                         android:layout_height="wrap_content"
+                        android:layout_marginStart="@dimen/ds_space_m"
+                        android:layout_weight="1"
                         android:ellipsize="end"
                         android:maxLines="1"
+                        android:text="@string/chat_record_hint"
                         android:textAppearance="?attr/textAppearanceBodySmall"
                         android:textColor="?attr/colorOnSurfaceVariant" />
                 </LinearLayout>
+            </dev.proflyder.home.core.designsystem.glass.GlassPillLayout>
 
-                <ImageButton
-                    android:id="@+id/chat_reply_cancel"
-                    android:layout_width="40dp"
-                    android:layout_height="40dp"
-                    android:background="?attr/selectableItemBackgroundBorderless"
-                    android:contentDescription="@string/chat_reply_cancel"
-                    android:src="@drawable/chat_ic_close" />
-            </LinearLayout>
+            <FrameLayout
+                android:layout_width="@dimen/chat_send_size"
+                android:layout_height="@dimen/chat_send_size"
+                android:layout_marginStart="@dimen/chat_floating_gap">
 
-            <HorizontalScrollView
-                android:id="@+id/chat_pending_scroll"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingBottom="6dp"
-                android:scrollbars="none"
-                android:visibility="gone">
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/chat_send"
+                    style="@style/Widget.Home.IconButton.Filled.M"
+                    android:contentDescription="@string/chat_send"
+                    android:visibility="gone"
+                    app:icon="@drawable/chat_ic_send" />
 
-                <com.google.android.material.chip.ChipGroup
-                    android:id="@+id/chat_pending"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    app:singleLine="true" />
-            </HorizontalScrollView>
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/chat_stop"
+                    style="@style/Widget.Home.IconButton.Filled.M"
+                    android:contentDescription="@string/chat_stop"
+                    android:visibility="gone"
+                    app:icon="@drawable/chat_ic_stop" />
 
-            <LinearLayout
-                android:id="@+id/chat_recording"
-                android:layout_width="match_parent"
-                android:layout_height="48dp"
-                android:gravity="center_vertical"
-                android:orientation="horizontal"
-                android:paddingStart="12dp"
-                android:paddingEnd="12dp"
-                android:visibility="gone">
-
-                <View
-                    android:layout_width="10dp"
-                    android:layout_height="10dp"
-                    android:background="@drawable/chat_bg_record_dot" />
-
-                <TextView
-                    android:id="@+id/chat_recording_time"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="10dp"
-                    android:fontFeatureSettings="tnum"
-                    android:textAppearance="?attr/textAppearanceTitleMedium"
-                    android:textColor="?attr/colorOnSurface" />
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="12dp"
-                    android:layout_weight="1"
-                    android:maxLines="1"
-                    android:ellipsize="end"
-                    android:text="@string/chat_record_hint"
-                    android:textAppearance="?attr/textAppearanceBodySmall"
-                    android:textColor="?attr/colorOnSurfaceVariant" />
-            </LinearLayout>
-
-            <LinearLayout
-                android:id="@+id/chat_compose"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:gravity="bottom"
-                android:orientation="horizontal">
-
-                <ImageButton
-                    android:id="@+id/chat_attach"
-                    android:layout_width="48dp"
-                    android:layout_height="48dp"
-                    android:layout_marginEnd="4dp"
-                    android:background="?attr/selectableItemBackgroundBorderless"
-                    android:contentDescription="@string/chat_attach"
-                    android:src="@drawable/chat_ic_attach" />
-
-                <com.google.android.material.textfield.TextInputLayout
-                    android:id="@+id/chat_input_layout"
-                    style="@style/Widget.Home.TextInput.Chat"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1">
-
-                    <com.google.android.material.textfield.TextInputEditText
-                        android:id="@+id/chat_input"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:hint="@string/chat_input_hint"
-                        android:imeOptions="flagNoExtractUi"
-                        android:inputType="textCapSentences|textMultiLine"
-                        android:maxLines="6"
-                        android:minHeight="48dp"
-                        android:paddingTop="12dp"
-                        android:paddingBottom="12dp" />
-                </com.google.android.material.textfield.TextInputLayout>
-
-                <FrameLayout
-                    android:layout_width="48dp"
-                    android:layout_height="48dp"
-                    android:layout_marginStart="8dp">
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/chat_send"
-                        style="@style/Widget.Home.IconButton.Filled.M"
-                        android:contentDescription="@string/chat_send"
-                        android:visibility="gone"
-                        app:icon="@drawable/chat_ic_send" />
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/chat_mic"
-                        style="@style/Widget.Home.IconButton.Filled.M"
-                        android:contentDescription="@string/chat_record"
-                        app:icon="@drawable/chat_ic_mic" />
-                </FrameLayout>
-            </LinearLayout>
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/chat_mic"
+                    style="@style/Widget.Home.IconButton.Filled.M"
+                    android:contentDescription="@string/chat_record"
+                    app:icon="@drawable/chat_ic_mic" />
+            </FrameLayout>
         </LinearLayout>
     </LinearLayout>
-</FrameLayout>
+</dev.proflyder.home.core.designsystem.glass.GlassHeaderLayout>
