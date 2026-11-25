@@ -21,6 +21,7 @@ class GlassChromeLayout @JvmOverloads constructor(
     init {
         orientation = VERTICAL
         setWillNotDraw(false)
+        receiveBorderlessRipples()
         context.withStyledAttributes(attrs, R.styleable.GlassChromeLayout) {
             edgeAtTop = getInt(R.styleable.GlassChromeLayout_glassEdge, EDGE_BOTTOM) == EDGE_TOP
         }

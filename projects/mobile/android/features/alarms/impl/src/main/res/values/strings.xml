@@ -67,6 +67,22 @@
         <item quantity="one">Delete %1$d alarm from the home server?</item>
         <item quantity="other">Delete %1$d alarms from the home server?</item>
     </plurals>
+    <string name="alarms_card_countdown">%2$s · %1$s</string>
+    <string name="alarms_countdown_in">in %1$s</string>
+    <string name="alarms_countdown_under_minute">in less than a minute</string>
+    <string name="alarms_countdown_notice">Alarm will ring %1$s</string>
+    <plurals name="alarms_countdown_days">
+        <item quantity="one">%1$d day</item>
+        <item quantity="other">%1$d days</item>
+    </plurals>
+    <plurals name="alarms_countdown_hours">
+        <item quantity="one">%1$d h</item>
+        <item quantity="other">%1$d h</item>
+    </plurals>
+    <plurals name="alarms_countdown_minutes">
+        <item quantity="one">%1$d min</item>
+        <item quantity="other">%1$d min</item>
+    </plurals>
     <string-array name="alarms_day_short">
         <item>@string/alarms_day_mon</item>
         <item>@string/alarms_day_tue</item>

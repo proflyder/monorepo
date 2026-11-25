@@ -7,10 +7,7 @@ interface PushDevicesApi {
         deviceId: String,
         token: String,
         appVersion: String,
-        deviceName: String,
     ): Outcome<Unit>
-
-    suspend fun rename(deviceId: String, deviceName: String): Outcome<Unit>
 
     suspend fun unregister(token: String): Outcome<Unit>
 }

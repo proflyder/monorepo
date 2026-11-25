@@ -41,7 +41,6 @@ class HomePushRegistrarTest {
         store = store,
         tokens = tokens,
         publisher = PushRegistrationPublisher(api, FixedIdentity),
-        identity = FixedIdentity,
         settings = settings,
         version = FixedVersion,
         clock = FakeClock(wallMillis = 1_000_000L),
@@ -138,20 +137,6 @@ class HomePushRegistrarTest {
     }
 
     @Test
-    fun renamingRegistersTheNewNameOnce() {
-        settings.configure("https://home.test")
-        tokens.refreshed("token-a")
-        registrar.start()
-        scope.runCurrent()
-        var saved: PushRegistrationResult? = null
-        scope.backgroundScope.launch { saved = registrar.saveDeviceName("  Кухня  ") }
-        scope.runCurrent()
-        assertEquals(PushRegistrationResult.Done, saved)
-        assertEquals(listOf("Pixel", "Кухня"), api.names)
-        assertEquals("Кухня", store.registration.value.registeredName)
-    }
-
-    @Test
     fun registerNowFetchesAMissingPushTokenBeforeGivingUp() {
         settings.configure("https://home.test")
         tokens.fetchable = "token-late"
@@ -215,7 +200,6 @@ class HomePushRegistrarTest {
 
     private class RecordingApi : PushDevicesApi {
         val tokens = mutableListOf<String>()
-        val names = mutableListOf<String>()
         val unregistered = mutableListOf<String>()
         var result: () -> Outcome<Unit> = { Outcome.Success(Unit) }
         var suspended: CompletableDeferred<Outcome<Unit>>? = null
@@ -224,14 +208,10 @@ class HomePushRegistrarTest {
             deviceId: String,
             token: String,
             appVersion: String,
-            deviceName: String,
         ): Outcome<Unit> {
             tokens += token
-            names += deviceName
             return suspended?.await() ?: result()
         }
-
-        override suspend fun rename(deviceId: String, deviceName: String): Outcome<Unit> = error("unused")
 
         override suspend fun unregister(token: String): Outcome<Unit> {
             unregistered += token
@@ -249,14 +229,9 @@ class HomePushRegistrarTest {
             state.value = state.value.copy(
                 token = record.token,
                 registeredAtMillis = record.registeredAtMillis,
-                registeredName = record.deviceName,
                 appVersion = record.appVersion,
                 server = record.server,
             )
-        }
-
-        override suspend fun savedName(name: String) {
-            state.value = state.value.copy(deviceName = name)
         }
     }
 

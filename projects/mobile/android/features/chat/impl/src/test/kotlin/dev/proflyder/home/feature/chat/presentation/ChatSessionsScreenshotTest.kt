@@ -1,5 +1,6 @@
 package dev.proflyder.home.feature.chat.presentation
 
+import dev.proflyder.home.core.designsystem.list.addFullWidthRows
 import android.app.Activity
 import android.view.LayoutInflater
 import android.view.View
@@ -8,7 +9,6 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import com.google.android.material.color.MaterialColors
 import dev.proflyder.home.core.designsystem.glass.bindGlassBackdrop
 import dev.proflyder.home.core.designsystem.list.ListHeaderSpacer
-import dev.proflyder.home.core.designsystem.list.addGroupedRows
 import dev.proflyder.home.core.model.ChatQuote
 import dev.proflyder.home.core.model.ChatRole
 import dev.proflyder.home.core.model.ChatStatus
@@ -50,13 +50,15 @@ class ChatSessionsScreenshotTest {
         override fun onArchive() = Unit
     }
 
-    private fun sessionList(name: String): FragmentChatSessionsBinding {
+    private fun sessionList(name: String, search: Boolean = false): FragmentChatSessionsBinding {
         val context = ChatShots.themed(AppTheme.EMERALD)
         val binding = FragmentChatSessionsBinding.inflate(LayoutInflater.from(context))
         val adapter = ChatSessionsAdapter(NoRows)
         val list = binding.chatSessionsList
         list.adapter = ConcatAdapter(ListHeaderSpacer.leading(list, binding.chatSessionsHeader), adapter)
-        list.addGroupedRows(context.resources.getDimensionPixelSize(R.dimen.chat_session_divider_inset))
+        list.addFullWidthRows(list.resources.getDimensionPixelSize(R.dimen.chat_session_divider_inset))
+        binding.chatSessionsSearchReveal.attach(list, binding.chatSessionsSearch)
+        if (search) binding.chatSessionsSearchReveal.expand(animate = false)
         val sessions = ChatFixtures.sessions
         val state = ChatSessionsUiState(
             sessions = sessions.filterNot { it.archived },
@@ -67,6 +69,7 @@ class ChatSessionsScreenshotTest {
         binding.root.setBackgroundColor(MaterialColors.getColor(binding.root, android.R.attr.colorBackground))
         Robolectric.buildActivity(Activity::class.java).setup().get().setContentView(binding.root)
         ChatShots.applyInsets(binding.root, keyboard = 0, statusBar = 0)
+        shadowOf(android.os.Looper.getMainLooper()).idle()
         ChatShots.save(name, binding.root)
         return binding
     }
@@ -75,13 +78,34 @@ class ChatSessionsScreenshotTest {
     fun sessionListLight() {
         val binding = sessionList("chat-sessions-light")
         val active = ChatFixtures.sessions.count { !it.archived }
-        assertEquals(HEADER_ARCHIVE_AND_GAP + active, binding.chatSessionsList.adapter?.itemCount)
+        assertEquals(HEADER_AND_ARCHIVE + active, binding.chatSessionsList.adapter?.itemCount)
     }
 
     @Test
     @Config(qualifiers = DARK)
     fun sessionListDark() {
         sessionList("chat-sessions-dark")
+    }
+
+    @Test
+    fun searchCollapsedByDefault() {
+        val binding = sessionList("chat-sessions-collapsed-light")
+        assertEquals(binding.chatSessionsHeader.paddingTop, binding.chatSessionsHeader.height)
+        assertTrue(binding.chatSessionsSearchReveal.canScrollVertically(-1))
+    }
+
+    @Test
+    fun searchPulledLight() = assertRevealed(sessionList("chat-sessions-search-light", search = true))
+
+    @Test
+    @Config(qualifiers = DARK)
+    fun searchPulledDark() = assertRevealed(sessionList("chat-sessions-search-dark", search = true))
+
+    private fun assertRevealed(binding: FragmentChatSessionsBinding) {
+        val reveal = binding.chatSessionsSearchReveal
+        assertEquals(binding.chatSessionsHeader.paddingTop + reveal.fullHeight, binding.chatSessionsHeader.height)
+        assertTrue(reveal.fullHeight > 0)
+        assertTrue("refresh is reachable once the search is open", !reveal.canScrollVertically(-1))
     }
 
     private val timeline = ChatTimeline(
@@ -121,6 +145,7 @@ class ChatSessionsScreenshotTest {
         shadowOf(android.os.Looper.getMainLooper()).idle()
         val keyColor = MaterialColors.getColor(binding.root, MaterialR.attr.colorSurfaceContainerHighest)
         ChatShots.save(name, binding.root, keys, keyColor)
+        assertScrims(binding)
         return binding
     }
 
@@ -146,6 +171,15 @@ class ChatSessionsScreenshotTest {
         assertTrue("messages scroll under the input", binding.chatList.paddingBottom >= binding.chatPanel.height)
     }
 
+    private fun assertScrims(binding: FragmentChatBinding) {
+        val root = binding.root
+        val shot = android.graphics.Bitmap.createBitmap(root.width, root.height, android.graphics.Bitmap.Config.ARGB_8888)
+        root.draw(android.graphics.Canvas(shot))
+        val background = MaterialColors.getColor(root, android.R.attr.colorBackground)
+        assertEquals("status bar scrim is opaque", background, shot.getPixel(1, 1))
+        assertEquals("navigation scrim is opaque", background, shot.getPixel(1, root.height - 2))
+    }
+
     @Test
     fun conversationLight() = assertFloating(conversation("chat-conversation-light", keyboard = false), 0)
 
@@ -168,6 +202,6 @@ class ChatSessionsScreenshotTest {
     }
 }
 
-private const val HEADER_ARCHIVE_AND_GAP = 3
+private const val HEADER_AND_ARCHIVE = 2
 private const val LIGHT = "ru-w411dp-h891dp-xxhdpi"
 private const val DARK = "ru-w411dp-h891dp-night-xxhdpi"

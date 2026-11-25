@@ -11,5 +11,6 @@ import org.junit.runners.Suite
     AlarmSchedulingTest::class,
     AlarmEditorTimeTest::class,
     AlarmDisableChoiceTest::class,
+    AlarmCountdownTest::class,
 )
 class AllAlarmApiTests

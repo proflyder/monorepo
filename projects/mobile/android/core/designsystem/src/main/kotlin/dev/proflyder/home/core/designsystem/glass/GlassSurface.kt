@@ -1,5 +1,8 @@
 package dev.proflyder.home.core.designsystem.glass
 
+import android.view.View
+import androidx.core.graphics.drawable.toDrawable
+import android.graphics.Color
 import android.content.Context
 import android.graphics.Canvas
 import android.os.Build
@@ -23,4 +26,8 @@ class GlassSurface(context: Context) {
     @RequiresApi(Build.VERSION_CODES.S)
     private fun backdrop(): GlassBackdrop =
         backdrop as? GlassBackdrop ?: GlassBackdrop(style.blurRadius, style.backdropColor).also { backdrop = it }
+}
+
+internal fun View.receiveBorderlessRipples() {
+    if (background == null) background = Color.TRANSPARENT.toDrawable()
 }

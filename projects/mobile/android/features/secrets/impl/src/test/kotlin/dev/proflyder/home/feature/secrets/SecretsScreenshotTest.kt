@@ -9,7 +9,7 @@ import android.graphics.drawable.RippleDrawable
 import android.widget.FrameLayout
 import androidx.appcompat.view.ContextThemeWrapper
 import com.google.android.material.color.MaterialColors
-import dev.proflyder.home.core.designsystem.list.addGroupedRows
+import dev.proflyder.home.core.designsystem.list.addFullWidthRows
 import dev.proflyder.home.core.model.SecretVersion
 import dev.proflyder.home.feature.secrets.impl.databinding.DialogSecretStepupBinding
 import dev.proflyder.home.feature.secrets.impl.databinding.FragmentSecretPathBinding
@@ -50,7 +50,7 @@ class SecretsScreenshotTest {
         val binding = FragmentSecretsCatalogBinding.inflate(LayoutInflater.from(context))
         val adapter = SecretsCatalogAdapter({})
         binding.secretsCatalogList.adapter = adapter
-        binding.secretsCatalogList.addGroupedRows()
+        binding.secretsCatalogList.addFullWidthRows()
         adapter.submitList(
             catalogRows(
                 listOf(
@@ -108,7 +108,7 @@ class SecretsScreenshotTest {
         val binding = FragmentSecretsCatalogBinding.inflate(LayoutInflater.from(context))
         val adapter = SecretsCatalogAdapter({}, {})
         binding.secretsCatalogList.adapter = adapter
-        binding.secretsCatalogList.addGroupedRows()
+        binding.secretsCatalogList.addFullWidthRows()
         adapter.submitList(rows)
         binding.secretsCatalogProgress.visibility = View.GONE
         shadowOf(android.os.Looper.getMainLooper()).idle()
@@ -150,7 +150,7 @@ class SecretsScreenshotTest {
             },
         )
         binding.secretPathList.adapter = adapter
-        binding.secretPathList.addGroupedRows()
+        binding.secretPathList.addFullWidthRows()
         val rows = buildList {
             add(
                 SecretPathRow.Header(

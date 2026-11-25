@@ -13,14 +13,10 @@ internal data class RegisterDeviceBody(
     val token: String,
     val platform: String = "android",
     val appVersion: String = "",
-    val deviceName: String = "",
 )
 
 @Serializable
 internal data class RemoveDeviceBody(val token: String)
-
-@Serializable
-internal data class RenameDeviceBody(val deviceId: String, val deviceName: String)
 
 @Serializable
 internal data class PushDeviceResponseDto(val device: PushDeviceDto? = null)
@@ -49,11 +45,6 @@ internal interface PushApi {
     suspend fun remove(
         @retrofit2.http.Body body: RemoveDeviceBody,
     ): Outcome<RemovedDeviceResponseDto>
-
-    @retrofit2.http.POST("v1/push/devices/rename")
-    suspend fun rename(
-        @retrofit2.http.Body body: RenameDeviceBody,
-    ): Outcome<PushDeviceResponseDto>
 }
 
 @SingleIn(AppScope::class)
@@ -66,25 +57,12 @@ class HttpPushDevicesClient(private val http: HomeHttp) : PushDevicesApi {
         deviceId: String,
         token: String,
         appVersion: String,
-        deviceName: String,
     ): Outcome<Unit> =
         api.register(
             RegisterDeviceBody(
                 deviceId = deviceId.take(MAX_DEVICE_ID_CHARS),
                 token = token,
                 appVersion = appVersion.take(MAX_META_CHARS),
-                deviceName = deviceName.take(MAX_META_CHARS),
-            ),
-        ).mapResult { }
-
-    override suspend fun rename(
-        deviceId: String,
-        deviceName: String,
-    ): Outcome<Unit> =
-        api.rename(
-            RenameDeviceBody(
-                deviceId = deviceId.take(MAX_DEVICE_ID_CHARS),
-                deviceName = deviceName.take(MAX_META_CHARS),
             ),
         ).mapResult { }
 

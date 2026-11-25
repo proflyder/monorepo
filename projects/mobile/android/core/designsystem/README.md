@@ -34,7 +34,7 @@ the colour roles.
 | Button row | `ButtonRow` with the secondary action first and the main one last | Side by side (main on the right) when both fit at their natural width; otherwise stacked full width, main on top. Button text never wraps or gets cut (`maxLines=1` in every button style). `app:equalWidth` gives every button the widest one's width, `app:centered` centres the group (empty states). At most one Filled button per row (static check). |
 | Special buttons | `Widget.Home.Button.Pill.Outlined` (outlined 32dp pill), `.DayToggle` (checkable weekday circle), `.BarAction` (icon over label in a bottom bar), `.TimeDisplay` (large time in editors) | Use only for these roles. |
 | Icon button | `MaterialButton` + `Widget.Home.IconButton.<Standard\|Filled\|Tonal\|Outlined>.<S\|M\|L>` + `app:icon` + `contentDescription` | Visible 32/40/48 dp circle, always a 48 dp touch target (insets). |
-| FAB | `OutlinedFloatingActionButton` (theme default), `Widget.Home.FloatingActionButton.Small`, `ExtendedFloatingActionButton` (theme default), quick action `Widget.Home.FloatingActionButton.SmallSecondary` + label `Widget.Home.FabLabel` | Outline and glow come from `homeFab*` in every theme. |
+| FAB | `OutlinedFloatingActionButton` (theme default), `Widget.Home.FloatingActionButton.Small`, `ExtendedFloatingActionButton` (theme default), quick action `Widget.Home.FloatingActionButton.SmallSecondary` + label `Widget.Home.FabLabel` | Outline and glow come from `homeFab*` in every theme. A FAB anchored to the bottom of a `FrameLayout` in a screen gets the chrome bottom inset (navigation bar or bottom navigation) from `BaseFragment` through `liftScreenFabs`; screens do not lift it themselves. `setShown` toggles a view with a scale and fade (`HomeMotion` selection duration) between `VISIBLE` and `INVISIBLE`, so it never requests a layout. |
 | Toolbar title | `ToolbarTitle` | Picks the largest size from 24sp down to 16sp at which the title fits in two lines without breaking a word (balanced breaks, no hyphenation, no ellipsis). AppCompat autoSize is not used: it does nothing with `wrap_content` width, which is what the toolbar gives its title. |
 | Field supporting text | `TextView` + `Widget.Home.FieldSupportingText` (`.Error`) | Status lines under a field: same 16dp indent as the field's helper, 8dp above. |
 | Text field | `TextInputLayout` without `style` (theme default `Widget.Home.TextInput`, card-like) | Chat message field: `Widget.Home.TextInput.Chat`. |
@@ -49,6 +49,9 @@ the colour roles.
 | Empty state | `EmptyState` (`app:emptyIcon`, `emptyText`, `emptyAction`) | Main action Filled M (`action`, `app:emptyAction`), optional secondary Tonal M (`secondaryAction`, `app:emptySecondaryAction`) in a centred equal-width `ButtonRow`. |
 | Status chip | `TextView` + `Widget.Home.StatusChip.<Error\|Warning\|Success\|Neutral>` | 24 dp pill. |
 | Device tile | `DeviceTile` (`app:tileIcon`, `tileTitle`, `tileStatus`, `tileOn`) | On/off via `DeviceStateViews`. |
+| Pull-to-reveal search | `PullRevealSearch` wrapping the search `TextInputLayout` inside a list header (`ListHeaderSpacer`), then `attach(list, editText)`; pass it to `setupPullToRefresh(list, search)` | Collapsed (0 dp) by default; keep the design top gap as the header's `paddingTop`. The pull starts when the first item is at the list start (geometry, not `canScrollVertically`, which reports scrollable on short lists), so it works on one-item and empty lists. Pulling the list down past the top grows it from 0 under the toolbar glass; release snaps open past half. Collapses on scroll up and on focus loss while empty; stays open with text. Refresh starts only from a later pull once the search is open. |
+| Glass ripples | `GlassPillLayout`, `GlassChromeLayout`, `GlassScreenHeader` | Glass draws itself in `draw()`, so each container gets a transparent background and becomes the projection receiver for borderless ripples (`?attr/selectableItemBackgroundBorderless`, toolbar actions): the ripple stays a circle bounded by the button, clipped to the pill. Without it the ripple projects onto a distant ancestor and covers the whole bar. |
+| Immersive scrims | `GlassHeaderLayout` with `FloatingGlassHeader` on top and `FloatingGlassFooter` as the bottom panel | Drawn by the layout behind the chrome: `colorBackground`, opaque under the status bar fading out `ds_scrim_fade_height` below the header; from transparent above the footer's first non-FAB child to opaque at the navigation bar. Follows the footer while it rides the keyboard. A `FloatingActionButton` placed directly in the `GlassHeaderLayout` (gravity `top|end`) is anchored by translation above the footer's composer, its bottom margin as the gap, so showing or hiding it never changes the footer height or the list padding (no relayout while scrolling). |
 
 ## Which variant and size
 
@@ -160,6 +163,13 @@ the new theme automatically.
   rounded bottom for the last, the plain row rectangle in between. Only
   clickable rows get the ripple, so the adapter sets `isClickable`; rows must
   not declare `selectableItemBackground` themselves.
+- `addFullWidthRows(dividerInset)` (`list`) is the edge-to-edge list pattern
+  (notification history, secrets, chat sessions): no card surface, a thin
+  divider from `dividerInset` to the end edge between rows of one section
+  (sectioned adapters) or of one adapter, following swipe translation. It only
+  draws; clickable rows get the full-row rectangular ripple from
+  `View.applyFullRowRipple()` in their holder or `?attr/selectableItemBackground`
+  in the layout.
 - `GroupedRowsLayout` (`list`) is the same contract for a static card: a
   vertical `LinearLayout` placed inside a `MaterialCardView` that binds a
   `GroupedRowRipple` to every visible child on layout, using the card's corner

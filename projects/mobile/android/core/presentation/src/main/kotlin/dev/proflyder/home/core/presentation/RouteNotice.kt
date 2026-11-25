@@ -15,8 +15,8 @@ data class RouteNotice(
     @StringRes val action: Int = DesignR.string.ds_action_open,
 )
 
-fun Fragment.showNotice(notice: RouteNotice) {
+fun Fragment.showNotice(notice: RouteNotice, message: CharSequence = getString(notice.message)) {
     val navigator = requireNavigator()
     val action = notice.route?.let { route -> NoticeAction(getString(notice.action)) { navigator.open(route) } }
-    Notices.show(requireView(), getString(notice.message), long = action != null, action = action)
+    Notices.show(requireView(), message, long = action != null, action = action)
 }

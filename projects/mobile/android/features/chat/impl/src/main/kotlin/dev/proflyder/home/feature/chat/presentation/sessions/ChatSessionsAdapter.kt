@@ -3,8 +3,6 @@ package dev.proflyder.home.feature.chat.presentation.sessions
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import androidx.recyclerview.widget.RecyclerView
-import dev.proflyder.home.core.designsystem.list.SectionedAdapter
 import dev.proflyder.home.core.presentation.KeyedDiff
 import dev.proflyder.home.core.ui.AdapterCallback
 import dev.proflyder.home.core.ui.BaseAdapterCallback
@@ -33,27 +31,15 @@ internal interface SessionRowListener {
 
 internal class ChatSessionsAdapter(
     private val listener: SessionRowListener,
-) : BaseListAdapter<SessionRow, ViewBinding, RowCallback>(BaseAdapterCallback<SessionRow>(), RowDiff), SectionedAdapter {
-    override fun isSectionHeader(position: Int): Boolean = getItem(position) is SessionRow.Gap
-
-    override fun isStickyHeader(position: Int): Boolean = false
-
+) : BaseListAdapter<SessionRow, ViewBinding, RowCallback>(BaseAdapterCallback<SessionRow>(), RowDiff) {
     override fun viewTypeOf(item: SessionRow): Int = when (item) {
         is SessionRow.Archive -> TYPE_ARCHIVE
-        SessionRow.Gap -> TYPE_GAP
         is SessionRow.Item -> TYPE_SESSION
     }
 
     override fun onCreateHolder(inflater: LayoutInflater, parent: ViewGroup, viewType: Int): RowHolder = when (viewType) {
         TYPE_ARCHIVE -> ArchiveHolder(ItemChatSessionArchiveBinding.inflate(inflater, parent, false))
-        TYPE_GAP -> GapHolder(GapBinding(View(parent.context).apply { layoutParams = RecyclerView.LayoutParams(0, 0) }))
         else -> SessionHolder(ItemChatSessionBinding.inflate(inflater, parent, false))
-    }
-
-    private class GapBinding(override val root: View) : ViewBinding
-
-    private class GapHolder(views: GapBinding) : RowHolder(views, BaseAdapterCallback<SessionRow>()) {
-        override fun bind(item: SessionRow) = Unit
     }
 
     private inner class ArchiveHolder(private val views: ItemChatSessionArchiveBinding) : RowHolder(views, BaseAdapterCallback<SessionRow>()) {
@@ -83,7 +69,6 @@ internal class ChatSessionsAdapter(
 
     private companion object {
         const val TYPE_ARCHIVE = 0
-        const val TYPE_GAP = 1
-        const val TYPE_SESSION = 2
+        const val TYPE_SESSION = 1
     }
 }

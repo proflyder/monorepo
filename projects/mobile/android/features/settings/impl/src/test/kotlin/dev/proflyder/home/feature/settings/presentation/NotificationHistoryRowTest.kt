@@ -1,6 +1,5 @@
 package dev.proflyder.home.feature.settings.presentation
 
-import android.content.res.ColorStateList
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.PointF
@@ -10,7 +9,8 @@ import android.view.View
 import androidx.appcompat.view.ContextThemeWrapper
 import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.LinearLayoutManager
-import com.google.android.material.shape.MaterialShapeDrawable
+import android.graphics.Paint
+import android.graphics.drawable.ColorDrawable
 import dev.proflyder.home.core.access.AppAccessState
 import dev.proflyder.home.core.model.NotificationHistory
 import dev.proflyder.home.core.model.NotificationHistoryType
@@ -86,13 +86,9 @@ class NotificationHistoryRowTest {
         val pressed = ContextCompat.getColorStateList(row.context, DesignR.color.ds_row_item_ripple)
             ?.getColorForState(intArrayOf(android.R.attr.state_pressed), android.graphics.Color.TRANSPARENT)
             ?: return
-        val mask = (row.foreground as RippleDrawable).findDrawableByLayerId(android.R.id.mask) as MaterialShapeDrawable
+        assertTrue((row.foreground as RippleDrawable).findDrawableByLayerId(android.R.id.mask) is ColorDrawable)
         val offset = offsetIn(root, row)
-        MaterialShapeDrawable(mask.shapeAppearanceModel).apply {
-            fillColor = ColorStateList.valueOf(pressed)
-            setBounds(offset.x.toInt(), offset.y.toInt(), offset.x.toInt() + row.width, offset.y.toInt() + row.height)
-            draw(canvas)
-        }
+        canvas.drawRect(offset.x, offset.y, offset.x + row.width, offset.y + row.height, Paint().apply { color = pressed })
     }
 
     private fun windowBackground(themed: ContextThemeWrapper): android.graphics.drawable.Drawable? {

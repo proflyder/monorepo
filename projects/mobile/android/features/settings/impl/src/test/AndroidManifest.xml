@@ -1,3 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="dev.proflyder.home.feature.settings.impl" />
+    package="dev.proflyder.home.feature.settings.impl">
+
+    <application android:name="dev.proflyder.home.feature.settings.presentation.HistoryTestApplication">
+        <activity
+            android:name="dev.proflyder.home.feature.settings.presentation.HistoryTestActivity"
+            android:theme="@style/Base.Theme.Home" />
+    </application>
+</manifest>

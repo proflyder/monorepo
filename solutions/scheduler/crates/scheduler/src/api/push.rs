@@ -51,8 +51,6 @@ pub struct RemoveBody {
 pub struct RenameBody {
     #[serde(default)]
     pub device_id: String,
-    #[serde(default)]
-    pub device_name: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -145,7 +143,7 @@ pub async fn register(
         token: body.token,
         platform: body.platform,
         app_version: body.app_version,
-        device_name: body.device_name,
+        device_name: principal.name.clone(),
     };
     let now = super::now_unix();
     let result = blocking(Arc::clone(&state.store), move |store| {
@@ -170,10 +168,9 @@ pub async fn rename(
         Ok(caller) => caller,
         Err(response) => return *response,
     };
-    let now = super::now_unix();
     let scope = scope(&caller);
     let result = blocking(Arc::clone(&state.store), move |store| {
-        store.rename_push_device_for(&body.device_id, &body.device_name, scope, now)
+        store.scoped_push_device(&body.device_id, &scope)
     })
     .await;
     match result {
@@ -405,6 +402,14 @@ mod tests {
         )
         .await;
         assert_eq!(status, StatusCode::NOT_FOUND);
+        let own = r#"{"deviceId":"device-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","deviceName":"x"}"#;
+        let (status, body) = call(
+            router.clone(),
+            as_token("POST", "/v1/push/devices/rename", "member-token", own),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        assert!(body.contains("\"deviceName\":\"member\""), "{body}");
         let remove = r#"{"token":"token-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}"#;
         let (status, body) = call(
             router.clone(),
@@ -440,7 +445,8 @@ mod tests {
             "platform":"android","appVersion":"0.1.0","deviceName":"Pixel"}"#;
         let (status, response) = call(router.clone(), register_request(body)).await;
         assert_eq!(status, StatusCode::OK, "{response}");
-        assert!(response.contains("\"deviceName\":\"Pixel\""), "{response}");
+        assert!(response.contains("\"deviceName\":\"test\""), "{response}");
+        assert!(!response.contains("Pixel"), "{response}");
 
         let request = Request::builder()
             .uri("/v1/push/devices")
@@ -496,11 +502,11 @@ mod tests {
             devices[0].device_id,
             "device-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
         );
-        assert_eq!(devices[0].device_name, "Pixel");
+        assert_eq!(devices[0].device_name, "test");
     }
 
     #[tokio::test]
-    async fn renaming_a_device_keeps_its_token() {
+    async fn a_legacy_rename_keeps_the_token_name() {
         let (router, store) = app();
         let body = r#"{"deviceId":"device-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             "token":"token-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -518,9 +524,9 @@ mod tests {
             .expect("request");
         let (status, response) = call(router, request).await;
         assert_eq!(status, StatusCode::OK, "{response}");
-        assert!(response.contains("\"deviceName\":\"Стас\""), "{response}");
+        assert!(response.contains("\"deviceName\":\"test\""), "{response}");
         let devices = store.list_push_devices().expect("list");
-        assert_eq!(devices[0].device_name, "Стас");
+        assert_eq!(devices[0].device_name, "test");
         assert_eq!(
             devices[0].token,
             "token-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"

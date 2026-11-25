@@ -58,17 +58,40 @@ class SystemScreenshotTest {
 
     private fun exactly(size: Int): Int = View.MeasureSpec.makeMeasureSpec(size, View.MeasureSpec.EXACTLY)
 
-    private fun overview(snapshot: SystemSnapshot): (SystemRows) -> List<SystemRow> = { it.overview(snapshot) }
+    private fun health(snapshot: SystemSnapshot): (SystemRows) -> List<SystemRow> = { it.health(snapshot) }
+
+    private fun overview(snapshot: SystemSnapshot): (SystemRows) -> List<SystemRow> =
+        { it.overview(snapshot, SystemLinks(access = true, secrets = true)) }
 
     @Test
-    fun overviewWithProblems() {
+    fun overviewTab() {
         val list = render("system-overview", overview(SystemFixtures.snapshot))
+        assertEquals(3, list.adapter?.itemCount)
+    }
+
+    @Test
+    @Config(qualifiers = "ru-w411dp-h891dp-night-xxhdpi")
+    fun overviewTabDark() {
+        val list = render("system-overview-dark", overview(SystemFixtures.snapshot))
+        assertEquals(3, list.adapter?.itemCount)
+    }
+
+    @Test
+    fun healthWithProblems() {
+        val list = render("system-health", health(SystemFixtures.snapshot))
         assertEquals(7, list.adapter?.itemCount)
     }
 
     @Test
-    fun overviewWithoutSources() {
-        val list = render("system-overview-no-data", overview(SystemFixtures.empty))
+    @Config(qualifiers = "ru-w411dp-h891dp-night-xxhdpi")
+    fun healthWithProblemsDark() {
+        val list = render("system-health-dark", health(SystemFixtures.snapshot))
+        assertEquals(7, list.adapter?.itemCount)
+    }
+
+    @Test
+    fun healthWithoutSources() {
+        val list = render("system-health-no-data", health(SystemFixtures.empty))
         assertEquals(5, list.adapter?.itemCount)
     }
 

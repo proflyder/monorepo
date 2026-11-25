@@ -11,19 +11,20 @@ import androidx.annotation.DrawableRes
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.withClip
 import com.google.android.material.color.MaterialColors
-import kotlin.math.abs
 
 class SwipeBackground(private val context: Context) {
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val radius = context.resources.getDimension(R.dimen.ui_swipe_radius)
     private val inset = context.resources.getDimensionPixelSize(R.dimen.ui_swipe_icon_inset)
 
     fun draw(canvas: Canvas, item: View, dx: Float, action: SwipeAction) {
         if (dx == 0f) return
         val left = dx < 0
-        val area = area(item, dx)
+        val area = when {
+            left -> RectF(item.right + dx, item.top.toFloat(), item.right.toFloat(), item.bottom.toFloat())
+            else -> RectF(item.left.toFloat(), item.top.toFloat(), item.left + dx, item.bottom.toFloat())
+        }
         paint.color = MaterialColors.getColor(context, action.style.colorAttr, 0)
-        canvas.drawRoundRect(area, radius, radius, paint)
+        canvas.drawRect(area, paint)
         val icon = icon(action.style)
         canvas.withClip(area) {
             placeIcon(icon, item, left)
@@ -35,11 +36,6 @@ class SwipeBackground(private val context: Context) {
         checkNotNull(ContextCompat.getDrawable(context, style.icon)).mutate().also {
             it.setTint(MaterialColors.getColor(context, style.tintAttr, 0))
         }
-
-    private fun area(item: View, dx: Float): RectF = when {
-        dx < 0 -> RectF(item.right + dx, item.top.toFloat(), item.right.toFloat(), item.bottom.toFloat())
-        else -> RectF(item.left.toFloat(), item.top.toFloat(), item.left + abs(dx), item.bottom.toFloat())
-    }
 
     private fun placeIcon(icon: Drawable, item: View, left: Boolean) {
         val size = icon.intrinsicWidth

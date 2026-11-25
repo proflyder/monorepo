@@ -5,6 +5,7 @@ import dev.proflyder.home.core.model.HealthLevel
 import dev.proflyder.home.core.navigation.Route
 import dev.proflyder.home.feature.hermes.HermesRoutes
 import dev.proflyder.home.feature.secrets.SecretsRoutes
+import dev.proflyder.home.feature.system.SystemHealthDestination
 import dev.proflyder.home.feature.system.SystemFixtures
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -42,8 +43,19 @@ class SystemRowsTest {
     }
 
     @Test
-    fun overviewPutsTheTrafficLightAndAlertsBeforeTheCards() {
-        val overview = rows.overview(SystemFixtures.snapshot)
+    fun overviewIsOneHealthEntryWithTheSummary() {
+        val overview = rows.overview(SystemFixtures.snapshot, SystemLinks(access = true, secrets = true))
+        assertEquals(listOf("health", "access", "secrets"), overview.map { it.key })
+        val health = overview.first() as SystemRow.Link
+        assertEquals("System health", health.title)
+        assertEquals("Problems detected · 2 active alerts", health.subtitle)
+        assertEquals(HealthLevel.CRITICAL, health.level)
+        assertEquals(Route.Screen(SystemHealthDestination), health.route)
+    }
+
+    @Test
+    fun healthPutsTheTrafficLightAndAlertsBeforeTheCards() {
+        val overview = rows.health(SystemFixtures.snapshot)
         assertEquals(
             listOf("status", "alert:0:KubePodCrashLooping", "alert:1:PinsStale", "card:host", "card:guests", "card:cluster", "card:devices"),
             overview.map { it.key },
@@ -65,7 +77,7 @@ class SystemRowsTest {
 
     @Test
     fun missingSourcesSayNoDataInsteadOfZeroes() {
-        val overview = rows.overview(SystemFixtures.empty)
+        val overview = rows.health(SystemFixtures.empty)
         val status = overview.first() as SystemRow.Status
         assertEquals("No data", status.title)
         assertTrue(status.subtitle.startsWith("Alerts unavailable"))

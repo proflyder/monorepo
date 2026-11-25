@@ -82,7 +82,6 @@ class ChatViewModelsTest {
         assertEquals(1, state.archivedCount)
         val rows = SessionRows.build(state)
         assertEquals(SessionRow.Archive(1), rows.first())
-        assertEquals(SessionRow.Gap, rows[1])
         assertNull(listStatus(state).emptyText)
     }
 

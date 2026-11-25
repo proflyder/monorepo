@@ -17,7 +17,6 @@ class PushRegistrationPublisher(
         deviceId = identity.deviceId(),
         token = request.token,
         appVersion = request.appVersion,
-        deviceName = request.deviceName,
     )
 
     internal suspend fun unregister(token: String): Outcome<Unit> = client.unregister(token)

@@ -1,11 +1,11 @@
 package dev.proflyder.home.feature.chat.presentation.sessions
 
+import dev.proflyder.home.core.designsystem.list.addFullWidthRows
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
 import androidx.recyclerview.widget.ConcatAdapter
 import dev.proflyder.home.core.designsystem.list.ListHeaderSpacer
-import dev.proflyder.home.core.designsystem.list.addGroupedRows
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.navigation.Route
 import dev.proflyder.home.core.presentation.ScreenFragment
@@ -34,8 +34,9 @@ internal class ChatSessionsFragment :
 
     override fun onViewReady(binding: FragmentChatSessionsBinding, savedInstanceState: Bundle?) = with(binding) {
         chatSessionsList.adapter = ConcatAdapter(ListHeaderSpacer.leading(chatSessionsList, chatSessionsHeader), adapter)
-        chatSessionsList.addGroupedRows(resources.getDimensionPixelSize(R.dimen.chat_session_divider_inset))
-        chatSessionsRefresh.setupPullToRefresh(chatSessionsList) { dispatch(ChatSessionsIntent.Refresh) }
+        chatSessionsList.addFullWidthRows(chatSessionsList.resources.getDimensionPixelSize(R.dimen.chat_session_divider_inset))
+        chatSessionsSearchReveal.attach(chatSessionsList, chatSessionsSearch)
+        chatSessionsRefresh.setupPullToRefresh(chatSessionsList, chatSessionsSearchReveal) { dispatch(ChatSessionsIntent.Refresh) }
         chatSessionsRetry.setOnClickListener { dispatch(ChatSessionsIntent.Refresh) }
         chatSessionsNew.setOnClickListener { dispatch(ChatSessionsIntent.Create) }
         chatSessionsNew.setVisible(!viewModel.state.value.archived)

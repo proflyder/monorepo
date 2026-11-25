@@ -47,6 +47,7 @@ home_android_local_test(
     test_classes = [
         "dev.proflyder.home.feature.alarms.presentation.AlarmAdapterPayloadTest",
         "dev.proflyder.home.feature.alarms.presentation.AlarmEditorScreenshotTest",
+        "dev.proflyder.home.feature.alarms.presentation.AlarmCountdownTextTest",
         "dev.proflyder.home.feature.alarms.presentation.AlarmItemLayoutTest",
         "dev.proflyder.home.feature.alarms.presentation.AlarmRepeatSheetTest",
         "dev.proflyder.home.feature.alarms.presentation.AlarmSelectionBarTest",

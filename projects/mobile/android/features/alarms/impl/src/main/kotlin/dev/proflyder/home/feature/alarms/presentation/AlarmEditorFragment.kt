@@ -109,7 +109,7 @@ internal class AlarmEditorFragment :
                 dispatch(AlarmEditorIntent.SetDate(it))
             }
             is AlarmEditorEvent.PickRepeat -> openRepeatSheet(event.repeat, event.days)
-            is AlarmEditorEvent.Completed -> complete(event.notice)
+            is AlarmEditorEvent.Completed -> complete(event.notice, event.countdown)
             is AlarmEditorEvent.OpenRoute -> navigate(event.route)
         }
     }
@@ -119,8 +119,9 @@ internal class AlarmEditorFragment :
         AlarmRepeatSheet.create(repeat, days).show(childFragmentManager, AlarmRepeatSheet.TAG)
     }
 
-    private fun complete(notice: RouteNotice) {
-        showNotice(notice)
+    private fun complete(notice: RouteNotice, countdown: AlarmEditorCountdown?) {
+        val message = countdown?.let { AlarmCountdownText.notice(resources, it.now, it.trigger) } ?: getString(notice.message)
+        showNotice(notice, message)
         dispatch(AlarmEditorIntent.CompletionShown)
     }
 }

@@ -82,7 +82,7 @@
           ],
           "ready": true,
           "scenarioStoreSupported": true,
-          "schemaVersion": 10,
+          "schemaVersion": 11,
           "version": "test"
         }
       }
