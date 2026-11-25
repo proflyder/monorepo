@@ -800,9 +800,11 @@ to wallpaper colours on API 31+. Only the alias of
 (`core/launchericon/api`) is implemented by `PackageManagerLauncherIcons`
 (`core/launchericon/impl`), which enables the target alias first, then
 disables the others with `DONT_KILL_APP`, skipping writes when the state
-already matches. `LauncherIconSync` (an `AppStartable`) waits for the stored
-appearance and applies every distinct theme, so the startup sync and theme
-changes share one path. `MainActivity` stays exported without a launcher
+already matches. `LauncherIconSync` (an `AppStartable`) applies the stored
+theme's alias only when the process goes to background (`AppForeground`
+moving from visible to hidden): the running task may have been launched
+through the alias being disabled, and disabling it while visible makes the
+system finish the task. The theme itself applies in-app immediately. `MainActivity` stays exported without a launcher
 filter, so explicit intents and `getLaunchIntentForPackage` (push, VPN
 notifications) keep working. A new `AppTheme` entry fails compilation in
 `LauncherAliases` until its alias and icon exist.

@@ -5,11 +5,13 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.Color
 import android.os.Looper
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
+import android.widget.TextView
 import androidx.appcompat.view.ContextThemeWrapper
 import androidx.core.graphics.Insets
 import androidx.core.view.ViewCompat
@@ -25,6 +27,7 @@ import dev.proflyder.home.core.model.ControlEntry
 import dev.proflyder.home.feature.control.ControlItem
 import dev.proflyder.home.core.model.ControlKind
 import dev.proflyder.home.core.model.PowerState
+import dev.proflyder.home.feature.control.impl.R
 import dev.proflyder.home.feature.control.impl.databinding.FragmentControlBinding
 import java.io.File
 import org.junit.Assert.assertEquals
@@ -60,8 +63,25 @@ class HomeScrolledGlassTest {
         assertEquals("pinned room sits on the bar edge", BAR, pinned.top)
         assertEquals("pinned room has no own surface", 0f, pinned.alpha)
         assertEquals("bar and pinned room are one glass rect", BAR + pinned.height, home.chrome.glassBottom)
-        shoot(home, "home-glass-pinned.png")
+        val shot = shoot(home, "home-glass-pinned.png")
+        val title = pinned.findViewById<TextView>(R.id.control_header_title)
+        assertTrue("pinned room title is drawn above the glass", textPixels(shot, title) >= MIN_TEXT_PIXELS)
     }
+
+    private fun textPixels(shot: Bitmap, title: TextView): Int {
+        val origin = IntArray(2).also(title::getLocationInWindow)
+        val text = title.currentTextColor
+        val area = title.paint.measureText(title.text.toString()).toInt().coerceAtMost(title.width)
+        return (origin[1] until origin[1] + title.height).sumOf { y ->
+            (origin[0] until origin[0] + area).count { x -> close(shot.getPixel(x, y), text) }
+        }
+    }
+
+    private fun close(first: Int, second: Int): Boolean = listOf(
+        Color.red(first) - Color.red(second),
+        Color.green(first) - Color.green(second),
+        Color.blue(first) - Color.blue(second),
+    ).all { kotlin.math.abs(it) <= TEXT_TOLERANCE }
 
     private fun open(): Home {
         val controller = Robolectric.buildActivity(Activity::class.java)
@@ -97,13 +117,14 @@ class HomeScrolledGlassTest {
         .setInsets(WindowInsetsCompat.Type.statusBars(), Insets.of(0, BAR, 0, 0))
         .build()
 
-    private fun shoot(home: Home, name: String) {
+    private fun shoot(home: Home, name: String): Bitmap {
         val root = home.activity.window.decorView
         val bitmap = Bitmap.createBitmap(root.width, root.height, Bitmap.Config.ARGB_8888)
         root.draw(Canvas(bitmap))
-        val dir = System.getenv("TEST_UNDECLARED_OUTPUTS_DIR") ?: return
+        val dir = System.getenv("TEST_UNDECLARED_OUTPUTS_DIR") ?: return bitmap
         File(dir).mkdirs()
         File(dir, name).outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, PNG_QUALITY, it) }
+        return bitmap
     }
 
     private fun rooms(): List<ControlItem> = ROOMS.flatMapIndexed { room, title ->
@@ -144,6 +165,8 @@ class HomeScrolledGlassTest {
         const val ROOM_SCROLL = 400
         const val PASSES = 3
         const val PNG_QUALITY = 100
+        const val MIN_TEXT_PIXELS = 40
+        const val TEXT_TOLERANCE = 24
         val ROOMS = listOf("Спальня", "Гостиная", "Кухня")
         val SUMMARIES = listOf("Включено 5 из 8", "Включено 1 из 4", "Выключено")
         val DEVICES = listOf("Лампа", "Светильник", "Лента", "Торшер", "Ночник")

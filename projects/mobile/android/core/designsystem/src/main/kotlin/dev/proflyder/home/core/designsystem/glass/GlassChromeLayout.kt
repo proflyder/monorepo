@@ -8,7 +8,6 @@ import android.view.ViewTreeObserver
 import android.widget.LinearLayout
 import androidx.core.content.withStyledAttributes
 import androidx.core.graphics.withClip
-import androidx.core.graphics.withTranslation
 import dev.proflyder.home.core.designsystem.R
 
 class GlassChromeLayout @JvmOverloads constructor(
@@ -18,6 +17,7 @@ class GlassChromeLayout @JvmOverloads constructor(
     private val surface = GlassSurface(context)
     private val redraw = ViewTreeObserver.OnScrollChangedListener(::invalidate)
     private val blocks = mutableListOf<View>()
+    private val snapshots = BlockSnapshots()
     private val origin = IntArray(2)
     private val target = IntArray(2)
     private var source: GlassSource? = null
@@ -47,6 +47,7 @@ class GlassChromeLayout @JvmOverloads constructor(
 
     override fun detachBlock(block: View) {
         if (!blocks.remove(block)) return
+        snapshots.release(block)
         block.alpha = 1f
         invalidate()
     }
@@ -74,7 +75,7 @@ class GlassChromeLayout @JvmOverloads constructor(
     private fun drawBlock(canvas: Canvas, block: View) {
         windowOrigin(origin)
         block.windowOrigin(target)
-        canvas.withTranslation((target[0] - origin[0]).toFloat(), (target[1] - origin[1]).toFloat()) { block.draw(this) }
+        snapshots.draw(canvas, block, (target[0] - origin[0]).toFloat(), (target[1] - origin[1]).toFloat())
     }
 
     private fun drawEdge(canvas: Canvas, bottom: Int) {
