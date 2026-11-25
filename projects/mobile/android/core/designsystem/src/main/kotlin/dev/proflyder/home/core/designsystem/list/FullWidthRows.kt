@@ -18,15 +18,25 @@ class FullWidthRows(@Px private val dividerInset: Int) : RecyclerView.ItemDecora
 
     override fun onDraw(canvas: Canvas, parent: RecyclerView, state: RecyclerView.State) {
         divider.color = MaterialColors.getColor(parent, com.google.android.material.R.attr.colorOutlineVariant)
-        val thickness = parent.resources.displayMetrics.density.coerceAtLeast(1f)
-        parent.children().forEach { child -> parent.slotOfChild(child)?.let { drawRow(canvas, child, it, thickness) } }
+        val thickness = parent.resources.getDimension(R.dimen.ds_full_row_divider).coerceAtLeast(1f)
+        val rtl = parent.layoutDirection == View.LAYOUT_DIRECTION_RTL
+        parent.children().filter(parent::hasRowBelow).forEach { drawDivider(canvas, it, thickness, rtl) }
     }
 
-    private fun drawRow(canvas: Canvas, child: View, slot: GroupSlot, thickness: Float) {
-        if (slot.last) return
+    private fun drawDivider(canvas: Canvas, child: View, thickness: Float, rtl: Boolean) {
+        val shift = child.translationX
+        val start = if (rtl) 0 else dividerInset
+        val end = if (rtl) dividerInset else 0
         val bottom = child.bottom + child.translationY
-        canvas.drawRect(child.left + child.translationX + dividerInset, bottom - thickness, child.right + child.translationX, bottom, divider)
+        canvas.drawRect(child.left + shift + start, bottom - thickness, child.right + shift - end, bottom, divider)
     }
+}
+
+private fun RecyclerView.hasRowBelow(child: View): Boolean {
+    if (sectionedAdapter() != null) return slotOfChild(child)?.last == false
+    val holder = getChildViewHolder(child)
+    val count = holder.bindingAdapter?.itemCount ?: return false
+    return holder.bindingAdapterPosition in 0 until count - 1
 }
 
 fun View.applyFullRowRipple() {

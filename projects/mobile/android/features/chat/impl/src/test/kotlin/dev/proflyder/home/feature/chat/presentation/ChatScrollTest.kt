@@ -1,5 +1,6 @@
 package dev.proflyder.home.feature.chat.presentation
 
+import dev.proflyder.home.core.designsystem.list.addFullWidthRows
 import android.app.Activity
 import android.os.Looper
 import android.os.SystemClock
@@ -27,7 +28,6 @@ import dev.proflyder.home.feature.chat.presentation.sessions.ChatSessionsAdapter
 import dev.proflyder.home.feature.chat.presentation.sessions.ChatSessionsUiState
 import dev.proflyder.home.feature.chat.presentation.sessions.SessionRow
 import dev.proflyder.home.feature.chat.presentation.sessions.SessionRowListener
-import dev.proflyder.home.feature.chat.presentation.sessions.SessionDividers
 import dev.proflyder.home.feature.chat.presentation.sessions.SessionRows
 import java.time.ZoneOffset
 import org.junit.Assert.assertEquals
@@ -58,7 +58,7 @@ class ChatScrollTest {
         val adapter = ChatSessionsAdapter(NoRows)
         val list = binding.chatSessionsList
         list.adapter = ConcatAdapter(ListHeaderSpacer.leading(list, binding.chatSessionsHeader), adapter)
-        list.addItemDecoration(SessionDividers(list))
+        list.addFullWidthRows(list.resources.getDimensionPixelSize(R.dimen.chat_session_divider_inset))
         binding.chatSessionsSearchReveal.attach(list, binding.chatSessionsSearch)
         binding.chatSessionsRefresh.setupPullToRefresh(list, binding.chatSessionsSearchReveal) { refreshes++ }
         val active = ChatFixtures.sessions.filterNot { it.archived }.take(count)
