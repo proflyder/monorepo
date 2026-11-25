@@ -6,23 +6,21 @@ import dev.proflyder.home.core.text.takeUtf8Bytes
 
 internal data class PushRegistrationRequest(
     val token: String,
-    val deviceName: String,
     val appVersion: String,
     val server: String,
 ) {
     fun record(nowMillis: Long): PushRegistrationRecord =
-        PushRegistrationRecord(token, nowMillis, deviceName, appVersion, server)
+        PushRegistrationRecord(token, nowMillis, appVersion, server)
 }
 
 internal object PushRegistrationPolicy {
     const val REFRESH_INTERVAL_MILLIS: Long = 24L * 60 * 60 * 1000
-    const val NAME_BYTES: Int = 64
+    const val VERSION_BYTES: Int = 64
 
     fun isDue(last: PushRegistration, wanted: PushRegistrationRequest, nowMillis: Long): Boolean =
         when {
             last.registeredAtMillis <= 0 -> true
             last.token != wanted.token -> true
-            last.registeredName != wanted.deviceName -> true
             last.appVersion != wanted.appVersion -> true
             last.server != wanted.server -> true
             nowMillis < last.registeredAtMillis -> true
@@ -37,6 +35,5 @@ internal object PushRegistrationPolicy {
         is Outcome.Failure -> PushRegistrationResult.Rejected(published.failure)
     }
 
-    fun cleanName(raw: String, fallback: String): String =
-        raw.trim().takeUtf8Bytes(NAME_BYTES).trim().ifEmpty { fallback }
+    fun cleanVersion(raw: String): String = raw.trim().takeUtf8Bytes(VERSION_BYTES).trim()
 }

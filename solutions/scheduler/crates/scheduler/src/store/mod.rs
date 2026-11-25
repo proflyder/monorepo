@@ -36,7 +36,7 @@ pub use vpn::{VpnPeer, VpnPeerInput, VpnPool, is_wireguard_key as vpn_key_is_val
 
 use crate::domain::ScheduleKind as DomainScheduleKind;
 
-pub const SCHEMA_VERSION: i64 = 10;
+pub const SCHEMA_VERSION: i64 = 11;
 
 pub const QUEUE_HOME: &str = "home";
 pub const QUEUE_TASKS: &str = "tasks";
@@ -193,6 +193,11 @@ const V10: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS vpn_peers_owner ON vpn_peers(token_id)",
 ];
 
+const V11: &[&str] = &["UPDATE push_devices SET device_name = (
+			SELECT name FROM app_tokens WHERE app_tokens.id = push_devices.token_id
+		)
+		WHERE token_id IN (SELECT id FROM app_tokens WHERE revoked_unix = 0)"];
+
 const V9: &[&str] = &[
     "ALTER TABLE push_devices ADD COLUMN token_id TEXT NOT NULL DEFAULT ''",
     "CREATE INDEX IF NOT EXISTS push_devices_owner ON push_devices(token_id, updated_unix)",
@@ -268,6 +273,11 @@ pub const MIGRATIONS: &[Migration] = &[
         version: 10,
         description: "scheduler v10 vpn peer ownership",
         statements: V10,
+    },
+    Migration {
+        version: 11,
+        description: "scheduler v11 push device names from application tokens",
+        statements: V11,
     },
 ];
 

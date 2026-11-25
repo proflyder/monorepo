@@ -11,6 +11,7 @@ metro_android_library(
     resource_files = glob(["src/main/res/**"]),
     view_binding = True,
     deps = [
+        "//projects/mobile/android/core/access",
         "//projects/mobile/android/core/data",
         "//projects/mobile/android/core/runtime",
         "//projects/mobile/android/features/chat/api",
@@ -73,6 +74,7 @@ home_android_local_test(
         "@maven//:androidx_datastore_datastore_preferences",
         "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_android",
         "@maven//:org_robolectric_robolectric",
+        "//projects/mobile/android/core/access",
         "//projects/mobile/android/core/data",
         "//projects/mobile/android/core/theme",
         "@maven//:androidx_core_core_ktx",

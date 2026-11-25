@@ -30,8 +30,10 @@ pub const MAX_META_BYTES: usize = 64;
 pub const MIN_DEVICE_ID_BYTES: usize = 8;
 pub const MAX_DEVICE_ID_BYTES: usize = 128;
 
-const COLS: &str =
-    "device_id, token, platform, app_version, device_name, token_id, created_unix, updated_unix";
+const COLS: &str = "device_id, token, platform, app_version,
+    COALESCE((SELECT name FROM app_tokens
+        WHERE app_tokens.id = push_devices.token_id AND app_tokens.revoked_unix = 0), device_name),
+    token_id, created_unix, updated_unix";
 
 fn scan_device(row: &Row<'_>) -> rusqlite::Result<PushDevice> {
     Ok(PushDevice {
@@ -117,6 +119,13 @@ fn device_where(
     Ok(statement
         .query_row(params![value], scan_device)
         .optional()?)
+}
+
+fn in_scope(device: &PushDevice, scope: &DeviceScope) -> bool {
+    match scope {
+        DeviceScope::All => true,
+        DeviceScope::Token(id) => device.token_id == *id,
+    }
 }
 
 fn may_take(current: &PushDevice, token_id: &str, owner: bool, fcm_token: &str) -> bool {
@@ -280,47 +289,18 @@ impl Store {
         })
     }
 
-    pub fn rename_push_device_for(
+    pub fn scoped_push_device(
         &self,
         device_id: &str,
-        device_name: &str,
-        scope: DeviceScope,
-        now_unix: i64,
+        scope: &DeviceScope,
     ) -> Result<PushDevice, StoreError> {
-        let device_id = device_id.trim().to_owned();
+        let device_id = device_id.trim();
         if device_id.is_empty() {
             return Err(StoreError::invalid("device_id is required"));
         }
-        let name = clean_meta(device_name, "device_name")?;
-        if name.is_empty() {
-            return Err(StoreError::invalid("device_name is required"));
-        }
-        let key = device_id.clone();
-        let token_id = match scope {
-            DeviceScope::All => None,
-            DeviceScope::Token(id) => Some(id),
-        };
-        let changed = self.call(move |connection| {
-            token_id.as_deref().map_or_else(
-                || {
-                    connection.execute(
-                        "UPDATE push_devices SET device_name = ?1, updated_unix = ?2 WHERE device_id = ?3",
-                        params![name, now_unix, key],
-                    )
-                },
-                |token| {
-                    connection.execute(
-                        "UPDATE push_devices SET device_name = ?1, updated_unix = ?2 WHERE device_id = ?3 AND token_id = ?4",
-                        params![name, now_unix, key, token],
-                    )
-                },
-            )
-        })?;
-        if changed == 0 {
-            return Err(StoreError::NotFound);
-        }
-        self.push_device(device_id.trim())
-            .and_then(|device| device.ok_or(StoreError::NotFound))
+        self.push_device(device_id)?
+            .filter(|device| in_scope(device, scope))
+            .ok_or(StoreError::NotFound)
     }
 
     pub fn push_device(&self, device_id: &str) -> Result<Option<PushDevice>, StoreError> {
@@ -713,12 +693,7 @@ mod tests {
         );
         assert!(
             store
-                .rename_push_device_for(
-                    &owner.device_id,
-                    "Чужой",
-                    DeviceScope::Token("mama".to_owned()),
-                    102,
-                )
+                .scoped_push_device(&owner.device_id, &DeviceScope::Token("mama".to_owned()))
                 .is_err()
         );
         assert!(
@@ -765,6 +740,67 @@ mod tests {
             .register_push_device_for(&input(TOKEN_A), "mama", false, 200)
             .expect("the legacy phone re-registers without a conflict");
         assert_eq!(refreshed.token_id, "mama");
+        std::fs::remove_dir_all(directory).expect("cleanup");
+    }
+
+    #[test]
+    fn the_device_name_is_the_application_token_name() {
+        let store = store();
+        let modules = home_app_auth::Modules::default();
+        store
+            .access_create(
+                "mama",
+                "Дарья",
+                &home_app_auth::sha256_hex("mama"),
+                &modules,
+                10,
+            )
+            .expect("token");
+        let device = store
+            .register_push_device_for(&input(TOKEN_A), "mama", false, 100)
+            .expect("register");
+        assert_eq!(device.device_name, "Дарья");
+        store
+            .access_update("mama", Some("Даша"), None, 20)
+            .expect("rename token");
+        let listed = store.list_push_devices().expect("list");
+        assert_eq!(listed[0].device_name, "Даша");
+        let scoped = store
+            .scoped_push_device(&device.device_id, &DeviceScope::Token("mama".to_owned()))
+            .expect("own device");
+        assert_eq!(scoped.device_name, "Даша");
+    }
+
+    #[tokio::test]
+    async fn a_v10_database_takes_device_names_from_tokens() {
+        let (directory, path) = temp_database("v11");
+        {
+            let db = home_sqlite::Db::open(&path, &MIGRATIONS[..10]).expect("v10 database");
+            db.call(|connection| {
+                connection.execute(
+                    "INSERT INTO app_tokens (id, name, sha256, modules_json, created_unix, updated_unix)
+                     VALUES ('mama', 'Дарья', 'digest', '[]', 1, 1)",
+                    [],
+                )?;
+                connection.execute(
+                    "INSERT INTO push_devices (device_id, token, platform, app_version, device_name, token_id, created_unix, updated_unix)
+                     VALUES ('device-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', ?1, 'android', '0.1.0', 'Мама', 'mama', 100, 100)",
+                    params![TOKEN_A],
+                )?;
+                Ok(())
+            })
+            .await
+            .expect("insert v10 rows");
+            db.shutdown().expect("close");
+        }
+        let store = Store::open(&path, Config::default()).expect("migrates to v11");
+        let stored: String = store
+            .call(|connection| {
+                connection.query_row("SELECT device_name FROM push_devices", [], |row| row.get(0))
+            })
+            .expect("stored name");
+        assert_eq!(stored, "Дарья");
+        drop(store);
         std::fs::remove_dir_all(directory).expect("cleanup");
     }
 

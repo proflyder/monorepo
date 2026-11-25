@@ -9,12 +9,10 @@ class PushRegistrationPolicyTest {
     private val last = PushRegistration(
         token = "token-a",
         registeredAtMillis = registeredAt,
-        deviceName = "Pixel",
-        registeredName = "Pixel",
         appVersion = "1.2.0",
         server = "https://home.test/",
     )
-    private val same = PushRegistrationRequest("token-a", "Pixel", "1.2.0", "https://home.test/")
+    private val same = PushRegistrationRequest("token-a", "1.2.0", "https://home.test/")
 
     @Test
     fun anUnchangedFreshRegistrationIsSkipped() {
@@ -29,10 +27,9 @@ class PushRegistrationPolicyTest {
     }
 
     @Test
-    fun aChangedTokenNameVersionOrServerRegisters() {
+    fun aChangedTokenVersionOrServerRegisters() {
         val now = registeredAt + 60_000
         assertTrue(PushRegistrationPolicy.isDue(last, same.copy(token = "token-b"), now))
-        assertTrue(PushRegistrationPolicy.isDue(last, same.copy(deviceName = "Стас"), now))
         assertTrue(PushRegistrationPolicy.isDue(last, same.copy(appVersion = "1.3.0"), now))
         assertTrue(PushRegistrationPolicy.isDue(last, same.copy(server = "https://other.test/"), now))
     }

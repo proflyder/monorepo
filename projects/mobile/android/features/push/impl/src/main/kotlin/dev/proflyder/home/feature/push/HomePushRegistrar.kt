@@ -2,7 +2,6 @@ package dev.proflyder.home.feature.push
 
 import dev.proflyder.home.core.config.ConnectionSettingsStore
 import dev.proflyder.home.core.model.Clock
-import dev.proflyder.home.core.model.DeviceIdentity
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.operation.suspendRunCatching
@@ -38,7 +37,6 @@ class HomePushRegistrar(
     private val store: PushRegistrationStore,
     private val tokens: PushTokenSource,
     private val publisher: PushRegistrationPublisher,
-    private val identity: DeviceIdentity,
     private val settings: ConnectionSettingsStore,
     private val version: AppVersion,
     private val clock: Clock,
@@ -64,15 +62,9 @@ class HomePushRegistrar(
         val server = PushRegistrationPolicy.serverOf(settings.config.value)
             ?: return PushRegistrationResult.NotConfigured
         val token = tokens.token.value ?: tokens.fetch()
-        val request = request(token, server, store.registration.value.deviceName)
+        val request = request(token, server)
             ?: return markFailed(PushRegistrationResult.NoPushToken)
         return register(request, force = true)
-    }
-
-    override suspend fun saveDeviceName(name: String): PushRegistrationResult {
-        store.savedName(PushRegistrationPolicy.cleanName(name, identity.defaultName()))
-        val request = current() ?: return PushRegistrationResult.Done
-        return register(request, force = false)
     }
 
     internal fun unregister(token: String) {
@@ -82,22 +74,14 @@ class HomePushRegistrar(
     private fun wanted(): Flow<PushRegistrationRequest> = combine(
         tokens.token.filterNotNull(),
         settings.config.map(PushRegistrationPolicy::serverOf),
-        store.registration.map { it.deviceName },
-    ) { token, server, name -> request(token, server, name) }
+        ::request,
+    )
         .filterNotNull()
         .distinctUntilChanged()
 
-    private fun current(): PushRegistrationRequest? = request(
-        token = tokens.token.value,
-        server = PushRegistrationPolicy.serverOf(settings.config.value),
-        rawName = store.registration.value.deviceName,
-    )
-
-    private fun request(token: String?, server: String?, rawName: String): PushRegistrationRequest? {
+    private fun request(token: String?, server: String?): PushRegistrationRequest? {
         if (token.isNullOrBlank() || server == null) return null
-        val name = PushRegistrationPolicy.cleanName(rawName, identity.defaultName())
-        val appVersion = PushRegistrationPolicy.cleanName(version.name, "")
-        return PushRegistrationRequest(token, name, appVersion, server)
+        return PushRegistrationRequest(token, PushRegistrationPolicy.cleanVersion(version.name), server)
     }
 
     private suspend fun register(request: PushRegistrationRequest, force: Boolean): PushRegistrationResult =
