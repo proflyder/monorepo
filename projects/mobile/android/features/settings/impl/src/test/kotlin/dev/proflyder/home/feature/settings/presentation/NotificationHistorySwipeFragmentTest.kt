@@ -199,10 +199,10 @@ class NotificationHistorySwipeFragmentTest {
         val at = IntArray(2).also(row::getLocationInWindow)
         val left = at[0] - row.translationX.toInt()
         val x = if (sign < 0) left + row.width - PROBE_INSET else left + PROBE_INSET
-        val corner = if (sign < 0) left + row.width - 1 else left
+        val corner = if (sign < 0) left + row.width - CORNER_PROBE else left + CORNER_PROBE
         val center = bitmap.getPixel(x, at[1] + row.height / 2)
-        val rounded = row.translationX == 0f || bitmap.getPixel(corner, at[1]) != center
-        assertTrue("action background has the card's rounded corner", rounded)
+        val square = row.translationX == 0f || bitmap.getPixel(corner, at[1] + CORNER_DEPTH) == center
+        assertTrue("action background is a full-width rectangle", square)
         return center
     }
 
@@ -235,6 +235,8 @@ class NotificationHistorySwipeFragmentTest {
         const val PASSES = 5
         const val BAR = 300
         const val PROBE_INSET = 10
+        const val CORNER_PROBE = 4
+        const val CORNER_DEPTH = 16
         const val NAV = 240
     }
 }
