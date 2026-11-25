@@ -26,8 +26,11 @@ fun SwipeRefreshLayout.setupPullToRefresh(scrolling: View, vararg alsoScrolling:
 }
 
 private fun SwipeRefreshLayout.placeSpinnerBelow(top: Int) {
-    val travel = resources.getDimensionPixelSize(R.dimen.ui_refresh_travel)
-    setProgressViewOffset(false, top - progressCircleDiameter, top + travel)
+    val start = top - progressCircleDiameter
+    if (progressViewStartOffset == start) return
+    val refreshing = isRefreshing
+    setProgressViewOffset(false, start, top + resources.getDimensionPixelSize(R.dimen.ui_refresh_travel))
+    isRefreshing = refreshing
 }
 
 fun RecyclerView.isAtTop(): Boolean {
