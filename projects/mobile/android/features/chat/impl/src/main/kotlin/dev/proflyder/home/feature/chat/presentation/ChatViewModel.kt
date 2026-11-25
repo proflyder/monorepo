@@ -8,7 +8,16 @@ import dev.proflyder.home.core.model.ChatRole
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.presentation.StateViewModel
-import dev.proflyder.home.core.ui.ViewModelSource
+import androidx.lifecycle.SavedStateHandle
+import dev.proflyder.home.core.model.ChatSession
+import dev.proflyder.home.core.navigation.destination
+import dev.proflyder.home.core.ui.SavedStateViewModelFactory
+import dev.proflyder.home.feature.chat.ChatConversationDestination
+import dev.proflyder.home.feature.chat.ChatRoute
+import dev.proflyder.home.feature.chat.data.ChatSessionsRepository
+import dev.proflyder.home.feature.chat.data.SessionAction
+import dev.proflyder.home.feature.chat.data.SessionActions
+import dev.proflyder.home.feature.chat.data.SessionsSnapshot
 import dev.proflyder.home.feature.chat.data.AttachmentSource
 import dev.proflyder.home.feature.chat.data.AudioVoiceRecorder
 import dev.proflyder.home.feature.chat.data.ChatComponents
@@ -46,6 +55,9 @@ internal data class ChatUiState(
     val loaded: Boolean = false,
     val failure: RemoteFailure? = null,
     val hasMore: Boolean = false,
+    val session: ChatSession? = null,
+    val activeTool: String? = null,
+    val stoppableReplyId: String? = null,
 ) {
     val canSend: Boolean get() = draft.isNotBlank() || pending.isNotEmpty()
 }
@@ -65,25 +77,38 @@ internal sealed interface ChatIntent {
     data object StartRecording : ChatIntent
     data class FinishRecording(val send: Boolean) : ChatIntent
     data class ToggleVoice(val media: BubbleMedia) : ChatIntent
+    data object Stop : ChatIntent
+    data class Act(val action: SessionAction) : ChatIntent
 }
 
 internal sealed interface ChatEvent {
     data class Failure(val failure: RemoteFailure) : ChatEvent
     data class Rejected(val key: String) : ChatEvent
+    data object Closed : ChatEvent
 }
 
+internal class ConversationSources(
+    val sessionId: String,
+    val repository: ChatRepository,
+    val sessions: ChatSessionsRepository,
+    val actions: SessionActions,
+)
+
 internal class ChatViewModel(
-    private val repository: ChatRepository,
+    private val sources: ConversationSources,
     private val media: ChatMedia,
     capture: VoiceCapture,
     private val player: VoicePlayer,
     private val zone: () -> ZoneId = ZoneId::systemDefault,
 ) : StateViewModel<ChatUiState, ChatIntent, ChatEvent>(ChatUiState()) {
     private val recording = VoiceRecording(capture, viewModelScope)
+    private val repository: ChatRepository = sources.repository
+    val sessionId: String get() = sources.sessionId
 
     init {
         whileObserved(::timelineState)
         recording.state.onEach(::onRecording).launchIn(viewModelScope)
+        sources.sessions.sessions.onEach(::onSessions).launchIn(viewModelScope)
     }
 
     override fun handle(intent: ChatIntent) {
@@ -96,6 +121,8 @@ internal class ChatViewModel(
             ChatIntent.CancelReply -> updateState { copy(replyTo = null) }
             is ChatIntent.Retry -> retry(intent.bubble)
             is ChatIntent.Discard -> discard(intent.bubble)
+            ChatIntent.Stop -> stop()
+            is ChatIntent.Act -> act(intent.action)
             else -> handleMedia(intent)
         }
     }
@@ -127,7 +154,32 @@ internal class ChatViewModel(
     private fun timelineState(): Flow<Unit> = combine(repository.timeline, player.playback, ::onTimeline)
 
     private fun onTimeline(timeline: ChatTimeline, voice: VoicePlayback?) = updateState {
-        copy(items = ChatItems.build(timeline, zone(), voice), loaded = timeline.loaded, failure = timeline.failure, hasMore = timeline.hasMore)
+        copy(
+            items = ChatItems.build(timeline, zone(), voice),
+            loaded = timeline.loaded,
+            failure = timeline.failure,
+            hasMore = timeline.hasMore,
+            activeTool = timeline.activeTool,
+            stoppableReplyId = timeline.streamingReplyId,
+        )
+    }
+
+    private fun onSessions(snapshot: SessionsSnapshot) {
+        snapshot.find(sources.sessionId)?.let { updateState { copy(session = it) } }
+    }
+
+    private fun stop() {
+        val id = currentState.stoppableReplyId ?: return
+        launch { report(repository.stop(id)) }
+    }
+
+    private fun act(action: SessionAction) {
+        launch { acted(action, sources.actions.perform(action)) }
+    }
+
+    private fun acted(action: SessionAction, outcome: Outcome<Unit>) {
+        report(outcome)
+        if (outcome is Outcome.Success && action is SessionAction.Delete) emit(ChatEvent.Closed)
     }
 
     private fun onRecording(state: RecordingState) {
@@ -194,13 +246,15 @@ internal class ChatViewModel(
 
 internal val BubbleMedia.ref: MediaRef get() = MediaRef(id, path)
 
-@ContributesIntoMap(AppScope::class, binding = binding<ViewModelSource>())
+@ContributesIntoMap(AppScope::class, binding = binding<SavedStateViewModelFactory>())
 @ClassKey(ChatViewModel::class)
 @Inject
 class ChatViewModelSource internal constructor(
     private val components: ChatComponents,
-) : ViewModelSource {
-    override fun create(): ViewModel = run {
-        ChatViewModel(components.repository, components.media, AudioVoiceRecorder(components.media::newVoiceFile), ChatVoicePlayer())
+) : SavedStateViewModelFactory {
+    override fun create(savedState: SavedStateHandle): ViewModel {
+        val sessionId = savedState.destination(ChatConversationDestination)?.sessionId ?: ChatRoute.LEGACY_SESSION_ID
+        val sources = ConversationSources(sessionId, components.repository(sessionId), components.sessions, components.sessionActions)
+        return ChatViewModel(sources, components.media, AudioVoiceRecorder(components.media::newVoiceFile), ChatVoicePlayer())
     }
 }

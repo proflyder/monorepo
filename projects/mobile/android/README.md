@@ -11,8 +11,9 @@ a typed router. Device acceptance and open work: [STATE](../../../docs/STATE.md)
 
 - Bottom tabs: **Home** (catalog, live rows, quick-actions dial),
   **Scenarios** (builder for `home.v1.ScenarioService`), **Time** (pager over
-  Alarms / Timers / Reminders), **Chat** (Hermes, one server-side
-  conversation), **System** (home dashboard from `mcp-gateway`).
+  Alarms / Timers / Reminders), **Chat** (Hermes sessions: list with
+  search, pin, archive, rename, delete; a conversation opens full screen with
+  `ScreenChrome.IMMERSIVE` and its own floating glass header and input bar), **System** (home dashboard from `mcp-gateway`).
 - Top app bar: **Call** (audio call to the station) and **Settings** (overlay
   over the current tab): Connection, Phone notifications and find, VPN home,
   Notification history, Appearance; debug builds also show **Design system**.
@@ -838,8 +839,9 @@ light the badge with old history.
 
 The history row and the system notification share `NotificationTargets`
 (`core/navigation`): the stored `deepLink` is normalized (`home://` optional)
-and resolved through `FeatureRegistry`. `chat/message/<id>` opens Chat with
-that message focused, `alarms`/`timers`/`reminders` and `time/<section>` select
+and resolved through `FeatureRegistry`. `chat/session/<session>/message/<id>` opens that
+conversation with the message focused (legacy `chat/message/<id>` maps to
+`home-app`), `alarms`/`timers`/`reminders` and `time/<section>` select
 the Time tab on that section, and `secrets`/`secrets/path/<path>` open System →
 Secrets; the gateway writes the audited path into the deep link. The target is
 resolved against `AppAccessState` at render and at tap time (secrets need the
@@ -848,3 +850,16 @@ so a row whose module the token lacks has no chevron and is not clickable.
 `settings/impl`'s rows show the chevron only when a gated target exists.
 Sync pushes carry no notification, and the Access screen (`notificationLink =
 false`) has no target, so both never open from the history.
+
+### Screen chrome per destination
+
+`FeatureEntry.screenChrome(destination)` decides the activity chrome for the
+current route: `FULL`, `WITHOUT_BOTTOM_BAR` (the old `hidesBottomBar`), or
+`IMMERSIVE`, where the glass top and bottom chrome are hidden and the screen
+receives raw system insets (`MainInsets.showChrome`). The chat conversation is
+the immersive user: `FloatingGlassHeader` (a `GlassHeader` inside
+`GlassHeaderLayout`, so the list gets the header height as its top inset) and
+`GlassPillLayout` pills for the header buttons, title and composer;
+`pinAboveKeyboard` keeps the composer on the IME. `GroupDividers` skips a row
+divider that falls under a pinned sticky header, so the header hairline is
+never doubled.

@@ -7,9 +7,12 @@ import dev.proflyder.home.core.model.ChatEvent
 import dev.proflyder.home.core.model.ChatKind
 import dev.proflyder.home.core.model.ChatMessage
 import dev.proflyder.home.core.model.ChatPage
+import dev.proflyder.home.core.model.ChatPreview
 import dev.proflyder.home.core.model.ChatQuote
 import dev.proflyder.home.core.model.ChatRole
 import dev.proflyder.home.core.model.ChatSent
+import dev.proflyder.home.core.model.ChatSession
+import dev.proflyder.home.core.model.ChatSessionPatch
 import dev.proflyder.home.core.model.ChatStatus
 import dev.proflyder.home.core.model.Outcome
 import dev.zacsweers.metro.AppScope
@@ -25,7 +28,9 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.ResponseBody
 import okio.BufferedSource
 import retrofit2.http.Body
+import retrofit2.http.DELETE
 import retrofit2.http.GET
+import retrofit2.http.PATCH
 import retrofit2.http.POST
 import retrofit2.http.Path
 import retrofit2.http.Query
@@ -65,6 +70,7 @@ internal data class ChatAlertDto(
 @Serializable
 internal data class ChatMessageDto(
     val id: String = "",
+    val sessionId: String = "",
     val seq: Long = 0,
     val version: Long = 0,
     val clientId: String? = null,
@@ -90,6 +96,7 @@ internal data class ChatPageDto(
 
 @Serializable
 internal data class ChatSendRequestDto(
+    val sessionId: String,
     val clientId: String,
     val text: String,
     val replyTo: String? = null,
@@ -109,10 +116,78 @@ internal data class ChatDeltaDto(
     val text: String = "",
 )
 
+@Serializable
+internal data class ChatPreviewDto(
+    val role: String = "",
+    val kind: String = "",
+    val text: String = "",
+    val status: String = "",
+)
+
+@Serializable
+internal data class ChatSessionDto(
+    val id: String = "",
+    val title: String? = null,
+    val pinned: Boolean = false,
+    val archived: Boolean = false,
+    val preview: ChatPreviewDto? = null,
+    val createdAt: Long = 0,
+    val updatedAt: Long = 0,
+)
+
+@Serializable
+internal data class ChatSessionListDto(
+    val sessions: List<ChatSessionDto> = emptyList(),
+)
+
+@Serializable
+internal data class ChatSessionCreateDto(
+    val title: String? = null,
+)
+
+@Serializable
+internal data class ChatSessionPatchDto(
+    val title: String? = null,
+    val pinned: Boolean? = null,
+    val archived: Boolean? = null,
+)
+
+@Serializable
+internal data class ChatToolDto(
+    val id: String = "",
+    val name: String = "",
+    val done: Boolean = false,
+)
+
+@Serializable
+internal data class ChatRemovedDto(
+    val id: String = "",
+)
+
 internal interface ChatApi {
     @Idempotent
     @GET("v1/chat/messages")
-    suspend fun page(@Query("before") before: Long?, @Query("limit") limit: Int): Outcome<ChatPageDto>
+    suspend fun page(
+        @Query("session") session: String,
+        @Query("before") before: Long?,
+        @Query("limit") limit: Int,
+    ): Outcome<ChatPageDto>
+
+    @POST("v1/chat/messages/{id}/stop")
+    suspend fun stop(@Path("id") id: String, @Body body: EmptyBody): Outcome<ChatMessageDto>
+
+    @Idempotent
+    @GET("v1/chat/sessions")
+    suspend fun sessions(@Query("archived") archived: Boolean): Outcome<ChatSessionListDto>
+
+    @POST("v1/chat/sessions")
+    suspend fun createSession(@Body body: ChatSessionCreateDto): Outcome<ChatSessionDto>
+
+    @PATCH("v1/chat/sessions/{id}")
+    suspend fun patchSession(@Path("id") id: String, @Body body: ChatSessionPatchDto): Outcome<ChatSessionDto>
+
+    @DELETE("v1/chat/sessions/{id}")
+    suspend fun deleteSession(@Path("id") id: String): Outcome<ChatRemovedDto>
 
     @POST("v1/chat/messages")
     suspend fun send(@Body body: ChatSendRequestDto): Outcome<ChatSendResponseDto>
@@ -164,6 +239,7 @@ internal fun String.toChatStatus(): ChatStatus = when (this) {
 
 internal fun ChatMessageDto.toDomain(): ChatMessage = ChatMessage(
     id = id,
+    sessionId = sessionId,
     seq = seq,
     version = version,
     clientId = clientId,
@@ -192,6 +268,16 @@ internal fun ChatMessageDto.toDomain(): ChatMessage = ChatMessage(
             runbookUrl = it.runbookUrl,
         )
     },
+)
+
+internal fun ChatSessionDto.toDomain(): ChatSession = ChatSession(
+    id = id,
+    title = title?.takeIf { it.isNotBlank() },
+    pinned = pinned,
+    archived = archived,
+    preview = preview?.let { ChatPreview(it.role.toChatRole(), it.kind.toChatKind(), it.text, it.status.toChatStatus()) },
+    createdAtMillis = createdAt,
+    updatedAtMillis = updatedAt,
 )
 
 internal fun ChatPageDto.toDomain(): ChatPage =
@@ -224,6 +310,9 @@ internal class ChatSseReader {
     private fun decode(event: String, payload: String): ChatEvent? = when (event) {
         "message" -> ChatEvent.Upsert(NetworkJson.decodeFromString(ChatMessageDto.serializer(), payload).toDomain())
         "delta" -> NetworkJson.decodeFromString(ChatDeltaDto.serializer(), payload).toEvent()
+        "tool" -> NetworkJson.decodeFromString(ChatToolDto.serializer(), payload).let { ChatEvent.Tool(it.id, it.name, it.done) }
+        "session" -> ChatEvent.SessionChanged(NetworkJson.decodeFromString(ChatSessionDto.serializer(), payload).toDomain())
+        "session_removed" -> ChatEvent.SessionRemoved(NetworkJson.decodeFromString(ChatRemovedDto.serializer(), payload).id)
         else -> null
     }
 
@@ -236,16 +325,12 @@ internal class ChatSseReader {
 class HttpChatClient(private val http: HomeHttp) : ChatClient {
     private val api: ChatApi by lazy { http.rest(ChatApi::class, Target.Control) }
 
-    override suspend fun page(before: Long?, limit: Int): Outcome<ChatPage> =
-        api.page(before, limit).mapResult { it.toDomain() }
+    override suspend fun page(sessionId: String, before: Long?, limit: Int): Outcome<ChatPage> =
+        api.page(sessionId, before, limit).mapResult { it.toDomain() }
 
-    override suspend fun send(
-        clientId: String,
-        text: String,
-        replyTo: String?,
-        attachments: List<String>,
-    ): Outcome<ChatSent> = api.send(ChatSendRequestDto(clientId, text, replyTo, attachments))
-        .mapResult { ChatSent(it.message.toDomain(), it.reply.toDomain()) }
+    override suspend fun send(request: ChatSendRequest): Outcome<ChatSent> =
+        api.send(ChatSendRequestDto(request.sessionId, request.clientId, request.text, request.replyTo, request.attachments))
+            .mapResult { ChatSent(it.message.toDomain(), it.reply.toDomain()) }
 
     override suspend fun upload(bytes: ByteArray, mime: String, name: String): Outcome<ChatAttachment> =
         api.upload(name, bytes.toRequestBody(mime.toMediaType())).mapResult { it.toDomain() }
@@ -256,8 +341,28 @@ class HttpChatClient(private val http: HomeHttp) : ChatClient {
     override suspend fun retry(id: String): Outcome<ChatMessage> =
         api.retry(id, EmptyBody).mapResult { it.toDomain() }
 
-    override fun events(after: Long): Flow<ChatEvent> =
-        http.stream(Target.Control, StreamRequest("v1/chat/events?after=$after", EVENT_STREAM), ChatSseDecoder)
+    override suspend fun stop(id: String): Outcome<ChatMessage> =
+        api.stop(id, EmptyBody).mapResult { it.toDomain() }
+
+    override suspend fun sessions(archived: Boolean): Outcome<List<ChatSession>> =
+        api.sessions(archived).mapResult { list -> list.sessions.map { it.toDomain() } }
+
+    override suspend fun createSession(title: String?): Outcome<ChatSession> =
+        api.createSession(ChatSessionCreateDto(title)).mapResult { it.toDomain() }
+
+    override suspend fun patchSession(id: String, patch: ChatSessionPatch): Outcome<ChatSession> =
+        api.patchSession(id, ChatSessionPatchDto(patch.title, patch.pinned, patch.archived)).mapResult { it.toDomain() }
+
+    override suspend fun deleteSession(id: String): Outcome<Unit> =
+        api.deleteSession(id).mapResult { }
+
+    override fun events(sessionId: String?, after: Long): Flow<ChatEvent> =
+        http.stream(Target.Control, StreamRequest(eventsPath(sessionId, after), EVENT_STREAM), ChatSseDecoder)
+
+    private fun eventsPath(sessionId: String?, after: Long): String {
+        val session = sessionId?.let { "&session=${java.net.URLEncoder.encode(it, Charsets.UTF_8.name())}" }.orEmpty()
+        return "v1/chat/events?after=$after$session"
+    }
 
     private companion object {
         const val EVENT_STREAM = "text/event-stream"

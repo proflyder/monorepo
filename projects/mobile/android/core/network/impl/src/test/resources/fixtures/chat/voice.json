@@ -15,6 +15,7 @@
   "kind": "voice",
   "role": "user",
   "seq": 1,
+  "sessionId": "home-app",
   "status": "done",
   "text": "",
   "transcript": "включи свет в гостиной",

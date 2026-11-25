@@ -71,6 +71,8 @@ internal object PushPayloads {
 }
 
 internal object PushChatGate {
-    fun shouldSkip(message: PushMessage.Notify, chatVisible: Boolean = ChatFocus.isVisible): Boolean =
-        chatVisible && message.deepLink?.route?.let(ChatRoute::isChat) == true
+    fun shouldSkip(message: PushMessage.Notify, showing: (String?) -> Boolean = ChatFocus::isShowing): Boolean {
+        val link = message.deepLink?.route?.let(ChatRoute::parse) ?: return false
+        return showing(link.sessionId)
+    }
 }

@@ -9,6 +9,7 @@ import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.model.StorageReason
 import dev.proflyder.home.core.network.ChatClient
+import dev.proflyder.home.core.network.ChatSendRequest
 import dev.proflyder.home.core.network.RouteGate
 import dev.proflyder.home.core.network.StreamUnauthorizedException
 import dev.proflyder.home.core.runtime.Backoff
@@ -90,9 +91,12 @@ internal interface ChatRepository {
     fun discardOutgoing(clientId: String)
 
     suspend fun retryReply(id: String): Outcome<Unit>
+
+    suspend fun stop(id: String): Outcome<Unit>
 }
 
 internal class LiveChatRepository(
+    private val sessionId: String,
     private val client: ChatClient,
     private val outboxStore: ChatOutboxStore,
     private val scope: CoroutineScope,
@@ -113,7 +117,7 @@ internal class LiveChatRepository(
 
     override suspend fun refresh(): Outcome<Unit> {
         restoreOutbox()
-        return when (val page = client.page(before = null, limit = CHAT_PAGE_SIZE)) {
+        return when (val page = client.page(sessionId, before = null, limit = CHAT_PAGE_SIZE)) {
             is Outcome.Success -> Outcome.Success(Unit).also { onPage(page.value) }
             is Outcome.Failure -> page.also { failure -> state.update { it.copy(failure = failure.failure) } }
         }
@@ -129,7 +133,7 @@ internal class LiveChatRepository(
         val oldest = current.oldestSeq ?: return
         if (!current.hasMore || current.loadingOlder) return
         state.update { it.copy(loadingOlder = true) }
-        when (val page = client.page(before = oldest, limit = CHAT_PAGE_SIZE)) {
+        when (val page = client.page(sessionId, before = oldest, limit = CHAT_PAGE_SIZE)) {
             is Outcome.Success -> state.update { it.withOlder(page.value) }
             is Outcome.Failure -> state.update { it.copy(loadingOlder = false) }
         }
@@ -158,6 +162,11 @@ internal class LiveChatRepository(
         is Outcome.Failure -> result
     }
 
+    override suspend fun stop(id: String): Outcome<Unit> = when (val result = client.stop(id)) {
+        is Outcome.Success -> Outcome.Success(Unit).also { accept(result.value) }
+        is Outcome.Failure -> result
+    }
+
     private fun accept(message: ChatMessage) = state.update { it.upsert(message) }
 
     private fun liveUpdates(): Flow<Nothing> = flow { emitAll(connectEvents()) }
@@ -167,7 +176,7 @@ internal class LiveChatRepository(
 
     private suspend fun connectEvents(): Flow<ChatEvent> {
         if (!state.value.loaded) refresh()
-        return client.events(state.value.cursor)
+        return client.events(sessionId, state.value.cursor)
     }
 
     private fun persistAndKick() {
@@ -202,7 +211,8 @@ internal class LiveChatRepository(
 
     private suspend fun sendUploaded(next: Outgoing, failures: Long): Long {
         val ids = next.attachments.mapNotNull { it.uploadedId }
-        return when (val result = client.send(next.clientId, next.text, next.replyTo?.id, ids)) {
+        val request = ChatSendRequest(sessionId, next.clientId, next.text, next.replyTo?.id, ids)
+        return when (val result = client.send(request)) {
             is Outcome.Success -> 0L.also { delivered(result.value) }
             is Outcome.Failure -> undelivered(next, result.failure, failures)
         }

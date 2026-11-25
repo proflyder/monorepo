@@ -10,7 +10,7 @@ use serde_json::{Value, json};
 use tokio::sync::mpsc;
 use tower::ServiceExt as _;
 
-use super::hermes::{self, HermesApi, SseParser, TurnEvent};
+use super::hermes::{self, HermesApi, SseParser, Turn, TurnEvent};
 use super::media::{self, MediaStore, Pcm};
 use super::model::{ErrorKey, SendRequest, Status};
 use super::store::{Store, Update};
@@ -19,26 +19,34 @@ use super::{Chat, Event, Options};
 use crate::tools::BoxFuture;
 
 const NOW: i64 = 1_795_129_665_000;
+const DEFAULT_SESSION: &str = "home-app";
 
 #[derive(Default)]
 struct ScriptedHermes {
     scripts: Mutex<Vec<Vec<TurnEvent>>>,
     seen: Mutex<Vec<Value>>,
+    sessions: Mutex<Vec<String>>,
+    calls: Mutex<Vec<String>>,
+    title: Mutex<Option<String>>,
 }
 
 impl ScriptedHermes {
     fn with(scripts: Vec<Vec<TurnEvent>>) -> Arc<Self> {
         Arc::new(Self {
             scripts: Mutex::new(scripts.into_iter().rev().collect()),
-            seen: Mutex::new(Vec::new()),
+            ..Self::default()
         })
     }
 }
 
 impl HermesApi for ScriptedHermes {
-    fn run<'a>(&'a self, message: Value, sink: mpsc::Sender<TurnEvent>) -> BoxFuture<'a, ()> {
+    fn run<'a>(&'a self, turn: Turn<'a>, sink: mpsc::Sender<TurnEvent>) -> BoxFuture<'a, ()> {
         Box::pin(async move {
-            self.seen.lock().expect("seen").push(message);
+            self.sessions
+                .lock()
+                .expect("sessions")
+                .push(turn.session.to_owned());
+            self.seen.lock().expect("seen").push(turn.message);
             let script = self
                 .scripts
                 .lock()
@@ -46,11 +54,40 @@ impl HermesApi for ScriptedHermes {
                 .pop()
                 .unwrap_or_default();
             for event in script {
+                if event == TurnEvent::Delta(HANG.to_owned()) {
+                    std::future::pending::<()>().await;
+                }
                 let _sent = sink.send(event).await;
             }
         })
     }
+
+    fn title<'a>(&'a self, _session: &'a str) -> BoxFuture<'a, Option<String>> {
+        Box::pin(async move { self.title.lock().expect("title").clone() })
+    }
+
+    fn patch<'a>(&'a self, session: &'a str, fields: Value) -> BoxFuture<'a, Result<(), ErrorKey>> {
+        Box::pin(async move {
+            self.calls
+                .lock()
+                .expect("calls")
+                .push(format!("patch {session} {fields}"));
+            Ok(())
+        })
+    }
+
+    fn delete<'a>(&'a self, session: &'a str) -> BoxFuture<'a, Result<(), ErrorKey>> {
+        Box::pin(async move {
+            self.calls
+                .lock()
+                .expect("calls")
+                .push(format!("delete {session}"));
+            Ok(())
+        })
+    }
 }
+
+const HANG: &str = "\u{0}hang";
 
 fn sequential_ids() -> super::NewId {
     let counter = Arc::new(AtomicUsize::new(0));
@@ -86,6 +123,7 @@ fn chat_with_media(
     media: Option<Arc<MediaStore>>,
 ) -> Arc<Chat> {
     Chat::start(Options {
+        default_session: DEFAULT_SESSION.to_owned(),
         store,
         hermes,
         media,
@@ -101,6 +139,7 @@ fn chat_with_media(
 fn request(client_id: &str, text: &str, reply_to: Option<&str>) -> SendRequest {
     SendRequest {
         client_id: client_id.to_owned(),
+        session_id: None,
         text: text.to_owned(),
         reply_to: reply_to.map(str::to_owned),
         attachments: Vec::new(),
@@ -227,6 +266,7 @@ async fn a_turn_streams_and_matches_the_app_contract() {
         recorded.push(match event {
             Event::Message(message) => json!({"event": "message", "data": message}),
             Event::Delta(delta) => json!({"event": "delta", "data": delta}),
+            other => json!({"event": "other", "data": other.session_id()}),
         });
     }
     golden(
@@ -312,10 +352,14 @@ async fn a_failed_reply_keeps_partial_text_and_can_be_retried() {
 #[tokio::test]
 async fn a_restart_fails_interrupted_turns_and_resumes_pending_ones() {
     let store = Arc::new(Store::in_memory().expect("store"));
+    store
+        .adopt_legacy(DEFAULT_SESSION, "legacy", NOW)
+        .expect("legacy");
     let ids = sequential_ids();
     for client in ["c-1", "c-2"] {
         store
             .insert_turn(&super::store::NewTurn {
+                session_id: DEFAULT_SESSION,
                 client_id: client,
                 text: "hi",
                 kind: super::model::Kind::Text,
@@ -340,6 +384,7 @@ async fn a_restart_fails_interrupted_turns_and_resumes_pending_ones() {
         .expect("update");
     let hermes = ScriptedHermes::with(vec![vec![TurnEvent::Completed("ok".to_owned())]]);
     let chat = Chat::start(Options {
+        default_session: DEFAULT_SESSION.to_owned(),
         store: Arc::clone(&store),
         hermes,
         media: None,
@@ -448,12 +493,16 @@ async fn the_http_client_creates_the_session_and_reads_the_stream() {
     let client = hermes::Client::new(
         &format!("http://{address}"),
         "relay".to_owned(),
-        "home-app",
         "prompt".to_owned(),
     )
     .expect("client");
     let (sink, mut events) = mpsc::channel(16);
-    client.run(json!("hi"), sink).await;
+    let turn = Turn {
+        session: "home-app",
+        title: Some("Главный чат"),
+        message: json!("hi"),
+    };
+    client.run(turn, sink).await;
     let mut received = Vec::new();
     while let Some(event) = events.recv().await {
         received.push(event);
@@ -720,6 +769,7 @@ impl crate::push::PushApi for RecordingPush {
 
 fn alerting_chat(hermes: Arc<ScriptedHermes>, push: Arc<RecordingPush>) -> Arc<Chat> {
     Chat::start(Options {
+        default_session: DEFAULT_SESSION.to_owned(),
         store: Arc::new(Store::in_memory().expect("store")),
         hermes,
         media: None,
@@ -781,14 +831,14 @@ async fn alerts_become_cards_that_resolve_in_place_and_push_once() {
     golden("alert", &serde_json::to_value(&card).expect("json"));
     assert_eq!(chat.page(None, None).expect("page").messages.len(), 1);
     assert_eq!(
-        chat.page_for(None, Some(1), false)
+        chat.page_for(None, None, Some(1), false)
             .expect("page without alerts")
             .messages
             .len(),
         0
     );
     assert_eq!(
-        chat.page_for(None, Some(1), true)
+        chat.page_for(None, None, Some(1), true)
             .expect("page with alerts")
             .messages
             .len(),
@@ -820,14 +870,14 @@ async fn alerts_become_cards_that_resolve_in_place_and_push_once() {
                 "alerts".to_owned(),
                 "🔴 KubePodCrashLooping".to_owned(),
                 "scheduler перезапускается".to_owned(),
-                Some("home://chat/message/m_0001".to_owned())
+                Some("home://chat/session/home-app/message/m_0001".to_owned())
             ),
             (
                 "chat".to_owned(),
                 "Рикардо".to_owned(),
                 "Разбираюсь: OOMKilled.".to_owned(),
                 Some(format!(
-                    "home://chat/message/{}",
+                    "home://chat/session/home-app/message/{}",
                     sent["reply"]["id"].as_str().expect("id")
                 ))
             ),
@@ -852,5 +902,328 @@ async fn an_invalid_webhook_is_rejected() {
     assert_eq!(
         (status, body["code"].clone()),
         (StatusCode::BAD_REQUEST, json!("chat_alert_invalid"))
+    );
+}
+
+#[tokio::test]
+async fn sessions_are_listed_newest_first_with_previews_and_route_turns() {
+    let hermes = ScriptedHermes::with(vec![vec![TurnEvent::Completed("Готово.".to_owned())]]);
+    let clock = Arc::new(std::sync::atomic::AtomicI64::new(NOW));
+    let tick = Arc::clone(&clock);
+    let chat = Chat::start(Options {
+        default_session: DEFAULT_SESSION.to_owned(),
+        store: Arc::new(Store::in_memory().expect("store")),
+        hermes: Arc::clone(&hermes) as Arc<dyn HermesApi>,
+        media: None,
+        stt: None,
+        push: None,
+        notify: super::Notify::default(),
+        now: Arc::new(move || tick.fetch_add(1000, Ordering::SeqCst)),
+        new_id: sequential_ids(),
+    })
+    .expect("chat");
+    let app: Router = super::router(Arc::clone(&chat));
+
+    let (status, created) = call(
+        &app,
+        "POST",
+        "/v1/chat/sessions",
+        Some(json!({"title": " Шопинг "})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(created["title"], "Шопинг");
+    let id = created["id"].as_str().expect("id").to_owned();
+    assert!(id.starts_with(super::APP_SESSION_PREFIX), "{id}");
+
+    let (status, sent) = call(
+        &app,
+        "POST",
+        "/v1/chat/messages",
+        Some(json!({"clientId": "c-1", "sessionId": id, "text": "Купи молоко"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(sent["message"]["sessionId"], id.as_str());
+    settled(&chat, sent["reply"]["id"].as_str().expect("reply")).await;
+    assert_eq!(
+        hermes.sessions.lock().expect("sessions").clone(),
+        vec![id.clone()]
+    );
+
+    let (_, list) = call(&app, "GET", "/v1/chat/sessions", None).await;
+    let sessions = list["sessions"].as_array().expect("sessions");
+    assert_eq!(sessions.len(), 2);
+    assert_eq!(sessions[0]["id"], id.as_str());
+    assert_eq!(sessions[0]["preview"]["text"], "Готово.");
+    assert_eq!(sessions[0]["preview"]["role"], "assistant");
+    assert_eq!(sessions[1]["id"], DEFAULT_SESSION);
+    assert_eq!(sessions[1]["title"], super::LEGACY_SESSION_TITLE);
+
+    let (_, own) = call(
+        &app,
+        "GET",
+        &format!("/v1/chat/messages?session={id}"),
+        None,
+    )
+    .await;
+    assert_eq!(own["messages"].as_array().expect("messages").len(), 2);
+    let (_, legacy) = call(&app, "GET", "/v1/chat/messages", None).await;
+    assert_eq!(legacy["messages"].as_array().expect("messages").len(), 0);
+    let (status, missing) = call(&app, "GET", "/v1/chat/messages?session=s_missing", None).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(missing["code"], "chat_session_not_found");
+    let (status, _) = call(
+        &app,
+        "POST",
+        "/v1/chat/messages",
+        Some(json!({"clientId": "c-2", "sessionId": "s_missing", "text": "?"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn sessions_can_be_renamed_pinned_archived_and_deleted() {
+    let hermes = ScriptedHermes::with(Vec::new());
+    let chat = chat_with(
+        Arc::new(Store::in_memory().expect("store")),
+        Arc::clone(&hermes),
+    );
+    let app: Router = super::router(Arc::clone(&chat));
+    let (_, created) = call(&app, "POST", "/v1/chat/sessions", None).await;
+    let id = created["id"].as_str().expect("id").to_owned();
+    assert!(created.get("title").is_none());
+    let path = format!("/v1/chat/sessions/{id}");
+
+    let (status, renamed) = call(&app, "PATCH", &path, Some(json!({"title": "Отпуск"}))).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(renamed["title"], "Отпуск");
+    let (status, invalid) = call(&app, "PATCH", &path, Some(json!({"title": "  "}))).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(invalid["code"], "chat_title_invalid");
+
+    let (_, pinned) = call(&app, "PATCH", &path, Some(json!({"pinned": true}))).await;
+    assert_eq!(pinned["pinned"], true);
+    let (_, list) = call(&app, "GET", "/v1/chat/sessions", None).await;
+    assert_eq!(list["sessions"][0]["id"], id.as_str());
+
+    call(&app, "PATCH", &path, Some(json!({"archived": true}))).await;
+    let (_, active) = call(&app, "GET", "/v1/chat/sessions", None).await;
+    assert!(
+        active["sessions"]
+            .as_array()
+            .expect("sessions")
+            .iter()
+            .all(|s| s["id"] != id.as_str())
+    );
+    let (_, archived) = call(&app, "GET", "/v1/chat/sessions?archived=true", None).await;
+    assert_eq!(archived["sessions"][0]["id"], id.as_str());
+
+    let (status, _) = call(&app, "DELETE", &path, None).await;
+    assert_eq!(status, StatusCode::OK);
+    let (status, _) = call(&app, "DELETE", &path, None).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    settle_tasks().await;
+    assert_eq!(
+        hermes.calls.lock().expect("calls").clone(),
+        vec![
+            format!("patch {id} {{\"title\":\"Отпуск\"}}"),
+            format!("delete {id}")
+        ]
+    );
+}
+
+#[tokio::test]
+async fn a_streaming_reply_can_be_stopped_and_retried() {
+    let hermes = ScriptedHermes::with(vec![
+        vec![
+            TurnEvent::Delta("Начинаю".to_owned()),
+            TurnEvent::Delta(HANG.to_owned()),
+        ],
+        vec![TurnEvent::Completed("Заново.".to_owned())],
+    ]);
+    let chat = chat_with(Arc::new(Store::in_memory().expect("store")), hermes);
+    let app: Router = super::router(Arc::clone(&chat));
+    let (_, sent) = call(
+        &app,
+        "POST",
+        "/v1/chat/messages",
+        Some(json!({"clientId": "c-1", "text": "Расскажи длинно"})),
+    )
+    .await;
+    let reply = sent["reply"]["id"].as_str().expect("reply").to_owned();
+    for _ in 0..200 {
+        if chat.live_text(&reply).as_deref() == Some("Начинаю") {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+    let (status, _) = call(
+        &app,
+        "POST",
+        &format!("/v1/chat/messages/{reply}/stop"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let stopped = settled(&chat, &reply).await;
+    assert_eq!(stopped.status, Status::Failed);
+    assert_eq!(stopped.error, Some(ErrorKey::ChatStopped));
+    assert_eq!(stopped.text, "Начинаю");
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/v1/chat/messages/{reply}/stop"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(body["code"], "chat_not_stoppable");
+
+    call(
+        &app,
+        "POST",
+        &format!("/v1/chat/messages/{reply}/retry"),
+        None,
+    )
+    .await;
+    assert_eq!(settled(&chat, &reply).await.text, "Заново.");
+}
+
+#[tokio::test]
+async fn tool_activity_and_titles_reach_the_session_stream() {
+    let hermes = ScriptedHermes::with(vec![
+        vec![
+            TurnEvent::Tool {
+                name: "ha_call".to_owned(),
+                done: false,
+            },
+            TurnEvent::Tool {
+                name: "ha_call".to_owned(),
+                done: true,
+            },
+            TurnEvent::Completed("Включил.".to_owned()),
+        ],
+        vec![TurnEvent::Completed("Куплю.".to_owned())],
+    ]);
+    *hermes.title.lock().expect("title") = Some("Свет в гостиной".to_owned());
+    let chat = chat_with(
+        Arc::new(Store::in_memory().expect("store")),
+        Arc::clone(&hermes),
+    );
+    let created = chat
+        .create_session(&super::model::CreateSession::default())
+        .expect("session");
+    let mut events = chat.subscribe();
+    let sent = chat
+        .send(&SendRequest {
+            session_id: Some(created.id.clone()),
+            ..request("c-1", "Включи свет\nв гостиной", None)
+        })
+        .expect("send");
+    settled(&chat, &sent.reply.id).await;
+    settle_tasks().await;
+    let mut tools = Vec::new();
+    let mut titles = Vec::new();
+    while let Ok(event) = events.try_recv() {
+        match event {
+            Event::Tool(tool) => tools.push((tool.session_id, tool.name, tool.done)),
+            Event::Session(session) => titles.push(session.title),
+            _ => {}
+        }
+    }
+    assert_eq!(
+        tools,
+        vec![
+            (created.id.clone(), "ha_call".to_owned(), false),
+            (created.id.clone(), "ha_call".to_owned(), true)
+        ]
+    );
+    assert_eq!(titles, vec![Some("Свет в гостиной".to_owned())]);
+
+    *hermes.title.lock().expect("title") = None;
+    let second = chat
+        .create_session(&super::model::CreateSession::default())
+        .expect("session");
+    let reply = chat
+        .send(&SendRequest {
+            session_id: Some(second.id.clone()),
+            ..request(
+                "c-2",
+                "  \nКупи хлеба и молока, пожалуйста, до вечера сегодня",
+                None,
+            )
+        })
+        .expect("send")
+        .reply;
+    settled(&chat, &reply.id).await;
+    settle_tasks().await;
+    let titled = chat
+        .store
+        .session(&second.id)
+        .expect("store")
+        .expect("session");
+    assert_eq!(
+        titled.title.as_deref(),
+        Some("Купи хлеба и молока, пожалуйста, до вече…")
+    );
+}
+
+#[tokio::test]
+async fn the_event_stream_can_follow_one_session() {
+    let filter = super::Filter {
+        alerts: true,
+        session: Some("s_1".to_owned()),
+    };
+    let delta = |session: &str| {
+        Event::Delta(super::model::Delta {
+            id: "m_1".to_owned(),
+            session_id: session.to_owned(),
+            offset: 0,
+            text: "x".to_owned(),
+        })
+    };
+    assert!(filter.admits(&delta("s_1")));
+    assert!(!filter.admits(&delta("s_2")));
+    assert!(
+        super::Filter {
+            alerts: true,
+            session: None
+        }
+        .admits(&delta("s_2"))
+    );
+}
+
+#[tokio::test]
+async fn a_legacy_transcript_becomes_the_default_session() {
+    let dir = tempfile::tempdir().expect("dir");
+    let path = dir.path().join("chat.db");
+    {
+        let legacy = rusqlite::Connection::open(&path).expect("open");
+        legacy
+            .execute_batch(
+                "CREATE TABLE chat_messages (seq INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT NOT NULL UNIQUE, \
+                 version INTEGER NOT NULL, client_id TEXT UNIQUE, role TEXT NOT NULL, kind TEXT NOT NULL, \
+                 text TEXT NOT NULL, reply_to TEXT, request_id TEXT, status TEXT NOT NULL, error TEXT, \
+                 created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL); \
+                 INSERT INTO chat_messages (id, version, role, kind, text, status, created_at, updated_at) \
+                 VALUES ('m_old', 1, 'user', 'text', 'Старый вопрос', 'done', 1, 1);",
+            )
+            .expect("legacy schema");
+    }
+    let chat = chat_with(
+        Arc::new(Store::open(&path).expect("store")),
+        ScriptedHermes::with(Vec::new()),
+    );
+    let page = chat.page(None, None).expect("page");
+    assert_eq!(page.messages.len(), 1);
+    assert_eq!(page.messages[0].session_id, DEFAULT_SESSION);
+    let sessions = chat.sessions(false).expect("sessions").sessions;
+    assert_eq!(sessions.len(), 1);
+    assert_eq!(sessions[0].id, DEFAULT_SESSION);
+    assert_eq!(
+        sessions[0].preview.as_ref().map(|p| p.text.as_str()),
+        Some("Старый вопрос")
     );
 }

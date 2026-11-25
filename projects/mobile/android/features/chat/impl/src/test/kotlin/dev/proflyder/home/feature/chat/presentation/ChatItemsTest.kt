@@ -4,6 +4,7 @@ import dev.proflyder.home.core.model.ChatRole
 import dev.proflyder.home.core.model.ChatStatus
 import dev.proflyder.home.feature.chat.ChatFixtures
 import dev.proflyder.home.feature.chat.ChatFocus
+import dev.proflyder.home.feature.chat.ChatLink
 import dev.proflyder.home.feature.chat.ChatRoute
 import dev.proflyder.home.feature.chat.data.ChatTimeline
 import dev.proflyder.home.feature.chat.data.Outgoing
@@ -32,8 +33,10 @@ class ChatItemsTest {
         val card = items.filterIsInstance<ChatItem.Alert>().single()
         assertEquals("m1", card.asBubble().messageId)
         assertTrue(card.asBubble().quotable)
-        assertEquals("m_7", ChatRoute.messageId("chat/message/m_7"))
-        assertEquals(null, ChatRoute.messageId("chat"))
+        assertEquals(ChatLink(ChatRoute.LEGACY_SESSION_ID, "m_7"), ChatRoute.parse("chat/message/m_7"))
+        assertEquals(ChatLink("s_1", "m_7"), ChatRoute.parse("chat/session/s_1/message/m_7"))
+        assertEquals(ChatLink("s_1", null), ChatRoute.parse("chat/session/s_1"))
+        assertEquals(null, ChatRoute.parse("chat"))
         assertTrue(ChatRoute.isChat("chat/message/m_7"))
         ChatFocus.request("m_7")
         assertEquals("m_7", ChatFocus.take())

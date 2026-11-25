@@ -8,7 +8,7 @@ use home_worker::{Worker, WorkerConfig};
 use tokio::net::TcpListener;
 
 use crate::api::{Options as ProxyOptions, Proxy};
-use crate::chat_relay::ChatRelay;
+use crate::chat_relay::{ChatRelay, SessionPolicy};
 use crate::config::{Config, LogLevel};
 use crate::domain::clock::{Clock, SystemClock};
 use crate::domain::profile::Profile;
@@ -205,7 +205,7 @@ pub async fn run() -> anyhow::Result<()> {
     if let Some(address) = config.chat_relay_address().context("chat relay address")? {
         let relay = ChatRelay::new(
             Upstream::new(&config.upstream, DEFAULT_TIMEOUT).context("chat relay upstream")?,
-            &config.chat_relay_session,
+            SessionPolicy::new(&config.chat_relay_session, &config.chat_relay_prefix),
             config.chat_relay_token.provider(),
             config.api_key.provider(),
         );

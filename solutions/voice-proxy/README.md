@@ -169,16 +169,21 @@ back to the consumer. When enqueueing fails the answer is announced directly.
 
 The Android chat (`mcp-gateway` `/v1/chat/*`) needs Hermes' sessions API,
 which listens only on loopback inside the Hermes Pod. The proxy is already in
-that Pod, so it carries a second, optional listener that relays exactly two
-calls for one session:
+that Pod, so it carries a second, optional listener that relays only the app's
+own sessions: `HERMES_CHAT_RELAY_SESSION` (`home-app`) and ids starting with
+`HERMES_CHAT_RELAY_PREFIX` (`app_`; ASCII letters, digits, `_`, `-`, at most
+96 characters):
 
 | Method | Path | Rule |
 |---|---|---|
-| `POST` | `/api/sessions` | JSON body `id` must equal `HERMES_CHAT_RELAY_SESSION` |
-| `POST` | `/api/sessions/<session>/chat/stream` | path session must match; the SSE body is passed through unchanged |
+| `POST` | `/api/sessions` | JSON body `id` must be an app session |
+| `GET` | `/api/sessions/<session>` | read the session (auto title) |
+| `PATCH` | `/api/sessions/<session>` | body may only contain `title`; `archived` and the rest are refused, Hermes archive triggers retention deletion |
+| `DELETE` | `/api/sessions/<session>` | delete the session |
+| `POST` | `/api/sessions/<session>/chat/stream` | the SSE body is passed through unchanged |
 
-Everything else answers `404`; a wrong caller token `401`; another session
-`403`. The caller presents `HERMES_CHAT_RELAY_TOKEN_FILE`
+Everything else answers `404`; a wrong caller token `401`; another session or
+a refused field `403`. The caller presents `HERMES_CHAT_RELAY_TOKEN_FILE`
 (`k8s/home-assistant/hermes-chat-relay`); upstream calls carry
 `Authorization: Bearer <API_SERVER_KEY>` from `HERMES_API_KEY`, so the gateway
 never sees the Hermes key. The listener is off unless
@@ -217,7 +222,8 @@ is **unset**, not when it is set to an empty string.
 | `HERMES_VOICE_SATELLITE` | `assist_satellite.iandeks_stantsiia_midi_assist_satellite` | Satellite entity |
 | `HERMES_VOICE_MEDIA_PLAYER` | `media_player.iandeks_stantsiia_midi_media_player` | Media player idle gate |
 | `HERMES_CHAT_RELAY_LISTEN` | — | `host:port` of the app chat relay; empty disables it |
-| `HERMES_CHAT_RELAY_SESSION` | `home-app` | The only Hermes session the relay accepts |
+| `HERMES_CHAT_RELAY_SESSION` | `home-app` | The legacy app session the relay accepts |
+| `HERMES_CHAT_RELAY_PREFIX` | `app_` | Prefix of the other app sessions; empty admits only the legacy one |
 | `HERMES_CHAT_RELAY_TOKEN_FILE` | — | Caller Bearer file (mcp-gateway) |
 | `HERMES_CHAT_RELAY_TOKEN` | — | Caller Bearer, inline fallback |
 | `HERMES_API_KEY_FILE` | — | Hermes `API_SERVER_KEY` file for relayed calls |

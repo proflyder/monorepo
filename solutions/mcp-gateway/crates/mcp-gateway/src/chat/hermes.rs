@@ -1,4 +1,5 @@
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::collections::HashSet;
+use std::sync::{Mutex, PoisonError};
 use std::time::Duration;
 
 use serde_json::{Value, json};
@@ -8,27 +9,40 @@ use super::model::ErrorKey;
 use crate::tools::BoxFuture;
 
 pub const SESSION_TITLE: &str = "Home app";
+pub const THINKING_TOOL: &str = "_thinking";
 pub const READ_TIMEOUT: Duration = Duration::from_secs(150);
 pub const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TurnEvent {
     Delta(String),
+    Tool { name: String, done: bool },
     Completed(String),
     Failed(ErrorKey),
 }
 
+pub struct Turn<'a> {
+    pub session: &'a str,
+    pub title: Option<&'a str>,
+    pub message: Value,
+}
+
 pub trait HermesApi: Send + Sync {
-    fn run<'a>(&'a self, message: Value, sink: mpsc::Sender<TurnEvent>) -> BoxFuture<'a, ()>;
+    fn run<'a>(&'a self, turn: Turn<'a>, sink: mpsc::Sender<TurnEvent>) -> BoxFuture<'a, ()>;
+
+    fn title<'a>(&'a self, session: &'a str) -> BoxFuture<'a, Option<String>>;
+
+    fn patch<'a>(&'a self, session: &'a str, fields: Value) -> BoxFuture<'a, Result<(), ErrorKey>>;
+
+    fn delete<'a>(&'a self, session: &'a str) -> BoxFuture<'a, Result<(), ErrorKey>>;
 }
 
 pub struct Client {
     http: reqwest::Client,
     base_url: String,
     token: String,
-    session: String,
     prompt: String,
-    session_ready: AtomicBool,
+    ready: Mutex<HashSet<String>>,
 }
 
 impl std::fmt::Debug for Client {
@@ -36,18 +50,12 @@ impl std::fmt::Debug for Client {
         formatter
             .debug_struct("chat::hermes::Client")
             .field("base_url", &self.base_url)
-            .field("session", &self.session)
             .finish_non_exhaustive()
     }
 }
 
 impl Client {
-    pub fn new(
-        base_url: &str,
-        token: String,
-        session: &str,
-        prompt: String,
-    ) -> Result<Self, String> {
+    pub fn new(base_url: &str, token: String, prompt: String) -> Result<Self, String> {
         let _already_installed = rustls::crypto::ring::default_provider().install_default();
         let http = reqwest::Client::builder()
             .connect_timeout(CONNECT_TIMEOUT)
@@ -58,46 +66,65 @@ impl Client {
             http,
             base_url: base_url.trim().trim_end_matches('/').to_owned(),
             token,
-            session: session.to_owned(),
             prompt,
-            session_ready: AtomicBool::new(false),
+            ready: Mutex::new(HashSet::new()),
         })
     }
 
-    async fn ensure_session(&self) -> Result<(), ErrorKey> {
-        if self.session_ready.load(Ordering::Acquire) {
+    fn session_url(&self, session: &str) -> String {
+        format!("{}/api/sessions/{session}", self.base_url)
+    }
+
+    fn mark(&self, session: &str, ready: bool) {
+        let mut known = self.ready.lock().unwrap_or_else(PoisonError::into_inner);
+        if ready {
+            known.insert(session.to_owned());
+        } else {
+            known.remove(session);
+        }
+    }
+
+    fn is_ready(&self, session: &str) -> bool {
+        self.ready
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .contains(session)
+    }
+
+    async fn ensure_session(&self, session: &str, title: Option<&str>) -> Result<(), ErrorKey> {
+        if self.is_ready(session) {
             return Ok(());
+        }
+        let mut body = json!({"id": session});
+        if let Some(title) = title {
+            body["title"] = Value::String(title.to_owned());
         }
         let response = self
             .http
             .post(format!("{}/api/sessions", self.base_url))
             .bearer_auth(&self.token)
             .header(reqwest::header::CONTENT_TYPE, "application/json")
-            .body(json!({"id": self.session, "title": SESSION_TITLE}).to_string())
+            .body(body.to_string())
             .send()
             .await
             .map_err(|_| ErrorKey::ChatUpstreamUnavailable)?;
-        let status = response.status().as_u16();
-        match status {
+        match response.status().as_u16() {
             200..=299 | 409 => {
-                self.session_ready.store(true, Ordering::Release);
+                self.mark(session, true);
                 Ok(())
             }
             _ => Err(ErrorKey::ChatUpstreamUnavailable),
         }
     }
 
-    async fn stream(&self, message: Value, sink: &mpsc::Sender<TurnEvent>) -> TurnEvent {
-        if let Err(key) = self.ensure_session().await {
+    async fn stream(&self, turn: Turn<'_>, sink: &mpsc::Sender<TurnEvent>) -> TurnEvent {
+        if let Err(key) = self.ensure_session(turn.session, turn.title).await {
             return TurnEvent::Failed(key);
         }
-        let body = json!({"message": message, "system_message": self.prompt});
+        let body = json!({"message": turn.message, "system_message": self.prompt});
         let sent = self
             .http
-            .post(format!(
-                "{}/api/sessions/{}/chat/stream",
-                self.base_url, self.session
-            ))
+            .post(format!("{}/chat/stream", self.session_url(turn.session)))
             .bearer_auth(&self.token)
             .header(reqwest::header::ACCEPT, "text/event-stream")
             .header(reqwest::header::CONTENT_TYPE, "application/json")
@@ -107,7 +134,7 @@ impl Client {
         let mut response = match sent {
             Ok(response) if response.status().is_success() => response,
             Ok(response) if response.status().as_u16() == 404 => {
-                self.session_ready.store(false, Ordering::Release);
+                self.mark(turn.session, false);
                 return TurnEvent::Failed(ErrorKey::ChatUpstreamUnavailable);
             }
             Ok(_) | Err(_) => return TurnEvent::Failed(ErrorKey::ChatUpstreamUnavailable),
@@ -155,6 +182,17 @@ async fn apply(
             };
             Some(TurnEvent::Completed(text))
         }
+        "tool.started" | "tool.completed" | "tool.failed" => {
+            let tool = payload["tool_name"].as_str().unwrap_or_default();
+            if !tool.is_empty() && tool != THINKING_TOOL {
+                let event = TurnEvent::Tool {
+                    name: tool.to_owned(),
+                    done: name != "tool.started",
+                };
+                let _sent = sink.send(event).await;
+            }
+            None
+        }
         "error" | "run.failed" | "run.cancelled" => {
             Some(TurnEvent::Failed(ErrorKey::ChatUpstreamFailed))
         }
@@ -162,12 +200,75 @@ async fn apply(
     }
 }
 
+impl Client {
+    async fn read_title(&self, session: &str) -> Option<String> {
+        let response = self
+            .http
+            .get(self.session_url(session))
+            .bearer_auth(&self.token)
+            .send()
+            .await
+            .ok()
+            .filter(|response| response.status().is_success())?;
+        let body: Value = serde_json::from_str(&response.text().await.ok()?).ok()?;
+        let session = body.get("session").unwrap_or(&body);
+        session["title"]
+            .as_str()
+            .map(str::trim)
+            .filter(|title| !title.is_empty())
+            .map(str::to_owned)
+    }
+
+    async fn send_patch(&self, session: &str, fields: Value) -> Result<(), ErrorKey> {
+        let response = self
+            .http
+            .patch(self.session_url(session))
+            .bearer_auth(&self.token)
+            .header(reqwest::header::CONTENT_TYPE, "application/json")
+            .body(fields.to_string())
+            .send()
+            .await
+            .map_err(|_| ErrorKey::ChatUpstreamUnavailable)?;
+        upstream_result(response.status())
+    }
+
+    async fn send_delete(&self, session: &str) -> Result<(), ErrorKey> {
+        self.mark(session, false);
+        let response = self
+            .http
+            .delete(self.session_url(session))
+            .bearer_auth(&self.token)
+            .send()
+            .await
+            .map_err(|_| ErrorKey::ChatUpstreamUnavailable)?;
+        upstream_result(response.status())
+    }
+}
+
+fn upstream_result(status: reqwest::StatusCode) -> Result<(), ErrorKey> {
+    (status.is_success() || status == reqwest::StatusCode::NOT_FOUND)
+        .then_some(())
+        .ok_or(ErrorKey::ChatUpstreamFailed)
+}
+
 impl HermesApi for Client {
-    fn run<'a>(&'a self, message: Value, sink: mpsc::Sender<TurnEvent>) -> BoxFuture<'a, ()> {
+    fn run<'a>(&'a self, turn: Turn<'a>, sink: mpsc::Sender<TurnEvent>) -> BoxFuture<'a, ()> {
         Box::pin(async move {
-            let terminal = self.stream(message, &sink).await;
+            let terminal = self.stream(turn, &sink).await;
             let _sent = sink.send(terminal).await;
         })
+    }
+
+    fn title<'a>(&'a self, session: &'a str) -> BoxFuture<'a, Option<String>> {
+        Box::pin(self.read_title(session))
+    }
+
+    fn patch<'a>(&'a self, session: &'a str, fields: Value) -> BoxFuture<'a, Result<(), ErrorKey>> {
+        Box::pin(self.send_patch(session, fields))
+    }
+
+    fn delete<'a>(&'a self, session: &'a str) -> BoxFuture<'a, Result<(), ErrorKey>> {
+        Box::pin(self.send_delete(session))
     }
 }
 

@@ -24,6 +24,10 @@ internal fun chatErrorText(key: String?): Int = when (key) {
     "chat_interrupted" -> R.string.chat_error_chat_interrupted
     "chat_storage_failed" -> R.string.chat_error_chat_storage_failed
     "chat_unauthorized" -> R.string.chat_error_chat_unauthorized
+    "chat_stopped" -> R.string.chat_error_chat_stopped
+    "chat_session_not_found" -> R.string.chat_error_chat_session_not_found
+    "chat_title_invalid" -> R.string.chat_error_chat_title_invalid
+    "chat_not_stoppable" -> R.string.chat_error_chat_not_stoppable
     else -> R.string.chat_error_generic
 }
 
@@ -51,3 +55,15 @@ private fun relativeDay(millis: Long, today: LocalDate, zone: ZoneId): String = 
     today.atStartOfDay(zone).toInstant().toEpochMilli(),
     DateUtils.DAY_IN_MILLIS,
 ).toString()
+
+internal fun chatListTime(context: Context, atMillis: Long, zone: ZoneId = ZoneId.systemDefault()): String {
+    val date = java.time.Instant.ofEpochMilli(atMillis).atZone(zone).toLocalDate()
+    val today = LocalDate.now(zone)
+    return when {
+        date == today -> chatTime(context, atMillis)
+        date.isAfter(today.minusDays(WEEK_DAYS)) -> DateUtils.formatDateTime(context, atMillis, DateUtils.FORMAT_SHOW_WEEKDAY or DateUtils.FORMAT_ABBREV_WEEKDAY)
+        else -> DateFormat.getDateFormat(context).format(Date(atMillis))
+    }
+}
+
+private const val WEEK_DAYS = 7L

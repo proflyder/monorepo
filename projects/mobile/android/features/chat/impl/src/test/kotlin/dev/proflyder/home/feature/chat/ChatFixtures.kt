@@ -8,6 +8,8 @@ import dev.proflyder.home.core.model.ChatMessage
 import dev.proflyder.home.core.model.ChatQuote
 import dev.proflyder.home.core.model.ChatRole
 import dev.proflyder.home.core.model.ChatStatus
+import dev.proflyder.home.core.model.ChatPreview
+import dev.proflyder.home.core.model.ChatSession
 
 internal object ChatFixtures {
     const val NOON = 1_795_129_665_000L
@@ -90,5 +92,54 @@ internal object ChatFixtures {
         ),
         message("m5", 5, ChatRole.USER, "Перезапусти scheduler", clientId = "c3"),
         message("m6", 6, ChatRole.ASSISTANT, "Перезапуск", status = ChatStatus.FAILED, error = "chat_upstream_failed"),
+    )
+
+    fun session(
+        id: String,
+        title: String? = null,
+        preview: ChatPreview? = null,
+        pinned: Boolean = false,
+        archived: Boolean = false,
+        updatedAt: Long = NOON,
+    ): ChatSession = ChatSession(id, title, pinned, archived, preview, NOON - DAY, updatedAt)
+
+    private const val DAY = 86_400_000L
+
+    const val DRAFT = "Подними лимит памяти до 512 МБ\nи перезапусти, потом проверь логи ещё раз"
+
+    val sessions: List<ChatSession> = listOf(
+        session(
+            "home-app",
+            "Главный чат",
+            ChatPreview(ChatRole.ASSISTANT, ChatKind.TEXT, "Свет в гостиной включён, музыка играет на колонке.", ChatStatus.DONE),
+            pinned = true,
+            updatedAt = NOON + 40 * MINUTE,
+        ),
+        session(
+            "s_trip",
+            "Поездка в Алматы",
+            ChatPreview(ChatRole.USER, ChatKind.TEXT, "Собери список вещей на три дня в горы", ChatStatus.DONE),
+            updatedAt = NOON + 25 * MINUTE,
+        ),
+        session(
+            "s_k3s",
+            "Почему падает scheduler",
+            ChatPreview(ChatRole.ASSISTANT, ChatKind.TEXT, "", ChatStatus.STREAMING),
+            updatedAt = NOON + 12 * MINUTE,
+        ),
+        session(
+            "s_shop",
+            "Покупки на выходные",
+            ChatPreview(ChatRole.USER, ChatKind.VOICE, "", ChatStatus.DONE),
+            updatedAt = NOON - DAY,
+        ),
+        session("s_new", null, null, updatedAt = NOON - 3 * DAY),
+        session(
+            "s_old",
+            "Ремонт ванной",
+            ChatPreview(ChatRole.ASSISTANT, ChatKind.TEXT, "Готово, смета в заметках.", ChatStatus.DONE),
+            archived = true,
+            updatedAt = NOON - 30 * DAY,
+        ),
     )
 }

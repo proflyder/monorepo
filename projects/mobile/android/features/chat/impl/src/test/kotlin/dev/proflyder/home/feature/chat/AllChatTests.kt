@@ -6,6 +6,8 @@ import dev.proflyder.home.feature.chat.data.OutboxCodecTest
 import dev.proflyder.home.feature.chat.presentation.ChatItemsTest
 import dev.proflyder.home.feature.chat.presentation.ChatMarkdownTest
 import dev.proflyder.home.feature.chat.presentation.ChatScreenshotTest
+import dev.proflyder.home.feature.chat.presentation.ChatViewModelsTest
+import dev.proflyder.home.feature.chat.presentation.ChatSessionsScreenshotTest
 import org.junit.runner.RunWith
 import org.junit.runners.Suite
 
@@ -17,5 +19,7 @@ import org.junit.runners.Suite
     ChatItemsTest::class,
     ChatMarkdownTest::class,
     ChatScreenshotTest::class,
+    ChatViewModelsTest::class,
+    ChatSessionsScreenshotTest::class,
 )
 class AllChatTests

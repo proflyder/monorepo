@@ -39,6 +39,7 @@ data class ChatQuote(
 
 data class ChatMessage(
     val id: String,
+    val sessionId: String = "",
     val seq: Long,
     val version: Long,
     val clientId: String?,
@@ -70,4 +71,33 @@ sealed interface ChatEvent {
     data class Upsert(val message: ChatMessage) : ChatEvent
 
     data class Delta(val id: String, val offset: Int, val text: String) : ChatEvent
+
+    data class Tool(val id: String, val name: String, val done: Boolean) : ChatEvent
+
+    data class SessionChanged(val session: ChatSession) : ChatEvent
+
+    data class SessionRemoved(val id: String) : ChatEvent
 }
+
+data class ChatPreview(
+    val role: ChatRole,
+    val kind: ChatKind,
+    val text: String,
+    val status: ChatStatus,
+)
+
+data class ChatSession(
+    val id: String,
+    val title: String?,
+    val pinned: Boolean,
+    val archived: Boolean,
+    val preview: ChatPreview?,
+    val createdAtMillis: Long,
+    val updatedAtMillis: Long,
+)
+
+data class ChatSessionPatch(
+    val title: String? = null,
+    val pinned: Boolean? = null,
+    val archived: Boolean? = null,
+)
