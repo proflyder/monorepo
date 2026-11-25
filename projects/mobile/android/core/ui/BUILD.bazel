@@ -17,6 +17,7 @@ metro_android_library(
         "@maven//:androidx_appcompat_appcompat",
         "@maven//:androidx_core_core_ktx",
         "@maven//:androidx_fragment_fragment_ktx",
+        "@maven//:androidx_lifecycle_lifecycle_process",
         "@maven//:androidx_lifecycle_lifecycle_runtime_ktx",
         "@maven//:androidx_lifecycle_lifecycle_viewmodel_ktx",
         "@maven//:androidx_lifecycle_lifecycle_viewmodel_savedstate",
@@ -44,6 +45,8 @@ home_android_local_test(
     ],
     deps = [
         "@maven//:androidx_appcompat_appcompat",
+        "@maven//:androidx_fragment_fragment_ktx",
+        "@maven//:androidx_lifecycle_lifecycle_process",
         "@maven//:com_google_android_material_material",
         "@maven//:junit_junit",
         "@maven//:org_robolectric_robolectric",

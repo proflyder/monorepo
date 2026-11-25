@@ -7,7 +7,6 @@ import android.view.View
 import android.widget.LinearLayout
 import androidx.appcompat.app.AlertDialog
 import androidx.core.view.isVisible
-import androidx.lifecycle.lifecycleScope
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.materialswitch.MaterialSwitch
 import dev.proflyder.home.core.designsystem.HomePopupMenu
@@ -38,7 +37,7 @@ internal class AccessFragment :
     private var editorKey: String? = null
     private var createdDialog: AlertDialog? = null
     private val clipboard by lazy {
-        SensitiveClipboard(requireContext(), getString(R.string.access_title), viewLifecycleOwner.lifecycleScope)
+        SensitiveClipboard.forProcess(requireContext(), getString(R.string.access_title))
     }
 
     override fun onViewReady(binding: FragmentAccessBinding, savedInstanceState: Bundle?) {

@@ -6,6 +6,8 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.os.Build
 import android.os.PersistableBundle
+import androidx.lifecycle.ProcessLifecycleOwner
+import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -44,7 +46,10 @@ class SensitiveClipboard(
         clipboard.setPrimaryClip(ClipData.newPlainText("", ""))
     }
 
-    private companion object {
-        const val CLEAR_AFTER_MILLIS = 30_000L
+    companion object {
+        private const val CLEAR_AFTER_MILLIS = 30_000L
+
+        fun forProcess(context: Context, label: String): SensitiveClipboard =
+            SensitiveClipboard(context.applicationContext, label, ProcessLifecycleOwner.get().lifecycleScope)
     }
 }

@@ -51,7 +51,9 @@ internal class SecretPathFragment :
     }
 
     private val adapter by lazy { SecretPathAdapter(actions) }
-    private val clipboard by lazy { SensitiveClipboard(requireContext(), getString(R.string.secrets_clip_label), viewLifecycleOwner.lifecycleScope) }
+    private val clipboard by lazy {
+        SensitiveClipboard.forProcess(requireContext(), getString(R.string.secrets_clip_label))
+    }
 
     private var activeDialog: AlertDialog? = null
     private var activeTag: DialogTag? = null

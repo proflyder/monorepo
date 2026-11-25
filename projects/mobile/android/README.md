@@ -52,7 +52,8 @@ a typed router. Device acceptance and open work: [STATE](../../../docs/STATE.md)
   and re-bind/revoke are explicit. A tapped value re-masks after 30 s; copying
   goes through the shared `core/ui` `SensitiveClipboard` (also used for a newly
   created access token), which marks the clip sensitive and clears it after
-  30 s. Every secrets screen
+  30 s. `SensitiveClipboard.forProcess` runs the clear on the process
+  lifecycle scope, so leaving or recreating the screen does not cancel it. Every secrets screen
   sets `FLAG_SECURE`, secrets notifications use `VISIBILITY_SECRET` so paths
   stay off the lock screen, the client is excluded from network inspection and
   values are never cached on disk.
