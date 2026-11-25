@@ -199,7 +199,11 @@ class NotificationHistorySwipeFragmentTest {
         val at = IntArray(2).also(row::getLocationInWindow)
         val left = at[0] - row.translationX.toInt()
         val x = if (sign < 0) left + row.width - PROBE_INSET else left + PROBE_INSET
-        return bitmap.getPixel(x, at[1] + row.height / 2)
+        val corner = if (sign < 0) left + row.width - 1 else left
+        val center = bitmap.getPixel(x, at[1] + row.height / 2)
+        val rounded = row.translationX == 0f || bitmap.getPixel(corner, at[1]) != center
+        assertTrue("action background has the card's rounded corner", rounded)
+        return center
     }
 
     private fun color(view: View, attr: Int): Int = MaterialColors.getColor(view, attr)

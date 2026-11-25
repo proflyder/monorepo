@@ -6,7 +6,6 @@
     <dimen name="settings_row_padding_chevron">16dp</dimen>
     <dimen name="settings_row_icon">24dp</dimen>
     <dimen name="settings_row_icon_gap">16dp</dimen>
-    <dimen name="settings_history_divider_inset">60dp</dimen>
     <dimen name="settings_row_chevron">20dp</dimen>
     <dimen name="settings_empty_padding">32dp</dimen>
     <dimen name="settings_empty_icon">48dp</dimen>
