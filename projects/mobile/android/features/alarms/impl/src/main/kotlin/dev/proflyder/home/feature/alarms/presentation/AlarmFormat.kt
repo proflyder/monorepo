@@ -67,9 +67,14 @@ internal object AlarmFormat {
                 instant(schedule.snoozeUntilUnix),
             )
             !schedule.enabled || schedule.nextDueUnix <= 0 -> context.getString(R.string.alarms_card_off, repeat)
-            else -> context.getString(R.string.alarms_card_next, repeat, nextDay(context, schedule))
+            else -> upcoming(context, schedule, repeat, Instant.ofEpochSecond(nowUnix))
         }
     }
+
+    private fun upcoming(context: Context, schedule: Schedule, repeat: String, now: Instant): String =
+        AlarmCountdownText.card(context.resources, schedule, now, ZoneId.systemDefault())
+            ?.let { context.getString(R.string.alarms_card_countdown, repeat, it) }
+            ?: context.getString(R.string.alarms_card_next, repeat, nextDay(context, schedule))
 
     private fun nextDay(context: Context, schedule: Schedule): String {
         val zone = ZoneId.systemDefault()

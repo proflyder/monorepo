@@ -40,6 +40,8 @@ class AlarmEditorViewModelTest {
         session = EditorDraftSession(state, "alarm", AlarmDraftCodec, AlarmEditorCompletion.entries) { "https://home" },
         defaultLabel = "Alarm",
         alarmId = alarmId,
+        now = { NOW },
+        zone = { ZONE },
     )
 
     @Test
@@ -71,7 +73,10 @@ class AlarmEditorViewModelTest {
         val viewModel = viewModel(SavedStateHandle(), alarmId = "a1")
         viewModel.dispatch(AlarmEditorIntent.SetLabel("Run"))
         viewModel.dispatch(AlarmEditorIntent.Save)
-        assertEquals(AlarmEditorEvent.Completed(RouteNotice(R.string.alarms_saved)), viewModel.events.first())
+        val completed = viewModel.events.first() as AlarmEditorEvent.Completed
+        assertEquals(RouteNotice(R.string.alarms_saved), completed.notice)
+        assertEquals(NOW, completed.countdown?.now)
+        assertTrue(checkNotNull(completed.countdown).trigger.isAfter(NOW))
         assertEquals("Run", repository["a1"]?.label)
         assertEquals(1, remote.listCalls)
     }
@@ -92,3 +97,6 @@ class AlarmEditorViewModelTest {
         assertEquals(Route.Screen(AlarmEditorDestination(created)), notice.route)
     }
 }
+
+private val NOW: java.time.Instant = java.time.Instant.parse("2026-11-26T03:00:00Z")
+private val ZONE: java.time.ZoneId = java.time.ZoneId.of("Asia/Almaty")

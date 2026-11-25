@@ -86,6 +86,59 @@ class AlarmItemLayoutTest {
     fun selectionCardReplacesSwitchWithIndicatorAt411dp() =
         assertSelectionCard(1f, "alarm-card-selection-411dp-ru.png")
 
+    @Test
+    fun countdownCardKeepsTheRegularCardHeight() = assertCountdownPair(DARK_THEME, "alarm-list-countdown-dark-ru.png")
+
+    @Test
+    @Config(qualifiers = "ru-rRU-w360dp-h800dp-notnight-xxhdpi")
+    fun countdownCardKeepsTheRegularCardHeightInLightTheme() =
+        assertCountdownPair(LIGHT_THEME, "alarm-list-countdown-light-ru.png")
+
+    @Test
+    fun countdownCardKeepsTheRegularCardHeightWithLargeFont() =
+        assertCountdownPair(DARK_THEME, null, fontScale = 1.15f, mustShow = "через 7 ч")
+
+    private fun assertCountdownPair(
+        theme: Int,
+        pngName: String?,
+        fontScale: Float = 1f,
+        mustShow: String = "через 7 ч 25 мин",
+    ) {
+        val now = Instant.now().epochSecond
+        val countdown = inflateAndBind(fontScale, schedule(false).copy(nextDueUnix = now + COUNTDOWN_SECONDS), theme = theme)
+        val regular = inflateAndBind(fontScale, schedule(false).copy(nextDueUnix = now + REGULAR_SECONDS), theme = theme)
+
+        assertTrue("countdown missing: ${countdown.alarmSummary.text}", countdown.alarmSummary.text.startsWith("через 7 ч 25 мин"))
+        assertTrue("regular card shows a countdown", !regular.alarmSummary.text.contains("через"))
+        assertEquals("countdown summary wrapped", 1, countdown.alarmSummary.lineCount)
+        val ellipsis = countdown.alarmSummary.layout.getEllipsisCount(0)
+        val visible = countdown.alarmSummary.text.length - ellipsis
+        assertTrue("countdown is cut by the ellipsis: $visible chars visible", visible >= mustShow.length)
+        assertEquals("countdown card height differs", regular.root.measuredHeight, countdown.root.measuredHeight)
+        when (pngName) {
+            null -> Unit
+            else -> saveList(theme, listOf(countdown, regular), pngName)
+        }
+    }
+
+    private fun saveList(theme: Int, cards: List<ItemAlarmBinding>, name: String) {
+        val themed = ContextThemeWrapper(RuntimeEnvironment.getApplication(), theme)
+        val list = android.widget.LinearLayout(themed).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            val margin = resources.getDimensionPixelSize(R.dimen.alarms_screen_margin)
+            setPadding(margin, margin, margin, margin)
+            setBackgroundColor(MaterialColors.getColor(this, android.R.attr.colorBackground))
+        }
+        val gap = list.resources.getDimensionPixelSize(R.dimen.alarms_screen_margin)
+        cards.forEach { card ->
+            list.addView(card.root, android.widget.LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = gap })
+        }
+        val width = list.resources.displayMetrics.widthPixels
+        list.measure(exactly(width), unspecified())
+        list.layout(0, 0, width, list.measuredHeight)
+        savePng(list, name)
+    }
+
     private fun assertIdleCard(fontScale: Float, pngName: String?) {
         val binding = inflateAndBind(fontScale, schedule(active = false))
         val cardWidth = cardWidth(binding.root)
@@ -275,12 +328,10 @@ class AlarmItemLayoutTest {
         schedule: Schedule,
         actionsAllowed: Boolean = true,
         selected: Boolean = false,
+        theme: Int = DARK_THEME,
     ): ItemAlarmBinding {
         RuntimeEnvironment.setFontScale(fontScale)
-        val themed = ContextThemeWrapper(
-            RuntimeEnvironment.getApplication(),
-            com.google.android.material.R.style.Theme_Material3_Dark_NoActionBar,
-        )
+        val themed = ContextThemeWrapper(RuntimeEnvironment.getApplication(), theme)
         val binding = ItemAlarmBinding.inflate(LayoutInflater.from(themed))
         bindAlarmCard(
             binding = binding,
@@ -354,6 +405,10 @@ class AlarmItemLayoutTest {
         const val MAX_IDLE_HEIGHT_DP = 112f
         const val RIPPLE_SETTLE_MS = 200L
         const val RGB_MASK = 0x00FFFFFF
+        const val COUNTDOWN_SECONDS = 7L * 3600 + 25 * 60 + 30
+        const val REGULAR_SECONDS = 3L * 24 * 3600
+        val DARK_THEME = com.google.android.material.R.style.Theme_Material3_Dark_NoActionBar
+        val LIGHT_THEME = com.google.android.material.R.style.Theme_Material3_Light_NoActionBar
     }
 }
 

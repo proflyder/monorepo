@@ -16,6 +16,7 @@ import org.junit.runners.Suite
     AlarmsScopeTest::class,
     UpcomingAlarmRulesTest::class,
     AlarmEditorViewModelTest::class,
+    AlarmMinuteTicksTest::class,
     dev.proflyder.home.feature.alarms.domain.SaveAlarmLabelTest::class,
 )
 class AllAlarmImplTests

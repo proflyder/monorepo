@@ -41,7 +41,10 @@ import dev.zacsweers.metro.ClassKey
 import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.binding
+import dev.proflyder.home.feature.alarms.nextTrigger
+import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
 import java.time.LocalDateTime
 
 internal data class AlarmEditorUiState(
@@ -75,9 +78,11 @@ internal sealed interface AlarmEditorEvent {
     data class PickTime(val hour: Int, val minute: Int) : AlarmEditorEvent
     data class PickDate(val selected: LocalDate) : AlarmEditorEvent
     data class PickRepeat(val repeat: RepeatKind, val days: Set<Int>) : AlarmEditorEvent
-    data class Completed(val notice: RouteNotice) : AlarmEditorEvent
+    data class Completed(val notice: RouteNotice, val countdown: AlarmEditorCountdown? = null) : AlarmEditorEvent
     data class OpenRoute(val route: Route) : AlarmEditorEvent
 }
+
+internal data class AlarmEditorCountdown(val now: Instant, val trigger: Instant)
 
 internal object AlarmDraftCodec : EditorDraftCodec<AlarmEditorDraft> {
     override fun encode(draft: AlarmEditorDraft): Map<String, Any?> = AlarmEditorDraftCodec.toMap(draft)
@@ -93,12 +98,14 @@ internal class AlarmEditorViewModel(
     private val session: AlarmDraftSession,
     private val defaultLabel: String,
     alarmId: String?,
+    private val now: () -> Instant = Instant::now,
+    private val zone: () -> ZoneId = ZoneId::systemDefault,
 ) : StateViewModel<AlarmEditorUiState, AlarmEditorIntent, AlarmEditorEvent>(
     session.restored?.toUiState() ?: AlarmEditorUiState(editing = alarmId != null),
 ) {
     init {
         session.restored?.takeIf { it.existingId == null }?.let { session.adoptRestoredCreate(it.toAlarmDraft()) }
-        session.pendingCompletion?.let { emit(AlarmEditorEvent.Completed(noticeFor(it, created = null))) }
+        session.pendingCompletion?.let { emit(AlarmEditorEvent.Completed(noticeFor(it, created = null), countdown())) }
         start(alarmId)
     }
 
@@ -186,7 +193,13 @@ internal class AlarmEditorViewModel(
         if (failure != null) return
         session.persist(currentState.toEditorDraft())
         session.complete(completion)
-        emit(AlarmEditorEvent.Completed(noticeFor(completion, created)))
+        emit(AlarmEditorEvent.Completed(noticeFor(completion, created), countdown()))
+    }
+
+    private fun countdown(): AlarmEditorCountdown? {
+        val at = now()
+        val trigger = currentState.existing?.nextTrigger(at, zone()) ?: currentState.toAlarmDraft().nextTrigger(at, zone())
+        return trigger?.let { AlarmEditorCountdown(at, it) }
     }
 
     private fun noticeFor(completion: AlarmEditorCompletion, created: String?): RouteNotice = when (completion) {

@@ -45,6 +45,7 @@ internal enum class AlarmAspect {
     ENABLED,
     SELECTION,
     CONTENT,
+    CLOCK,
 }
 
 internal val AlarmDiff = KeyedDiff<AlarmRow>(
@@ -60,18 +61,27 @@ internal val AlarmDiff = KeyedDiff<AlarmRow>(
 
 internal class AlarmAdapter(
     callback: AlarmAdapterCallback,
+    private val wallSeconds: () -> Long = { Instant.now().epochSecond },
 ) : BaseListAdapter<AlarmRow, ItemAlarmBinding, AlarmAdapterCallback>(callback, AlarmDiff) {
+    private var tickedMinute: Long? = null
+
+    fun tick(minute: Long) {
+        val previous = tickedMinute
+        tickedMinute = minute
+        if (previous != null && previous != minute) notifyItemRangeChanged(0, itemCount, PayloadSet.of(AlarmAspect.CLOCK))
+    }
 
     override fun onCreateHolder(
         inflater: LayoutInflater,
         parent: ViewGroup,
         viewType: Int,
     ): BaseViewHolder<AlarmRow, ItemAlarmBinding, AlarmAdapterCallback> =
-        Holder(ItemAlarmBinding.inflate(inflater, parent, false), callback)
+        Holder(ItemAlarmBinding.inflate(inflater, parent, false), callback, wallSeconds)
 
     private class Holder(
         binding: ItemAlarmBinding,
         callback: AlarmAdapterCallback,
+        private val wallSeconds: () -> Long,
     ) : BaseViewHolder<AlarmRow, ItemAlarmBinding, AlarmAdapterCallback>(binding, callback) {
         private val enabledSwitch = SwitchBinder(binding.alarmEnabled) { enabled ->
             callback.act(AlarmActionIntent.Toggle(item.alarm.id, enabled))
@@ -97,7 +107,7 @@ internal class AlarmAdapter(
                 binding = binding,
                 schedule = schedule,
                 context = context,
-                nowUnix = Instant.now().epochSecond,
+                nowUnix = wallSeconds(),
                 actionsAllowed = !item.selectionMode,
                 selected = item.selected,
             )
@@ -114,6 +124,11 @@ internal class AlarmAdapter(
             }
             if (AlarmAspect.ENABLED in aspects) renderEnabled(item, animate = true)
             if (AlarmAspect.SELECTION in aspects) renderSelection(item)
+            if (AlarmAspect.CLOCK in aspects) renderSummary(item)
+        }
+
+        private fun renderSummary(item: AlarmRow) {
+            binding.alarmSummary.text = AlarmFormat.summary(binding.root.context, item.alarm, wallSeconds())
         }
 
         private fun renderEnabled(item: AlarmRow, animate: Boolean) {

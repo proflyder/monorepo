@@ -71,6 +71,28 @@
         <item quantity="many">Удалить %1$d будильников с домашнего сервера?</item>
         <item quantity="other">Удалить %1$d будильника с домашнего сервера?</item>
     </plurals>
+    <string name="alarms_card_countdown">%2$s · %1$s</string>
+    <string name="alarms_countdown_in">через %1$s</string>
+    <string name="alarms_countdown_under_minute">меньше чем через минуту</string>
+    <string name="alarms_countdown_notice">Будильник сработает %1$s</string>
+    <plurals name="alarms_countdown_days">
+        <item quantity="one">%1$d день</item>
+        <item quantity="few">%1$d дня</item>
+        <item quantity="many">%1$d дней</item>
+        <item quantity="other">%1$d дня</item>
+    </plurals>
+    <plurals name="alarms_countdown_hours">
+        <item quantity="one">%1$d ч</item>
+        <item quantity="few">%1$d ч</item>
+        <item quantity="many">%1$d ч</item>
+        <item quantity="other">%1$d ч</item>
+    </plurals>
+    <plurals name="alarms_countdown_minutes">
+        <item quantity="one">%1$d мин</item>
+        <item quantity="few">%1$d мин</item>
+        <item quantity="many">%1$d мин</item>
+        <item quantity="other">%1$d мин</item>
+    </plurals>
     <string-array name="alarms_day_short">
         <item>@string/alarms_day_mon</item>
         <item>@string/alarms_day_tue</item>
