@@ -24,6 +24,7 @@ import org.robolectric.annotation.GraphicsMode
 import org.robolectric.shadows.ShadowWindowManagerImpl
 import androidx.appcompat.R as AppCompatR
 import dev.proflyder.home.core.ui.R as UiR
+import dev.proflyder.home.feature.chat.ChatRoute
 import dev.proflyder.home.feature.chat.impl.R as ChatR
 import kotlinx.coroutines.runBlocking
 
@@ -66,6 +67,8 @@ class ToolbarMenuScreenshotTest {
         shoot("menu-${theme.key}-appearance-$mode.png", activity)
 
         activity.router.selectTab("chat")
+        idle(activity)
+        activity.router.openRoute(ChatRoute.session(ChatRoute.LEGACY_SESSION_ID))
         idle(activity)
         val attach = activity.findViewById<View>(ChatR.id.chat_attach)
         attach.performClick()

@@ -388,13 +388,12 @@ class FragmentRouter(
     }
 
     private fun publishChrome(tab: FeatureEntry, canGoBack: Boolean) {
-        val routeEntry = registry.entryForRoute(routeState.currentRoute())
         mutableChrome.value = AppChromeState(
             tabId = tab.id,
             titleRes = titlesByRoute[routeState.currentRoute()] ?: tab.titleRes(tab.rootDestination),
             canGoBack = canGoBack,
             overlay = currentRouteOverlay(),
-            hidesBottomBar = routeEntry?.hidesBottomBar == true,
+            screen = currentScreenChrome(),
             screenActions = screenActionsByOwner.values.flatten(),
         )
     }
@@ -402,6 +401,12 @@ class FragmentRouter(
     private fun republishChrome() {
         val entry = registry.entry(routeState.currentTabId) ?: initialEntry
         publishChrome(entry, canGoBack = fragmentManager.backStackEntryCount > 0)
+    }
+
+    private fun currentScreenChrome(): ScreenChrome {
+        val path = RoutePath.of(routeState.currentRoute()) ?: return ScreenChrome.FULL
+        val entry = registry.entryForRoute(path.value) ?: return ScreenChrome.FULL
+        return entry.parse(path)?.let(entry::screenChrome) ?: ScreenChrome.FULL
     }
 
     private fun currentRouteOverlay(): Boolean {

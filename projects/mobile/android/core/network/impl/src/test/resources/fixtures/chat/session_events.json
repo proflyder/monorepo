@@ -1,0 +1,17 @@
+[
+  {
+    "event": "tool",
+    "data": {
+      "id": "m_2",
+      "sessionId": "s_1",
+      "name": "ha_call",
+      "done": false
+    }
+  },
+  {
+    "event": "session_removed",
+    "data": {
+      "id": "s_1"
+    }
+  }
+]

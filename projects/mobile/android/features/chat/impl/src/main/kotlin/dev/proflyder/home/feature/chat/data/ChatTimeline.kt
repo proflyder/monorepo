@@ -5,6 +5,7 @@ import dev.proflyder.home.core.model.ChatEvent
 import dev.proflyder.home.core.model.ChatMessage
 import dev.proflyder.home.core.model.ChatPage
 import dev.proflyder.home.core.model.ChatQuote
+import dev.proflyder.home.core.model.ChatRole
 import dev.proflyder.home.core.model.ChatSent
 import dev.proflyder.home.core.model.ChatStatus
 import dev.proflyder.home.core.model.RemoteFailure
@@ -38,7 +39,12 @@ internal data class ChatTimeline(
     val loaded: Boolean = false,
     val loadingOlder: Boolean = false,
     val failure: RemoteFailure? = null,
+    val tools: Map<String, String> = emptyMap(),
 ) {
+    val activeTool: String? get() = tools.values.lastOrNull()
+
+    val streamingReplyId: String? get() = messages.lastOrNull { it.isAnswering() }?.id
+
     val oldestSeq: Long? get() = messages.firstOrNull()?.seq
 
     fun withPage(page: ChatPage): ChatTimeline {
@@ -65,6 +71,7 @@ internal data class ChatTimeline(
         return copy(
             messages = replaced.sortedBy { it.seq },
             cursor = maxOf(cursor, message.version),
+            tools = if (message.isAnswering()) tools else tools - message.id,
         ).dropDelivered()
     }
 
@@ -73,7 +80,12 @@ internal data class ChatTimeline(
     fun apply(event: ChatEvent): ChatTimeline = when (event) {
         is ChatEvent.Upsert -> upsert(event.message)
         is ChatEvent.Delta -> appendDelta(event)
+        is ChatEvent.Tool -> withTool(event)
+        is ChatEvent.SessionChanged, is ChatEvent.SessionRemoved -> this
     }
+
+    private fun withTool(tool: ChatEvent.Tool): ChatTimeline =
+        copy(tools = if (tool.done) tools - tool.id else tools + (tool.id to tool.name))
 
     private fun appendDelta(delta: ChatEvent.Delta): ChatTimeline {
         val target = messages.firstOrNull { it.id == delta.id && it.text.length == delta.offset }
@@ -103,6 +115,9 @@ internal data class ChatTimeline(
         return copy(outbox = outbox.filterNot { it.clientId in delivered })
     }
 }
+
+internal fun ChatMessage.isAnswering(): Boolean =
+    role == ChatRole.ASSISTANT && (status == ChatStatus.PENDING || status == ChatStatus.STREAMING)
 
 internal fun Outgoing.withUploaded(path: String, id: String): Outgoing =
     copy(attachments = attachments.map { if (it.path == path) it.copy(uploadedId = id) else it })

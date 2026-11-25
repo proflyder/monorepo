@@ -91,20 +91,27 @@ internal object OutboxCodec {
 
 internal class DataStoreChatOutboxStore(
     private val dataStore: DataStore<Preferences>,
+    sessionId: String,
 ) : ChatOutboxStore {
+    private val key = outboxKey(sessionId)
+
     override suspend fun load(): List<OutgoingRecord> = suspendRunCatching {
-        OutboxCodec.decode(dataStore.data.first()[KEY_OUTBOX])
+        OutboxCodec.decode(dataStore.data.first()[key])
     }.getOrElse { emptyList() }
 
     override suspend fun save(records: List<OutgoingRecord>) {
         suspendRunCatching {
-            dataStore.edit { it[KEY_OUTBOX] = OutboxCodec.encode(records) }
+            dataStore.edit { it[key] = OutboxCodec.encode(records) }
         }.onFailure { failure ->
             if (failure !is IOException) throw failure
         }
     }
 
     private companion object {
-        val KEY_OUTBOX = stringPreferencesKey("chat_outbox")
+        const val LEGACY_KEY = "chat_outbox"
+
+        fun outboxKey(sessionId: String) = stringPreferencesKey(
+            if (sessionId == ChatSessions.LEGACY_ID) LEGACY_KEY else "${LEGACY_KEY}_$sessionId",
+        )
     }
 }

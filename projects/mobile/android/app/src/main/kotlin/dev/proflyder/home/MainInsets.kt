@@ -4,6 +4,7 @@ import android.view.View
 import androidx.core.view.OnApplyWindowInsetsListener
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.isVisible
 import androidx.core.view.updatePadding
 import dev.proflyder.home.core.ui.doOnApplyInsets
 import dev.proflyder.home.core.ui.horizontalInsets
@@ -13,7 +14,7 @@ import dev.proflyder.home.core.ui.topInset
 import dev.proflyder.home.core.ui.underChrome
 import dev.proflyder.home.databinding.ActivityMainBinding
 
-internal fun ActivityMainBinding.applySystemBarInsets(tabs: BottomTabs) {
+internal fun ActivityMainBinding.applySystemBarInsets(tabs: BottomTabs): ChromeSizes {
     topChrome.doOnApplyInsets { view, insets, initial ->
         val sides = insets.horizontalInsets()
         view.updatePadding(left = sides.left, top = initial.top + insets.topInset(), right = sides.right)
@@ -28,9 +29,17 @@ internal fun ActivityMainBinding.applySystemBarInsets(tabs: BottomTabs) {
     ViewCompat.setOnApplyWindowInsetsListener(fragmentContainer, sizes)
     topChrome.addOnLayoutChangeListener(sizes)
     bottomChrome.addOnLayoutChangeListener(sizes)
+    return sizes
 }
 
-private class ChromeSizes(private val binding: ActivityMainBinding) : View.OnLayoutChangeListener, OnApplyWindowInsetsListener {
+internal fun ActivityMainBinding.showChrome(shown: Boolean, sizes: ChromeSizes) {
+    if (topChrome.isVisible == shown && bottomChrome.isVisible == shown) return
+    topChrome.isVisible = shown
+    bottomChrome.isVisible = shown
+    sizes.redispatch()
+}
+
+internal class ChromeSizes(private val binding: ActivityMainBinding) : View.OnLayoutChangeListener, OnApplyWindowInsetsListener {
     private var top = -1
     private var bottom = -1
     private var system: WindowInsetsCompat? = null
@@ -39,6 +48,7 @@ private class ChromeSizes(private val binding: ActivityMainBinding) : View.OnLay
         system = insets
         val sides = insets.horizontalInsets()
         view.updatePadding(left = sides.left, right = sides.right)
+        if (!binding.topChrome.isVisible) return insets
         return insets.underChrome(top = binding.topChrome.height, bottom = binding.bottomChrome.height)
     }
 
@@ -48,6 +58,10 @@ private class ChromeSizes(private val binding: ActivityMainBinding) : View.OnLay
         if (nextTop == top && nextBottom == bottom) return
         top = nextTop
         bottom = nextBottom
+        redispatch()
+    }
+
+    fun redispatch() {
         val last = system ?: return
         binding.fragmentContainer.post { ViewCompat.dispatchApplyWindowInsets(binding.fragmentContainer, last) }
     }

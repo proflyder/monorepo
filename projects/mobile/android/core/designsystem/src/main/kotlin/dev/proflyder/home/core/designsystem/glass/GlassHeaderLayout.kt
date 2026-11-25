@@ -10,6 +10,8 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.children
 
+interface GlassHeader
+
 class GlassHeaderLayout @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
@@ -21,7 +23,7 @@ class GlassHeaderLayout @JvmOverloads constructor(
         clipChildren = false
     }
 
-    internal val edgeOwner: GlassEdgeOwner? get() = header()
+    internal val edgeOwner: GlassEdgeOwner? get() = header() as? GlassEdgeOwner
 
     override fun dispatchApplyWindowInsets(insets: WindowInsets): WindowInsets {
         received = insets
@@ -40,7 +42,7 @@ class GlassHeaderLayout @JvmOverloads constructor(
         if (height != dispatchedHeight) post { dispatchApplyWindowInsets(last) }
     }
 
-    private fun header(): GlassScreenHeader? = children.filterIsInstance<GlassScreenHeader>().firstOrNull { it.visibility != View.GONE }
+    private fun header(): View? = children.filter { it is GlassHeader }.firstOrNull { it.visibility != View.GONE }
 
     private fun WindowInsetsCompat.withTop(top: Int): WindowInsetsCompat {
         val bars = getInsets(WindowInsetsCompat.Type.statusBars())

@@ -8,6 +8,9 @@ pub const MAX_CLIENT_ID_CHARS: usize = 64;
 pub const DEFAULT_PAGE: usize = 50;
 pub const MAX_PAGE: usize = 200;
 pub const MAX_ATTACHMENTS: usize = 4;
+pub const MAX_TITLE_CHARS: usize = 80;
+pub const AUTO_TITLE_CHARS: usize = 40;
+pub const PREVIEW_CHARS: usize = 120;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -121,6 +124,10 @@ pub enum ErrorKey {
     ChatTooManyAttachments,
     ChatVoiceFormat,
     ChatSttFailed,
+    ChatStopped,
+    ChatSessionNotFound,
+    ChatTitleInvalid,
+    ChatNotStoppable,
 }
 
 impl ErrorKey {
@@ -143,6 +150,10 @@ impl ErrorKey {
             Self::ChatTooManyAttachments => "chat_too_many_attachments",
             Self::ChatVoiceFormat => "chat_voice_format",
             Self::ChatSttFailed => "chat_stt_failed",
+            Self::ChatStopped => "chat_stopped",
+            Self::ChatSessionNotFound => "chat_session_not_found",
+            Self::ChatTitleInvalid => "chat_title_invalid",
+            Self::ChatNotStoppable => "chat_not_stoppable",
         }
     }
 
@@ -165,6 +176,10 @@ impl ErrorKey {
             Self::ChatTooManyAttachments,
             Self::ChatVoiceFormat,
             Self::ChatSttFailed,
+            Self::ChatStopped,
+            Self::ChatSessionNotFound,
+            Self::ChatTitleInvalid,
+            Self::ChatNotStoppable,
         ]
         .into_iter()
         .find(|key| key.as_str() == raw)
@@ -183,6 +198,7 @@ pub struct Quote {
 #[serde(rename_all = "camelCase")]
 pub struct Message {
     pub id: String,
+    pub session_id: String,
     pub seq: i64,
     pub version: i64,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -218,6 +234,8 @@ pub struct Page {
 pub struct SendRequest {
     pub client_id: String,
     #[serde(default)]
+    pub session_id: Option<String>,
+    #[serde(default)]
     pub text: String,
     #[serde(default)]
     pub reply_to: Option<String>,
@@ -236,6 +254,7 @@ pub struct SendResponse {
 #[serde(rename_all = "camelCase")]
 pub struct Delta {
     pub id: String,
+    pub session_id: String,
     pub offset: usize,
     pub text: String,
 }
@@ -244,4 +263,60 @@ pub struct Delta {
 #[serde(rename_all = "camelCase")]
 pub struct ErrorBody {
     pub code: ErrorKey,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Preview {
+    pub role: Role,
+    pub kind: Kind,
+    pub text: String,
+    pub status: Status,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Session {
+    pub id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    pub pinned: bool,
+    pub archived: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub preview: Option<Preview>,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionList {
+    pub sessions: Vec<Session>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateSession {
+    #[serde(default)]
+    pub title: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionPatch {
+    #[serde(default)]
+    pub title: Option<String>,
+    #[serde(default)]
+    pub pinned: Option<bool>,
+    #[serde(default)]
+    pub archived: Option<bool>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Tool {
+    pub id: String,
+    pub session_id: String,
+    pub name: String,
+    pub done: bool,
 }

@@ -7,18 +7,49 @@ use axum::Router;
 use axum::body::{Body, Bytes};
 use axum::extract::{Path, State};
 use axum::http::{HeaderMap, HeaderValue, Response, StatusCode, header};
-use axum::routing::post;
+use axum::routing::{get, post};
 use tokio::sync::mpsc;
 
 use crate::relay::Upstream;
 use crate::services::TokenProvider;
 
 pub const MAX_RELAY_BODY: usize = 12 << 20;
+pub const MAX_SESSION_ID: usize = 96;
+pub const PATCHABLE_FIELDS: [&str; 1] = ["title"];
+
+#[derive(Clone, Debug)]
+pub struct SessionPolicy {
+    exact: Arc<str>,
+    prefix: Arc<str>,
+}
+
+impl SessionPolicy {
+    #[must_use]
+    pub fn new(exact: &str, prefix: &str) -> Self {
+        Self {
+            exact: Arc::from(exact),
+            prefix: Arc::from(prefix),
+        }
+    }
+
+    #[must_use]
+    pub fn allows(&self, id: &str) -> bool {
+        let safe = id.len() <= MAX_SESSION_ID
+            && id
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-');
+        let owned = id == &*self.exact
+            || (!self.prefix.is_empty()
+                && id.len() > self.prefix.len()
+                && id.starts_with(&*self.prefix));
+        safe && owned
+    }
+}
 
 #[derive(Clone)]
 pub struct ChatRelay {
     upstream: Upstream,
-    session: Arc<str>,
+    sessions: SessionPolicy,
     caller_token: TokenProvider,
     upstream_key: TokenProvider,
 }
@@ -27,13 +58,13 @@ impl ChatRelay {
     #[must_use]
     pub fn new(
         upstream: Upstream,
-        session: &str,
+        sessions: SessionPolicy,
         caller_token: TokenProvider,
         upstream_key: TokenProvider,
     ) -> Self {
         Self {
             upstream,
-            session: Arc::from(session),
+            sessions,
             caller_token,
             upstream_key,
         }
@@ -42,9 +73,55 @@ impl ChatRelay {
     pub fn router(self) -> Router {
         Router::new()
             .route("/api/sessions", post(create_session))
+            .route(
+                "/api/sessions/{id}",
+                get(read_session)
+                    .patch(patch_session)
+                    .delete(delete_session),
+            )
             .route("/api/sessions/{id}/chat/stream", post(chat_stream))
             .fallback(not_found)
             .with_state(Arc::new(self))
+    }
+
+    async fn forward(
+        &self,
+        method: reqwest::Method,
+        path: &str,
+        body: Option<Vec<u8>>,
+    ) -> Response<Body> {
+        match self
+            .upstream
+            .buffered(
+                method,
+                path,
+                body,
+                self.upstream_authorization(),
+                None,
+                None,
+            )
+            .await
+        {
+            Ok(fetch) => Response::builder()
+                .status(fetch.status.as_u16())
+                .header(header::CONTENT_TYPE, fetch.content_type)
+                .body(Body::from(fetch.body))
+                .unwrap_or_else(|_| status(StatusCode::BAD_GATEWAY)),
+            Err(error) => {
+                tracing::warn!(%error, %path, "chat relay: upstream call failed");
+                status(StatusCode::BAD_GATEWAY)
+            }
+        }
+    }
+
+    fn admit(&self, headers: &HeaderMap, id: &str, body: &[u8]) -> Result<(), StatusCode> {
+        if !self.authorized(headers) {
+            return Err(StatusCode::UNAUTHORIZED);
+        }
+        if body.len() > MAX_RELAY_BODY || !self.sessions.allows(id) {
+            return Err(StatusCode::FORBIDDEN);
+        }
+        Ok(())
     }
 
     fn authorized(&self, headers: &HeaderMap) -> bool {
@@ -71,34 +148,76 @@ async fn create_session(
     headers: HeaderMap,
     body: Bytes,
 ) -> Response<Body> {
-    if !relay.authorized(&headers) {
-        return status(StatusCode::UNAUTHORIZED);
+    let id = requested_session(&body).unwrap_or_default();
+    if let Err(code) = relay.admit(&headers, &id, &body) {
+        return status(code);
     }
-    if body.len() > MAX_RELAY_BODY || requested_session(&body).as_deref() != Some(&relay.session) {
+    relay
+        .forward(reqwest::Method::POST, "/api/sessions", Some(body.to_vec()))
+        .await
+}
+
+async fn read_session(
+    State(relay): State<Arc<ChatRelay>>,
+    Path(id): Path<String>,
+    headers: HeaderMap,
+) -> Response<Body> {
+    if let Err(code) = relay.admit(&headers, &id, &[]) {
+        return status(code);
+    }
+    relay
+        .forward(reqwest::Method::GET, &format!("/api/sessions/{id}"), None)
+        .await
+}
+
+async fn patch_session(
+    State(relay): State<Arc<ChatRelay>>,
+    Path(id): Path<String>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response<Body> {
+    if let Err(code) = relay.admit(&headers, &id, &body) {
+        return status(code);
+    }
+    if !only_patchable_fields(&body) {
         return status(StatusCode::FORBIDDEN);
     }
-    match relay
-        .upstream
-        .buffered(
-            reqwest::Method::POST,
-            "/api/sessions",
+    relay
+        .forward(
+            reqwest::Method::PATCH,
+            &format!("/api/sessions/{id}"),
             Some(body.to_vec()),
-            relay.upstream_authorization(),
-            None,
+        )
+        .await
+}
+
+async fn delete_session(
+    State(relay): State<Arc<ChatRelay>>,
+    Path(id): Path<String>,
+    headers: HeaderMap,
+) -> Response<Body> {
+    if let Err(code) = relay.admit(&headers, &id, &[]) {
+        return status(code);
+    }
+    relay
+        .forward(
+            reqwest::Method::DELETE,
+            &format!("/api/sessions/{id}"),
             None,
         )
         .await
-    {
-        Ok(fetch) => Response::builder()
-            .status(fetch.status.as_u16())
-            .header(header::CONTENT_TYPE, fetch.content_type)
-            .body(Body::from(fetch.body))
-            .unwrap_or_else(|_| status(StatusCode::BAD_GATEWAY)),
-        Err(error) => {
-            tracing::warn!(%error, "chat relay: session create failed");
-            status(StatusCode::BAD_GATEWAY)
-        }
-    }
+}
+
+fn only_patchable_fields(body: &[u8]) -> bool {
+    serde_json::from_slice::<serde_json::Value>(body)
+        .ok()
+        .and_then(|value| value.as_object().cloned())
+        .is_some_and(|fields| {
+            !fields.is_empty()
+                && fields
+                    .keys()
+                    .all(|key| PATCHABLE_FIELDS.contains(&key.as_str()))
+        })
 }
 
 async fn chat_stream(
@@ -107,11 +226,8 @@ async fn chat_stream(
     headers: HeaderMap,
     body: Bytes,
 ) -> Response<Body> {
-    if !relay.authorized(&headers) {
-        return status(StatusCode::UNAUTHORIZED);
-    }
-    if id != *relay.session || body.len() > MAX_RELAY_BODY {
-        return status(StatusCode::FORBIDDEN);
+    if let Err(code) = relay.admit(&headers, &id, &body) {
+        return status(code);
     }
     let path = format!("/api/sessions/{id}/chat/stream");
     let response = match relay
@@ -201,7 +317,7 @@ mod tests {
     use axum::http::HeaderMap;
     use axum::routing::post;
 
-    use super::ChatRelay;
+    use super::{ChatRelay, SessionPolicy};
     use crate::relay::Upstream;
 
     #[derive(Clone, Default)]
@@ -236,19 +352,45 @@ mod tests {
                 }
             }
         };
-        let stream = move |headers: HeaderMap, _body: Bytes| {
+        let stream = {
             let seen = seen.clone();
-            async move {
-                record(&seen, &headers, "/stream");
-                (
-                    [("content-type", "text/event-stream")],
-                    "event: assistant.delta\ndata: {\"delta\":\"hi\"}\n\nevent: done\ndata: {}\n\n",
-                )
+            move |headers: HeaderMap, _body: Bytes| {
+                let seen = seen.clone();
+                async move {
+                    record(&seen, &headers, "/stream");
+                    (
+                        [("content-type", "text/event-stream")],
+                        "event: assistant.delta\ndata: {\"delta\":\"hi\"}\n\nevent: done\ndata: {}\n\n",
+                    )
+                }
+            }
+        };
+        let session = {
+            let seen = seen.clone();
+            move |headers: HeaderMap, method: axum::http::Method, body: Bytes| {
+                let seen = seen.clone();
+                async move {
+                    record(
+                        &seen,
+                        &headers,
+                        &format!("{method} {}", String::from_utf8_lossy(&body)),
+                    );
+                    (
+                        axum::http::StatusCode::OK,
+                        "{\"session\":{\"title\":\"t\"}}",
+                    )
+                }
             }
         };
         serve(
             Router::new()
                 .route("/api/sessions", post(create))
+                .route(
+                    "/api/sessions/{id}",
+                    axum::routing::get(session.clone())
+                        .patch(session.clone())
+                        .delete(session),
+                )
                 .route("/api/sessions/{id}/chat/stream", post(stream)),
         )
         .await
@@ -258,7 +400,7 @@ mod tests {
         let upstream = Upstream::new(upstream, Duration::from_secs(5)).expect("client");
         let relay = ChatRelay::new(
             upstream,
-            "home-app",
+            SessionPolicy::new("home-app", "app_"),
             Arc::new(|| "caller".to_owned()),
             Arc::new(|| "hermes-key".to_owned()),
         );
@@ -331,5 +473,75 @@ mod tests {
             .await
             .expect("jobs");
         assert_eq!(jobs.status(), 404);
+    }
+
+    #[tokio::test]
+    async fn app_sessions_can_be_read_renamed_and_deleted_but_nothing_else() {
+        let seen = Seen::default();
+        let relay = relay_for(&hermes(seen.clone()).await).await;
+        let client = reqwest::Client::new();
+        let call = |method: reqwest::Method, path: &str, body: &'static str| {
+            client
+                .request(method, format!("{relay}{path}"))
+                .bearer_auth("caller")
+                .body(body)
+                .send()
+        };
+        let created = call(reqwest::Method::POST, "/api/sessions", "{\"id\":\"app_1\"}")
+            .await
+            .expect("create");
+        assert_eq!(created.status(), 201);
+        let read = call(reqwest::Method::GET, "/api/sessions/app_1", "")
+            .await
+            .expect("read");
+        assert_eq!(read.status(), 200);
+        let renamed = call(
+            reqwest::Method::PATCH,
+            "/api/sessions/app_1",
+            "{\"title\":\"Trip\"}",
+        )
+        .await
+        .expect("patch");
+        assert_eq!(renamed.status(), 200);
+        let archived = call(
+            reqwest::Method::PATCH,
+            "/api/sessions/app_1",
+            "{\"archived\":true}",
+        )
+        .await
+        .expect("archive");
+        assert_eq!(archived.status(), 403);
+        let deleted = call(reqwest::Method::DELETE, "/api/sessions/app_1", "")
+            .await
+            .expect("delete");
+        assert_eq!(deleted.status(), 200);
+        let foreign = call(reqwest::Method::DELETE, "/api/sessions/telegram", "")
+            .await
+            .expect("foreign");
+        assert_eq!(foreign.status(), 403);
+        let bare = call(reqwest::Method::DELETE, "/api/sessions/app_", "")
+            .await
+            .expect("bare prefix");
+        assert_eq!(bare.status(), 403);
+        assert_eq!(
+            seen.0.lock().expect("lock").clone(),
+            vec![
+                "/api/sessions Bearer hermes-key".to_owned(),
+                "GET  Bearer hermes-key".to_owned(),
+                "PATCH {\"title\":\"Trip\"} Bearer hermes-key".to_owned(),
+                "DELETE  Bearer hermes-key".to_owned(),
+            ]
+        );
+    }
+
+    #[test]
+    fn the_policy_admits_only_the_legacy_session_and_the_app_prefix() {
+        let policy = SessionPolicy::new("home-app", "app_");
+        assert!(policy.allows("home-app"));
+        assert!(policy.allows("app_0192abc"));
+        assert!(!policy.allows("app_"));
+        assert!(!policy.allows("app_../x"));
+        assert!(!policy.allows("telegram"));
+        assert!(!SessionPolicy::new("home-app", "").allows("app_1"));
     }
 }

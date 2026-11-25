@@ -18,21 +18,22 @@ use axum::http::HeaderMap;
 use axum::http::{Response, StatusCode, header};
 use axum::response::IntoResponse;
 use axum::response::sse::{Event as SseEvent, KeepAlive, Sse};
-use axum::routing::{get, post};
+use axum::routing::{get, patch, post};
 use futures::stream::{self, Stream, StreamExt as _};
 use home_app_auth::{Module, Principal};
 use serde::{Deserialize, Serialize};
-use tokio::sync::{broadcast, mpsc};
+use tokio::sync::{Notify as Signal, broadcast, mpsc};
 
 use base64::Engine as _;
-use hermes::{HermesApi, TurnEvent};
+use hermes::{HermesApi, Turn, TurnEvent};
 use media::{Attachment, AttachmentKind, MediaStore};
 use model::{
-    DEFAULT_PAGE, Delta, ErrorBody, ErrorKey, Kind, MAX_ATTACHMENTS, MAX_CLIENT_ID_CHARS, MAX_PAGE,
-    MAX_TEXT_CHARS, Message, Page, Role, SendRequest, SendResponse, Status,
+    AUTO_TITLE_CHARS, CreateSession, DEFAULT_PAGE, Delta, ErrorBody, ErrorKey, Kind,
+    MAX_ATTACHMENTS, MAX_CLIENT_ID_CHARS, MAX_PAGE, MAX_TEXT_CHARS, MAX_TITLE_CHARS, Message, Page,
+    Role, SendRequest, SendResponse, Session, SessionList, SessionPatch, Status, Tool,
 };
 use serde_json::{Value, json};
-use store::{NewTurn, Store, StoreError, Update};
+use store::{NewTurn, Scope, Store, StoreError, Update};
 use stt::SpeechToText;
 
 use crate::push::PushApi;
@@ -43,6 +44,8 @@ pub const SNAPSHOT_LIMIT: usize = 500;
 pub const QUOTE_FOR_MODEL_CHARS: usize = 1500;
 pub const PUSH_BODY_CHARS: usize = 300;
 pub const DEFAULT_ASSISTANT_TITLE: &str = "Рикардо";
+pub const LEGACY_SESSION_TITLE: &str = "Главный чат";
+pub const APP_SESSION_PREFIX: &str = "app_";
 const EVENTS_CAPACITY: usize = 512;
 
 pub type Now = Arc<dyn Fn() -> i64 + Send + Sync>;
@@ -52,9 +55,25 @@ pub type NewId = Arc<dyn Fn() -> String + Send + Sync>;
 pub enum Event {
     Message(Box<Message>),
     Delta(Delta),
+    Tool(Tool),
+    Session(Box<Session>),
+    SessionRemoved(String),
+}
+
+impl Event {
+    fn session_id(&self) -> &str {
+        match self {
+            Self::Message(message) => &message.session_id,
+            Self::Delta(delta) => &delta.session_id,
+            Self::Tool(tool) => &tool.session_id,
+            Self::Session(session) => &session.id,
+            Self::SessionRemoved(id) => id,
+        }
+    }
 }
 
 pub struct Options {
+    pub default_session: String,
     pub store: Arc<Store>,
     pub hermes: Arc<dyn HermesApi>,
     pub media: Option<Arc<MediaStore>>,
@@ -81,6 +100,8 @@ impl Default for Notify {
 }
 
 pub struct Chat {
+    default_session: String,
+    running: Mutex<HashMap<String, Arc<Signal>>>,
     push: Option<Arc<dyn PushApi>>,
     notify: Notify,
     store: Arc<Store>,
@@ -117,7 +138,14 @@ impl Chat {
     pub fn start(options: Options) -> Result<Arc<Self>, StoreError> {
         let (events, _) = broadcast::channel(EVENTS_CAPACITY);
         let (queue, mut receiver) = mpsc::unbounded_channel::<String>();
+        options.store.adopt_legacy(
+            &options.default_session,
+            LEGACY_SESSION_TITLE,
+            (options.now)(),
+        )?;
         let chat = Arc::new(Self {
+            default_session: options.default_session,
+            running: Mutex::new(HashMap::new()),
             store: options.store,
             hermes: options.hermes,
             media: options.media,
@@ -168,7 +196,9 @@ impl Chat {
         if text.is_empty() && attachments.is_empty() {
             return Err(ErrorKey::ChatTextEmpty);
         }
+        let session_id = self.session_or_default(request.session_id.as_deref());
         let turn = NewTurn {
+            session_id,
             client_id,
             text,
             kind: kind_of(&attachments),
@@ -187,6 +217,138 @@ impl Chat {
         Ok(SendResponse { message, reply })
     }
 
+    fn session_or_default<'a>(&'a self, requested: Option<&'a str>) -> &'a str {
+        requested
+            .map(str::trim)
+            .filter(|id| !id.is_empty())
+            .unwrap_or(&self.default_session)
+    }
+
+    pub fn sessions(&self, archived: bool) -> Result<SessionList, ErrorKey> {
+        let sessions = self.store.sessions(archived).map_err(storage_key)?;
+        Ok(SessionList { sessions })
+    }
+
+    pub fn create_session(&self, request: &CreateSession) -> Result<Session, ErrorKey> {
+        let title = request.title.as_deref().map(valid_title).transpose()?;
+        let id = format!(
+            "{APP_SESSION_PREFIX}{}",
+            (self.new_id)().trim_start_matches("m_")
+        );
+        let session = self
+            .store
+            .create_session(&id, title, (self.now)())
+            .map_err(storage_key)?;
+        self.publish(Event::Session(Box::new(session.clone())));
+        Ok(session)
+    }
+
+    pub fn patch_session(&self, id: &str, patch: &SessionPatch) -> Result<Session, ErrorKey> {
+        let title = patch.title.as_deref().map(valid_title).transpose()?;
+        let normalized = SessionPatch {
+            title: title.map(str::to_owned),
+            ..patch.clone()
+        };
+        let session = self
+            .store
+            .patch_session(id, &normalized, (self.now)())
+            .map_err(storage_key)?;
+        if let Some(title) = title {
+            self.mirror_title(id, title);
+        }
+        self.publish(Event::Session(Box::new(session.clone())));
+        Ok(session)
+    }
+
+    pub fn delete_session(&self, id: &str) -> Result<(), ErrorKey> {
+        self.stop_session(id);
+        let attachments = self.store.delete_session(id).map_err(storage_key)?;
+        if let Some(media) = &self.media {
+            attachments
+                .iter()
+                .for_each(|attachment| media.remove(&attachment.id));
+        }
+        self.publish(Event::SessionRemoved(id.to_owned()));
+        let hermes = Arc::clone(&self.hermes);
+        let session = id.to_owned();
+        tokio::spawn(async move {
+            if let Err(key) = hermes.delete(&session).await {
+                tracing::warn!(error = key.as_str(), "chat: hermes session not deleted");
+            }
+        });
+        Ok(())
+    }
+
+    fn mirror_title(&self, id: &str, title: &str) {
+        let hermes = Arc::clone(&self.hermes);
+        let session = id.to_owned();
+        let fields = json!({"title": title});
+        tokio::spawn(async move {
+            if let Err(key) = hermes.patch(&session, fields).await {
+                tracing::warn!(error = key.as_str(), "chat: hermes title not mirrored");
+            }
+        });
+    }
+
+    fn stop_session(&self, id: &str) {
+        let running: Vec<Arc<Signal>> = self
+            .running
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .iter()
+            .filter(|(reply, _)| {
+                self.store
+                    .get(reply)
+                    .ok()
+                    .flatten()
+                    .is_some_and(|message| message.session_id == id)
+            })
+            .map(|(_, signal)| Arc::clone(signal))
+            .collect();
+        running.iter().for_each(|signal| signal.notify_one());
+    }
+
+    pub fn stop(&self, id: &str) -> Result<Message, ErrorKey> {
+        let message = self
+            .store
+            .get(id)
+            .map_err(storage_key)?
+            .ok_or(ErrorKey::ChatNotFound)?;
+        if message.role != Role::Assistant {
+            return Err(ErrorKey::ChatNotStoppable);
+        }
+        match message.status {
+            Status::Pending => Ok(self.stopped(id, None)?),
+            Status::Streaming => {
+                self.signal_of(id)
+                    .ok_or(ErrorKey::ChatNotStoppable)?
+                    .notify_one();
+                Ok(message)
+            }
+            Status::Done | Status::Failed => Err(ErrorKey::ChatNotStoppable),
+        }
+    }
+
+    fn signal_of(&self, id: &str) -> Option<Arc<Signal>> {
+        self.running
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .get(id)
+            .cloned()
+    }
+
+    fn stopped(&self, id: &str, text: Option<&str>) -> Result<Message, ErrorKey> {
+        let update = Update {
+            text,
+            status: Status::Failed,
+            error: Some(ErrorKey::ChatStopped),
+            now: (self.now)(),
+        };
+        let message = self.store.update(id, &update).map_err(storage_key)?;
+        self.publish(Event::Message(Box::new(message.clone())));
+        Ok(message)
+    }
+
     pub fn ingest(&self, webhook: &alerts::Webhook) -> usize {
         webhook
             .alerts
@@ -199,14 +361,17 @@ impl Chat {
 
     fn ingest_card(&self, card: &alerts::AlertCard) -> bool {
         let text = card.text(&self.notify.zone);
-        match self
-            .store
-            .upsert_alert(&(self.new_id)(), card, &text, (self.now)())
-        {
+        match self.store.upsert_alert(
+            &self.default_session,
+            &(self.new_id)(),
+            card,
+            &text,
+            (self.now)(),
+        ) {
             Ok((message, created)) => {
                 self.publish(Event::Message(Box::new(message.clone())));
                 if created && card.status == alerts::AlertStatus::Firing {
-                    self.push_alert(card, &message.id);
+                    self.push_alert(card, &message);
                 }
                 true
             }
@@ -217,7 +382,7 @@ impl Chat {
         }
     }
 
-    fn push_alert(&self, card: &alerts::AlertCard, id: &str) {
+    fn push_alert(&self, card: &alerts::AlertCard, message: &Message) {
         let icon = if card.severity == "critical" {
             "🔴"
         } else {
@@ -228,10 +393,15 @@ impl Chat {
         } else {
             card.summary.clone()
         };
-        self.push_message(Module::Alerts, format!("{icon} {}", card.name), &body, id);
+        self.push_message(
+            Module::Alerts,
+            format!("{icon} {}", card.name),
+            &body,
+            message,
+        );
     }
 
-    fn push_message(&self, module: Module, title: String, body: &str, id: &str) {
+    fn push_message(&self, module: Module, title: String, body: &str, message: &Message) {
         let Some(push) = self.push.clone() else {
             return;
         };
@@ -239,7 +409,10 @@ impl Chat {
         if body.is_empty() {
             return;
         }
-        let link = format!("home://chat/message/{id}");
+        let link = format!(
+            "home://chat/session/{}/message/{}",
+            message.session_id, message.id
+        );
         tokio::spawn(async move {
             if let Err(error) = push.notify_module(module, &title, &body, Some(&link)).await {
                 tracing::warn!(%error, "chat: push failed");
@@ -295,6 +468,9 @@ impl Chat {
         if message.role != Role::Assistant || message.status != Status::Failed {
             return Err(ErrorKey::ChatNotRetryable);
         }
+        if self.store.request_of(id).map_err(storage_key)?.is_none() {
+            return Err(ErrorKey::ChatNotRetryable);
+        }
         let reset = self
             .store
             .update(
@@ -313,20 +489,29 @@ impl Chat {
     }
 
     pub fn page(&self, before: Option<i64>, limit: Option<usize>) -> Result<Page, ErrorKey> {
-        self.page_for(before, limit, true)
+        self.page_for(None, before, limit, true)
     }
 
     pub fn page_for(
         &self,
+        session: Option<&str>,
         before: Option<i64>,
         limit: Option<usize>,
         include_alerts: bool,
     ) -> Result<Page, ErrorKey> {
         let limit = limit.unwrap_or(DEFAULT_PAGE).clamp(1, MAX_PAGE);
+        let session = self.session_or_default(session);
+        if self.store.session(session).map_err(storage_key)?.is_none() {
+            return Err(ErrorKey::ChatSessionNotFound);
+        }
         let cursor = self.store.cursor().map_err(storage_key)?;
+        let scope = Scope {
+            session: Some(session),
+            include_alerts,
+        };
         let (messages, has_more) = self
             .store
-            .page_before(before, limit, include_alerts)
+            .page_before(&scope, before, limit)
             .map_err(storage_key)?;
         Ok(Page {
             messages: messages
@@ -339,13 +524,19 @@ impl Chat {
     }
 
     pub fn snapshot(&self, after: i64) -> Result<Vec<Message>, ErrorKey> {
-        self.snapshot_for(after, true)
+        self.snapshot_for(
+            &Scope {
+                session: None,
+                include_alerts: true,
+            },
+            after,
+        )
     }
 
-    pub fn snapshot_for(&self, after: i64, include_alerts: bool) -> Result<Vec<Message>, ErrorKey> {
+    pub fn snapshot_for(&self, scope: &Scope<'_>, after: i64) -> Result<Vec<Message>, ErrorKey> {
         let changed = self
             .store
-            .changed_after(after, SNAPSHOT_LIMIT, include_alerts)
+            .changed_after(scope, after, SNAPSHOT_LIMIT)
             .map_err(storage_key)?;
         Ok(changed
             .into_iter()
@@ -493,22 +684,61 @@ impl Chat {
     }
 
     async fn run_turn(&self, reply_id: &str) {
+        let Ok(Some(reply)) = self.store.get(reply_id) else {
+            return;
+        };
+        if reply.status != Status::Pending {
+            return;
+        }
         let Ok(Some(request)) = self.store.request_of(reply_id) else {
             self.update(reply_id, None, Status::Failed, Some(ErrorKey::ChatNotFound));
             return;
         };
+        let signal = Arc::new(Signal::new());
+        self.running
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .insert(reply_id.to_owned(), Arc::clone(&signal));
+        let outcome = tokio::select! {
+            outcome = self.stream_turn(&request, reply_id) => Some(outcome),
+            () = signal.notified() => None,
+        };
+        self.running
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .remove(reply_id);
+        let partial = self.live_text(reply_id);
+        self.set_live(reply_id, None);
+        match outcome {
+            Some((text, terminal)) => self.finish_turn(&request, reply_id, &text, terminal),
+            None => {
+                if let Err(key) = self.stopped(reply_id, partial.as_deref()) {
+                    tracing::warn!(error = key.as_str(), "chat: stop not stored");
+                }
+            }
+        }
+    }
+
+    async fn stream_turn(&self, request: &Message, reply_id: &str) -> (String, TurnEvent) {
         self.set_live(reply_id, Some(String::new()));
         self.update(reply_id, Some(""), Status::Streaming, None);
-        let message = match self.content_for(&request).await {
+        let message = match self.content_for(request).await {
             Ok(message) => message,
-            Err(key) => {
-                self.set_live(reply_id, None);
-                self.update(reply_id, Some(""), Status::Failed, Some(key));
-                return;
-            }
+            Err(key) => return (String::new(), TurnEvent::Failed(key)),
         };
+        let title = self
+            .store
+            .session(&request.session_id)
+            .ok()
+            .flatten()
+            .and_then(|session| session.title);
         let (sink, mut events) = mpsc::channel::<TurnEvent>(64);
-        let run = self.hermes.run(message, sink);
+        let turn = Turn {
+            session: &request.session_id,
+            title: title.as_deref(),
+            message,
+        };
+        let run = self.hermes.run(turn, sink);
         let consume = async {
             let mut text = String::new();
             let mut persisted = Instant::now();
@@ -516,36 +746,90 @@ impl Chat {
             while let Some(event) = events.recv().await {
                 match event {
                     TurnEvent::Delta(delta) => {
-                        self.on_delta(reply_id, &mut text, &delta, &mut persisted);
+                        self.on_delta(request, reply_id, &mut text, &delta, &mut persisted);
                     }
+                    TurnEvent::Tool { name, done } => self.publish(Event::Tool(Tool {
+                        id: reply_id.to_owned(),
+                        session_id: request.session_id.clone(),
+                        name,
+                        done,
+                    })),
                     other => terminal = other,
                 }
             }
             (text, terminal)
         };
-        let ((), (text, terminal)) = tokio::join!(run, consume);
-        self.set_live(reply_id, None);
+        let ((), outcome) = tokio::join!(run, consume);
+        outcome
+    }
+
+    fn finish_turn(&self, request: &Message, reply_id: &str, text: &str, terminal: TurnEvent) {
         match terminal {
             TurnEvent::Completed(final_text) => {
                 self.update(reply_id, Some(&final_text), Status::Done, None);
-                self.push_message(
-                    Module::Chat,
-                    self.notify.assistant_title.clone(),
-                    &final_text,
-                    reply_id,
-                );
+                if let Ok(Some(reply)) = self.store.get(reply_id) {
+                    self.push_message(
+                        Module::Chat,
+                        self.notify.assistant_title.clone(),
+                        &final_text,
+                        &reply,
+                    );
+                }
+                self.ensure_title(&request.session_id);
             }
-            TurnEvent::Failed(key) => self.update(reply_id, Some(&text), Status::Failed, Some(key)),
-            TurnEvent::Delta(_) => {}
+            TurnEvent::Failed(key) => self.update(reply_id, Some(text), Status::Failed, Some(key)),
+            TurnEvent::Delta(_) | TurnEvent::Tool { .. } => {}
         }
     }
 
-    fn on_delta(&self, reply_id: &str, text: &mut String, delta: &str, persisted: &mut Instant) {
+    fn ensure_title(&self, session_id: &str) {
+        let titled = self
+            .store
+            .session(session_id)
+            .ok()
+            .flatten()
+            .is_none_or(|session| session.title.is_some());
+        if titled {
+            return;
+        }
+        let Some(fallback) = self
+            .store
+            .first_user_text(session_id)
+            .ok()
+            .flatten()
+            .map(|text| auto_title(&text))
+            .filter(|title| !title.is_empty())
+        else {
+            return;
+        };
+        let hermes = Arc::clone(&self.hermes);
+        let store = Arc::clone(&self.store);
+        let events = self.events.clone();
+        let session = session_id.to_owned();
+        tokio::spawn(async move {
+            let title = hermes.title(&session).await.unwrap_or(fallback);
+            if store.title_if_missing(&session, &title).unwrap_or(false)
+                && let Ok(Some(updated)) = store.session(&session)
+            {
+                let _receivers = events.send(Event::Session(Box::new(updated)));
+            }
+        });
+    }
+
+    fn on_delta(
+        &self,
+        request: &Message,
+        reply_id: &str,
+        text: &mut String,
+        delta: &str,
+        persisted: &mut Instant,
+    ) {
         let offset = utf16_len(text);
         text.push_str(delta);
         self.set_live(reply_id, Some(text.clone()));
         self.publish(Event::Delta(Delta {
             id: reply_id.to_owned(),
+            session_id: request.session_id.clone(),
             offset,
             text: delta.to_owned(),
         }));
@@ -562,6 +846,17 @@ impl Chat {
             }
         }
     }
+}
+
+fn valid_title(raw: &str) -> Result<&str, ErrorKey> {
+    let title = raw.trim();
+    let valid = !title.is_empty() && title.chars().count() <= MAX_TITLE_CHARS;
+    valid.then_some(title).ok_or(ErrorKey::ChatTitleInvalid)
+}
+
+fn auto_title(text: &str) -> String {
+    let line = text.lines().map(str::trim).find(|line| !line.is_empty());
+    store::truncate(line.unwrap_or_default(), AUTO_TITLE_CHARS)
 }
 
 fn kind_of(attachments: &[Attachment]) -> Kind {
@@ -587,6 +882,7 @@ fn storage_key(error: StoreError) -> ErrorKey {
     match error {
         StoreError::ReplyNotFound => ErrorKey::ChatReplyNotFound,
         StoreError::NotFound => ErrorKey::ChatNotFound,
+        StoreError::SessionNotFound => ErrorKey::ChatSessionNotFound,
         StoreError::Sqlite(error) => {
             tracing::warn!(%error, "chat: storage failed");
             ErrorKey::ChatStorageFailed
@@ -598,6 +894,12 @@ pub fn router<S: Clone + Send + Sync + 'static>(chat: Arc<Chat>) -> Router<S> {
     Router::new()
         .route("/v1/chat/messages", get(list).post(send))
         .route("/v1/chat/messages/{id}/retry", post(retry))
+        .route("/v1/chat/messages/{id}/stop", post(stop))
+        .route("/v1/chat/sessions", get(list_sessions).post(create_session))
+        .route(
+            "/v1/chat/sessions/{id}",
+            patch(patch_session).delete(delete_session),
+        )
         .route("/v1/chat/events", get(events))
         .route(
             "/v1/chat/attachments",
@@ -627,6 +929,7 @@ async fn alert_webhook(State(chat): State<Arc<Chat>>, body: axum::body::Bytes) -
 
 #[derive(Debug, Deserialize)]
 struct ListQuery {
+    session: Option<String>,
     before: Option<i64>,
     limit: Option<usize>,
 }
@@ -668,6 +971,7 @@ async fn download(State(chat): State<Arc<Chat>>, Path(id): Path<String>) -> Resp
 #[derive(Debug, Deserialize)]
 struct EventsQuery {
     after: Option<i64>,
+    session: Option<String>,
 }
 
 async fn list(
@@ -676,7 +980,54 @@ async fn list(
     principal: Option<Extension<Principal>>,
 ) -> Response<Body> {
     let alerts = alerts_allowed(principal.as_ref());
-    respond(chat.page_for(query.before, query.limit, alerts))
+    respond(chat.page_for(query.session.as_deref(), query.before, query.limit, alerts))
+}
+
+#[derive(Debug, Deserialize)]
+struct SessionsQuery {
+    #[serde(default)]
+    archived: bool,
+}
+
+async fn list_sessions(
+    State(chat): State<Arc<Chat>>,
+    Query(query): Query<SessionsQuery>,
+) -> Response<Body> {
+    respond(chat.sessions(query.archived))
+}
+
+async fn create_session(State(chat): State<Arc<Chat>>, body: axum::body::Bytes) -> Response<Body> {
+    let request = if body.is_empty() {
+        Ok(CreateSession::default())
+    } else {
+        serde_json::from_slice::<CreateSession>(&body)
+    };
+    request.map_or_else(
+        |_| error_response(ErrorKey::ChatTitleInvalid),
+        |request| respond(chat.create_session(&request)),
+    )
+}
+
+async fn patch_session(
+    State(chat): State<Arc<Chat>>,
+    Path(id): Path<String>,
+    body: axum::body::Bytes,
+) -> Response<Body> {
+    serde_json::from_slice::<SessionPatch>(&body).map_or_else(
+        |_| error_response(ErrorKey::ChatTitleInvalid),
+        |patch| respond(chat.patch_session(&id, &patch)),
+    )
+}
+
+async fn delete_session(State(chat): State<Arc<Chat>>, Path(id): Path<String>) -> Response<Body> {
+    match chat.delete_session(&id) {
+        Ok(()) => json(StatusCode::OK, &json!({"deleted": id})),
+        Err(key) => error_response(key),
+    }
+}
+
+async fn stop(State(chat): State<Arc<Chat>>, Path(id): Path<String>) -> Response<Body> {
+    respond(chat.stop(&id))
 }
 
 async fn send(State(chat): State<Arc<Chat>>, body: axum::body::Bytes) -> Response<Body> {
@@ -695,9 +1046,16 @@ async fn events(
     Query(query): Query<EventsQuery>,
     principal: Option<Extension<Principal>>,
 ) -> Response<Body> {
-    let alerts = alerts_allowed(principal.as_ref());
+    let filter = Filter {
+        alerts: alerts_allowed(principal.as_ref()),
+        session: query.session.filter(|id| !id.trim().is_empty()),
+    };
     let receiver = chat.subscribe();
-    let snapshot = match chat.snapshot_for(query.after.unwrap_or(0), alerts) {
+    let scope = Scope {
+        session: filter.session.as_deref(),
+        include_alerts: filter.alerts,
+    };
+    let snapshot = match chat.snapshot_for(&scope, query.after.unwrap_or(0)) {
         Ok(snapshot) => snapshot,
         Err(key) => return error_response(key),
     };
@@ -706,7 +1064,7 @@ async fn events(
             .into_iter()
             .map(|message| Ok(message_event(&message))),
     );
-    Sse::new(initial.chain(live_events(receiver, alerts)))
+    Sse::new(initial.chain(live_events(receiver, filter)))
         .keep_alive(KeepAlive::new().interval(KEEPALIVE))
         .into_response()
 }
@@ -717,15 +1075,33 @@ fn alerts_allowed(principal: Option<&Extension<Principal>>) -> bool {
         .is_some_and(|principal| principal.0.allows(Module::Alerts))
 }
 
+#[derive(Debug, Clone)]
+struct Filter {
+    alerts: bool,
+    session: Option<String>,
+}
+
+impl Filter {
+    fn admits(&self, event: &Event) -> bool {
+        self.session
+            .as_deref()
+            .is_none_or(|session| session == event.session_id())
+    }
+}
+
 fn live_events(
     receiver: broadcast::Receiver<Event>,
-    alerts: bool,
+    filter: Filter,
 ) -> impl Stream<Item = Result<SseEvent, Infallible>> {
-    stream::unfold((receiver, alerts), |(mut receiver, alerts)| async move {
+    stream::unfold((receiver, filter), |(mut receiver, filter)| async move {
         loop {
             let event = receiver.recv().await.ok()?;
-            if let Some(event) = sse_event(&event, alerts) {
-                return Some((Ok(event), (receiver, alerts)));
+            if let Some(event) = filter
+                .admits(&event)
+                .then(|| sse_event(&event, filter.alerts))
+                .flatten()
+            {
+                return Some((Ok(event), (receiver, filter)));
             }
         }
     })
@@ -738,6 +1114,9 @@ fn sse_event(event: &Event, alerts: bool) -> Option<SseEvent> {
         }
         Event::Message(_) => None,
         Event::Delta(delta) => Some(json_event("delta", delta)),
+        Event::Tool(tool) => Some(json_event("tool", tool)),
+        Event::Session(session) => Some(json_event("session", session)),
+        Event::SessionRemoved(id) => Some(json_event("session_removed", &json!({"id": id}))),
     }
 }
 
@@ -760,22 +1139,25 @@ fn respond<T: Serialize>(result: Result<T, ErrorKey>) -> Response<Body> {
 
 fn error_response(key: ErrorKey) -> Response<Body> {
     let status = match key {
-        ErrorKey::ChatNotFound | ErrorKey::ChatReplyNotFound | ErrorKey::ChatAttachmentNotFound => {
-            StatusCode::NOT_FOUND
-        }
+        ErrorKey::ChatNotFound
+        | ErrorKey::ChatReplyNotFound
+        | ErrorKey::ChatAttachmentNotFound
+        | ErrorKey::ChatSessionNotFound => StatusCode::NOT_FOUND,
         ErrorKey::ChatAttachmentTooLarge => StatusCode::PAYLOAD_TOO_LARGE,
-        ErrorKey::ChatAttachmentUnsupported
-        | ErrorKey::ChatTooManyAttachments
-        | ErrorKey::ChatVoiceFormat => StatusCode::BAD_REQUEST,
-        ErrorKey::ChatNotRetryable => StatusCode::CONFLICT,
+        ErrorKey::ChatNotRetryable | ErrorKey::ChatNotStoppable => StatusCode::CONFLICT,
         ErrorKey::ChatStorageFailed
         | ErrorKey::ChatUpstreamUnavailable
         | ErrorKey::ChatUpstreamFailed
         | ErrorKey::ChatInterrupted
+        | ErrorKey::ChatStopped
         | ErrorKey::ChatSttFailed => StatusCode::SERVICE_UNAVAILABLE,
-        ErrorKey::ChatTextEmpty | ErrorKey::ChatTextTooLong | ErrorKey::ChatClientIdInvalid => {
-            StatusCode::BAD_REQUEST
-        }
+        ErrorKey::ChatAttachmentUnsupported
+        | ErrorKey::ChatTooManyAttachments
+        | ErrorKey::ChatVoiceFormat
+        | ErrorKey::ChatTextEmpty
+        | ErrorKey::ChatTextTooLong
+        | ErrorKey::ChatClientIdInvalid
+        | ErrorKey::ChatTitleInvalid => StatusCode::BAD_REQUEST,
     };
     json(status, &ErrorBody { code: key })
 }

@@ -17,7 +17,6 @@ import dev.proflyder.home.core.model.ChatQuote
 import dev.proflyder.home.core.model.ChatRole
 import dev.proflyder.home.core.model.ChatStatus
 import dev.proflyder.home.core.theme.AppTheme
-import dev.proflyder.home.core.theme.AppThemes
 import dev.proflyder.home.core.ui.pinAboveKeyboard
 import dev.proflyder.home.feature.chat.ChatFixtures
 import dev.proflyder.home.feature.chat.data.ChatTimeline
@@ -32,11 +31,9 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
-import androidx.appcompat.view.ContextThemeWrapper as ThemeWrapper
 import com.google.android.material.R as MaterialR
 
 @RunWith(RobolectricTestRunner::class)
@@ -46,10 +43,7 @@ class ChatScreenshotTest {
     private val streaming = ChatFixtures.message("m7", 7, ChatRole.ASSISTANT, "Перезапускаю `scheduler`", status = ChatStatus.STREAMING)
     private val queued = Outgoing("c9", "Спасибо!", ChatQuote("m4", ChatRole.ASSISTANT, "Всё в норме"), ChatFixtures.NOON + 900_000)
 
-    private fun themed(theme: AppTheme): Context {
-        val base = ThemeWrapper(RuntimeEnvironment.getApplication(), MaterialR.style.Theme_Material3_DayNight_NoActionBar)
-        return AppThemes.wrap(base, theme)
-    }
+    private fun themed(theme: AppTheme): Context = ChatShots.themed(theme)
 
     private class LocalImages : ChatAdapterCallbacks() {
         override fun bindImage(media: BubbleMedia, target: ImageView) {
@@ -162,25 +156,9 @@ class ChatScreenshotTest {
         binding.chatSend.isEnabled = true
     }
 
-    private fun layout(view: View) {
-        val width = (WIDTH_DP * view.resources.displayMetrics.density).toInt()
-        val height = (HEIGHT_DP * view.resources.displayMetrics.density).toInt()
-        view.measure(exactly(width), exactly(height))
-        view.layout(0, 0, width, height)
-    }
+    private fun layout(view: View) = ChatShots.layout(view)
 
-    private fun save(name: String, view: View) {
-        layout(view)
-        val width = view.width
-        val height = view.height
-        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-        view.draw(Canvas(bitmap))
-        val dir = System.getenv("TEST_UNDECLARED_OUTPUTS_DIR") ?: return
-        File(dir).mkdirs()
-        File(dir, "$name.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, PNG_QUALITY, it) }
-    }
-
-    private fun exactly(size: Int): Int = View.MeasureSpec.makeMeasureSpec(size, View.MeasureSpec.EXACTLY)
+    private fun save(name: String, view: View) = ChatShots.save(name, view)
 
     private fun conversation(): ChatTimeline =
         ChatTimeline(messages = ChatFixtures.conversation + streaming, outbox = listOf(queued), loaded = true)
@@ -221,7 +199,7 @@ class ChatScreenshotTest {
         val gap = binding.root.resources.getDimensionPixelSize(R.dimen.chat_fab_gap)
 
         assertEquals(View.VISIBLE, binding.chatScrollDown.visibility)
-        assertEquals(binding.chatBody.top, binding.chatScrollDown.bottom + gap)
+        assertEquals(binding.chatComposeRow.top, binding.chatScrollDown.bottom + gap)
         assertTrue(binding.chatList.paddingBottom >= binding.chatPanel.height)
     }
 
@@ -234,8 +212,6 @@ class ChatScreenshotTest {
     }
 
     private companion object {
-        const val WIDTH_DP = 411
-        const val HEIGHT_DP = 891
         const val PNG_QUALITY = 100
         const val PHOTO_WIDTH = 640
         const val PHOTO_HEIGHT = 480

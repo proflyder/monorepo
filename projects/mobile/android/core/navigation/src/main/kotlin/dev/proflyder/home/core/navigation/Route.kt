@@ -24,6 +24,10 @@ data class AppChromeState(
     val titleRes: Int,
     val canGoBack: Boolean = false,
     val overlay: Boolean = false,
-    val hidesBottomBar: Boolean = false,
+    val screen: ScreenChrome = ScreenChrome.FULL,
     val screenActions: List<ToolbarAction> = emptyList(),
-)
+) {
+    val hidesBottomBar: Boolean get() = !screen.showsBottomBar
+
+    val hidesChrome: Boolean get() = !screen.showsChrome
+}

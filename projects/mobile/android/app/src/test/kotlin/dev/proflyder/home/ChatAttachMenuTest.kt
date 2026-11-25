@@ -7,6 +7,7 @@ import android.view.WindowManager
 import dev.proflyder.home.core.designsystem.HomePopupMenu
 import dev.proflyder.home.core.theme.AppTheme
 import java.io.File
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -17,6 +18,7 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import dev.proflyder.home.feature.chat.ChatRoute
 import dev.proflyder.home.feature.chat.impl.R as ChatR
 import kotlinx.coroutines.runBlocking
 
@@ -58,7 +60,9 @@ class ChatAttachMenuTest {
         runBlocking { app.graph.appearance.selectTheme(AppTheme.EMERALD) }
         val activity = Robolectric.buildActivity(MainActivity::class.java).setup().get()
         idle(activity)
-        activity.router.selectTab("chat")
+        activity.router.selectTab(ChatRoute.FEATURE_ID)
+        idle(activity)
+        activity.router.openRoute(ChatRoute.session(ChatRoute.LEGACY_SESSION_ID))
         idle(activity)
         layout(activity.window.decorView)
         return activity
@@ -74,9 +78,8 @@ class ChatAttachMenuTest {
         assertNotNull("attach menu is shown", popup)
         val params = popup.contentView.rootView.layoutParams as WindowManager.LayoutParams
         val anchorTop = top(anchor)
-        val navTop = top(activity.findViewById(R.id.home_notice_anchor))
         assertTrue("menu is above the anchor", params.y + popup.height <= anchorTop)
-        assertTrue("menu is above the bottom navigation", params.y + popup.height <= navTop)
+        assertFalse("the conversation hides the bottom navigation", activity.findViewById<View>(R.id.home_notice_anchor).isShown)
         assertTrue("menu is inside the screen", params.y >= 0)
         shoot(activity, popup.contentView, params, name)
     }

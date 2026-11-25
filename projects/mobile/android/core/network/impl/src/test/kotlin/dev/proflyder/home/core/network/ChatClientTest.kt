@@ -9,6 +9,7 @@ import dev.proflyder.home.core.model.ChatAttachmentKind
 import dev.proflyder.home.core.model.ChatEvent
 import dev.proflyder.home.core.model.ChatKind
 import dev.proflyder.home.core.model.ChatRole
+import dev.proflyder.home.core.model.ChatSessionPatch
 import dev.proflyder.home.core.model.ChatStatus
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RemoteFailure
@@ -69,9 +70,9 @@ class ChatClientTest {
     @Test
     fun pageMapsMessagesQuotesAndCursor() = runBlocking {
         server.enqueue(MockResponse().setBody(fixture("page")))
-        val page = (client().page(before = null, limit = 3) as Outcome.Success).value
+        val page = (client().page("home-app", before = null, limit = 3) as Outcome.Success).value
         val request = server.takeRequest()
-        assertEquals("/v1/chat/messages?limit=3", request.path)
+        assertEquals("/v1/chat/messages?session=home-app&limit=3", request.path)
         assertEquals("Bearer tok-1", request.getHeader("Authorization"))
         assertTrue(page.hasMore)
         assertEquals(8L, page.cursor)
@@ -88,13 +89,15 @@ class ChatClientTest {
     @Test
     fun sendPostsTheClientIdAndMapsThePendingReply() = runBlocking {
         server.enqueue(MockResponse().setBody(fixture("send")))
-        val sent = (client().send("c-1", "Включи свет", replyTo = null) as Outcome.Success).value
+        val sent = (client().send(ChatSendRequest("home-app", "c-1", "Включи свет", replyTo = null)) as Outcome.Success).value
         val request = server.takeRequest()
         assertEquals("POST", request.method)
         assertEquals("/v1/chat/messages", request.path)
         val body = Json.parseToJsonElement(request.body.readUtf8()).jsonObject
         assertEquals("c-1", body.getValue("clientId").jsonPrimitive.content)
+        assertEquals("home-app", body.getValue("sessionId").jsonPrimitive.content)
         assertEquals("Включи свет", sent.message.text)
+        assertEquals("home-app", sent.message.sessionId)
         assertEquals(ChatStatus.PENDING, sent.reply.status)
         assertNull(sent.reply.errorKey)
         assertEquals(1_795_129_665_000L, sent.reply.createdAtMillis)
@@ -103,7 +106,7 @@ class ChatClientTest {
     @Test
     fun errorsCarryTheResourceKey() = runBlocking {
         server.enqueue(MockResponse().setResponseCode(400).setBody(fixture("error")))
-        val failure = (client().send("c-1", " ", replyTo = null) as Outcome.Failure).failure
+        val failure = (client().send(ChatSendRequest("home-app", "c-1", " ", replyTo = null)) as Outcome.Failure).failure
         assertEquals("chat_text_empty", (failure as RemoteFailure.Server).reason)
     }
 
@@ -118,8 +121,8 @@ class ChatClientTest {
     @Test
     fun eventsParseTheServerStream() = runBlocking {
         server.enqueue(MockResponse().setHeader("Content-Type", "text/event-stream").setBody(sseFromFixture()))
-        val events = client().events(after = 0).toList()
-        assertEquals("/v1/chat/events?after=0", server.takeRequest().path)
+        val events = client().events(sessionId = "home-app", after = 0).toList()
+        assertEquals("/v1/chat/events?after=0&session=home-app", server.takeRequest().path)
         assertEquals(6, events.size)
         val deltas = events.filterIsInstance<ChatEvent.Delta>()
         assertEquals(listOf(0, 5), deltas.map { it.offset })
@@ -176,7 +179,42 @@ class ChatClientTest {
     @Test
     fun unauthorizedEventsFail() = runBlocking {
         server.enqueue(MockResponse().setResponseCode(401))
-        val result = runCatching { client().events(after = 0).toList() }
+        val result = runCatching { client().events(sessionId = "home-app", after = 0).toList() }
         assertTrue(result.exceptionOrNull() is StreamUnauthorizedException)
+    }
+
+    @Test
+    fun sessionsAreListedCreatedPatchedAndDeleted() = runBlocking {
+        server.enqueue(MockResponse().setBody(fixture("sessions")))
+        server.enqueue(MockResponse().setBody(fixture("session")))
+        server.enqueue(MockResponse().setBody(fixture("session")))
+        server.enqueue(MockResponse().setBody(fixture("session_deleted")))
+        server.enqueue(MockResponse().setBody(Json.parseToJsonElement(fixture("send")).jsonObject.getValue("reply").toString()))
+        val client = client()
+        val listed = (client.sessions(archived = true) as Outcome.Success).value
+        assertEquals("/v1/chat/sessions?archived=true", server.takeRequest().path)
+        assertEquals(listOf("s_1", "home-app"), listed.map { it.id })
+        assertEquals("Готово.", listed[0].preview?.text)
+        assertEquals(ChatRole.ASSISTANT, listed[0].preview?.role)
+        assertNull(listed[1].title)
+        assertTrue(client.createSession(null) is Outcome.Success)
+        assertTrue(Json.parseToJsonElement(server.takeRequest().body.readUtf8()).jsonObject.isEmpty())
+        client.patchSession("s_1", ChatSessionPatch(pinned = true))
+        val patch = server.takeRequest()
+        assertEquals("PATCH", patch.method)
+        val patched = Json.parseToJsonElement(patch.body.readUtf8()).jsonObject
+        assertEquals(setOf("pinned"), patched.keys)
+        assertTrue(client.deleteSession("s_1") is Outcome.Success)
+        assertEquals("DELETE", server.takeRequest().method)
+        assertTrue(client.stop("m_0002") is Outcome.Success)
+        assertEquals("/v1/chat/messages/m_0002/stop", server.takeRequest().path)
+    }
+
+    @Test
+    fun toolAndSessionEventsAreDecoded() {
+        val reader = ChatSseReader()
+        val items = Json.parseToJsonElement(fixture("session_events")) as JsonArray
+        val events = items.flatMap { frame(it.jsonObject).split("\n") }.mapNotNull(reader::line)
+        assertEquals(listOf(ChatEvent.Tool("m_2", "ha_call", false), ChatEvent.SessionRemoved("s_1")), events)
     }
 }

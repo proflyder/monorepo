@@ -75,6 +75,14 @@ impl MediaStore {
         std::fs::read(self.blob(id)).map_err(|_| ErrorKey::ChatAttachmentNotFound)
     }
 
+    pub fn remove(&self, id: &str) {
+        if valid_id(id).is_err() {
+            return;
+        }
+        let _blob = std::fs::remove_file(self.blob(id));
+        let _meta = std::fs::remove_file(self.meta(id));
+    }
+
     fn blob(&self, id: &str) -> PathBuf {
         self.dir.join(format!("{id}.bin"))
     }

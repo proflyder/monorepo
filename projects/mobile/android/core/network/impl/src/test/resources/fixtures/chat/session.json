@@ -1,0 +1,14 @@
+{
+  "id": "s_1",
+  "title": "Отпуск",
+  "pinned": true,
+  "archived": false,
+  "preview": {
+    "role": "assistant",
+    "kind": "text",
+    "text": "Готово.",
+    "status": "done"
+  },
+  "createdAt": 1,
+  "updatedAt": 2
+}
