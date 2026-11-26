@@ -10,5 +10,6 @@ import org.junit.runners.Suite
     ForegroundGraceNoticePolicyTest::class,
     SensitiveClipboardLifecycleTest::class,
     SensitiveClipboardTest::class,
+    StateDialogSlotTest::class,
 )
 class UiTestSuite
