@@ -7,7 +7,7 @@ metadata:
     proflyder.dev/source: "initial pin from live cluster 2026-11-10"
     proflyder.dev/source-commit: "d77ed5ba9f3cfae187ea79b9d358b9614046b3d3"
     proflyder.dev/source-tree: "4b03d9ade0d94e3d37ec46a94b2f5167fceea05a"
-    proflyder.dev/verified-at: "2026-11-26T01:11:19Z"
+    proflyder.dev/verified-at: "2026-11-26T01:11:59Z"
     proflyder.dev/run: "https://github.com/proflyder/monorepo/actions/runs/45733912812"
 data:
   BUILD_ID: "d77ed5ba9f3c"
@@ -25,5 +25,5 @@ data:
   PHONE_PUSH_IMAGE: "ghcr.io/proflyder/phone-push@sha256:9b9e529efb18f387c1d7a61964a2344bb155814156b96153334867a00d41e976"
   SCHEDULER_IMAGE: "ghcr.io/proflyder/scheduler@sha256:3fd491a7fa75c8ab016a115c2f15d36a11ceb291f5df1918ffef02af1ed5e086"
   SECRETS_GATEWAY_IMAGE: "ghcr.io/proflyder/secrets-gateway@sha256:f7c020874ab7a4fdc8e907d9a4a00edd4170dc91bf8a478aa22f1a28c14a3b4d"
-  VOICE_PROXY_IMAGE: "ghcr.io/proflyder/voice-proxy@sha256:0e45d6452136feb9995b31fad4778e38559134c8e70a7be4e6f7a714d42f15f6"
+  VOICE_PROXY_IMAGE: "ghcr.io/proflyder/voice-proxy@sha256:c4aeaca547d7efa3418fce613aca1307cbc05335b4d4319dcd28b4a0680de0d6"
   WAKEGRANT_IMAGE: "ghcr.io/proflyder/wakegrant@sha256:f3116bc1ee516e500dc26b211ebd9482e29963f63dea23ad1f0a87ddb5c93635"
