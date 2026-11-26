@@ -81,7 +81,9 @@ abstract class ScreenFragment<VB : ViewBinding, S : Any, I : Any, E : Any>(
 
 abstract class SectionFragment<VB : ViewBinding, S : Any, I : Any, E : Any>(
     inflateBinding: (LayoutInflater, ViewGroup?, Boolean) -> VB,
-) : StateFragment<VB, S, I, E>(inflateBinding)
+) : StateFragment<VB, S, I, E>(inflateBinding) {
+    final override val ownsWindowInsets: Boolean = false
+}
 
 inline fun <reified VM : ViewModel> Fragment.screenViewModel(): Lazy<VM> =
     injectedViewModels()

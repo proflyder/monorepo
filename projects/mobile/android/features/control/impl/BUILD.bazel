@@ -58,6 +58,7 @@ home_android_local_test(
         "dev.proflyder.home.feature.control.presentation.HomeScrolledGlassTest",
         "dev.proflyder.home.feature.control.presentation.HubRowsScreenshotTest",
         "dev.proflyder.home.feature.control.presentation.HomeCardGridTest",
+        "dev.proflyder.home.feature.control.presentation.HomeAlarmGapsTest",
         "dev.proflyder.home.feature.control.presentation.LightSheetScreenshotTest",
     ],
     deps = [
@@ -76,6 +77,8 @@ home_android_local_test(
         "//projects/mobile/android/core/network/api",
         "//projects/mobile/android/core/runtime",
         "//projects/mobile/android/core/testing",
+        "//projects/mobile/android/features/alarms/impl",
+        "@maven//:androidx_fragment_fragment_ktx",
         "@maven//:androidx_recyclerview_recyclerview",
         "@maven//:androidx_swiperefreshlayout_swiperefreshlayout",
         "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_core",

@@ -4,6 +4,7 @@
     android:layout_height="wrap_content"
     android:divider="@drawable/alarms_upcoming_divider"
     android:orientation="vertical"
+    android:paddingTop="@dimen/ds_space_m"
     android:showDividers="middle"
     android:visibility="gone">
 

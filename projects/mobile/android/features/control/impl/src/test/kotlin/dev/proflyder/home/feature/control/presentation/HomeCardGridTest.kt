@@ -35,7 +35,6 @@ class HomeCardGridTest {
         assertEquals(cardEdge, home.controlAlarmsSlot.paddingEnd)
         assertEquals(device.leftMargin, margins(hub.layoutParams).leftMargin)
         assertEquals(device.topMargin + device.bottomMargin, hub.dividerDrawable.intrinsicHeight)
-        assertEquals(device.bottomMargin, home.controlAlarmsSlot.paddingBottom)
     }
 
     private fun margins(params: ViewGroup.LayoutParams): ViewGroup.MarginLayoutParams = params as ViewGroup.MarginLayoutParams

@@ -41,9 +41,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:paddingStart="@dimen/control_card_edge"
-                        android:paddingTop="@dimen/control_card_margin"
-                        android:paddingEnd="@dimen/control_card_edge"
-                        android:paddingBottom="@dimen/control_card_margin" />
+                        android:paddingEnd="@dimen/control_card_edge" />
                 </LinearLayout>
             </FrameLayout>
 
