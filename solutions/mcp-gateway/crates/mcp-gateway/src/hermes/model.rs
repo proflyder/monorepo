@@ -8,11 +8,15 @@ pub const VOICE_SOURCE: &str = "api_server";
 pub const VOICE_SESSION_PREFIX: &str = "api-";
 pub const REPORT_SKILL_MARKER: &str = "[IMPORTANT: The user has invoked the \"report\" skill";
 pub const REPORT_COMMAND: &str = "/report";
-pub const REPORT_SESSIONS: usize = 5;
+pub const REPORT_TOOL: &str = "infra_report";
+pub const APP_SESSION_PREFIX: &str = "app_";
+pub const APP_LEGACY_SESSION: &str = "home-app";
+pub const REPORT_SESSIONS: usize = 10;
 pub const VOICE_SESSIONS: usize = 10;
 pub const MAX_REPORTS: usize = 20;
 pub const MAX_VOICE_REQUESTS: usize = 20;
-pub const AGENT_LIMIT: usize = 20;
+pub const AGENT_LIMIT: usize = 60;
+pub const RECENT_AGENT_HOURS: u32 = 24;
 pub const FAILED_FINISH: &str = "error";
 pub const HIDDEN_KIND: &str = "hidden";
 
@@ -44,6 +48,10 @@ pub struct MessageRow {
     pub finish_reason: Option<String>,
     #[serde(default)]
     pub display_kind: Option<String>,
+    #[serde(default)]
+    pub tool_name: Option<String>,
+    #[serde(default)]
+    pub tool_calls: Value,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -68,6 +76,8 @@ pub struct Agent {
     pub status: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub runtime_seconds: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub updated_at: Option<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -81,11 +91,37 @@ pub struct Reports {
 #[serde(rename_all = "camelCase")]
 pub struct Report {
     pub id: String,
+    pub channel: Channel,
     pub requested_at: i64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub completed_at: Option<i64>,
     pub text: String,
     pub failed: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Channel {
+    Telegram,
+    App,
+    Voice,
+}
+
+impl Channel {
+    #[must_use]
+    pub fn of_session(source: &str, session: &str) -> Self {
+        match source {
+            TELEGRAM_SOURCE => Self::Telegram,
+            _ if session.starts_with(VOICE_SESSION_PREFIX) => Self::Voice,
+            _ => Self::App,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct SessionPage {
+    pub channel: Channel,
+    pub rows: Vec<MessageRow>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -121,6 +157,7 @@ pub struct Exchange {
     pub replied_at: Option<f64>,
     pub reply: Option<String>,
     pub failed: bool,
+    pub called_report_tool: bool,
 }
 
 impl Exchange {
@@ -132,7 +169,12 @@ impl Exchange {
             replied_at: None,
             reply: None,
             failed: false,
+            called_report_tool: false,
         }
+    }
+
+    fn note_tools(&mut self, message: &MessageRow) {
+        self.called_report_tool |= names_report_tool(message);
     }
 
     fn answer(&mut self, message: &MessageRow, text: String) {
@@ -145,12 +187,15 @@ impl Exchange {
 
     fn is_report(&self) -> bool {
         let request = self.request.trim_start();
-        request.starts_with(REPORT_SKILL_MARKER) || request.starts_with(REPORT_COMMAND)
+        self.called_report_tool
+            || request.starts_with(REPORT_SKILL_MARKER)
+            || request.starts_with(REPORT_COMMAND)
     }
 
-    fn report(self) -> Report {
+    fn report(self, channel: Channel) -> Report {
         Report {
             id: self.id,
+            channel,
             requested_at: whole_seconds(self.asked_at),
             completed_at: self.replied_at.map(whole_seconds),
             text: self.reply.as_deref().map(redact::text).unwrap_or_default(),
@@ -186,7 +231,11 @@ pub fn exchanges(mut messages: Vec<MessageRow>) -> Vec<Exchange> {
         let text = content_text(&message.content);
         match (message.role.as_str(), found.last_mut()) {
             ("user", _) => found.push(Exchange::opened_by(message, text)),
-            ("assistant", Some(open)) => open.answer(message, text),
+            ("assistant", Some(open)) => {
+                open.note_tools(message);
+                open.answer(message, text);
+            }
+            ("tool", Some(open)) => open.note_tools(message),
             _ => {}
         }
     }
@@ -194,16 +243,35 @@ pub fn exchanges(mut messages: Vec<MessageRow>) -> Vec<Exchange> {
 }
 
 #[must_use]
-pub fn reports(pages: Vec<Vec<MessageRow>>) -> Vec<Report> {
-    let mut found: Vec<Report> = pages
-        .into_iter()
-        .flat_map(exchanges)
-        .filter(Exchange::is_report)
-        .map(Exchange::report)
-        .collect();
+pub fn reports(pages: Vec<SessionPage>) -> Vec<Report> {
+    let mut found: Vec<Report> = pages.into_iter().flat_map(page_reports).collect();
     found.sort_by_key(|report| std::cmp::Reverse(report.requested_at));
     found.truncate(MAX_REPORTS);
     found
+}
+
+fn page_reports(page: SessionPage) -> Vec<Report> {
+    exchanges(page.rows)
+        .into_iter()
+        .filter(Exchange::is_report)
+        .map(|exchange| exchange.report(page.channel))
+        .collect()
+}
+
+fn names_report_tool(message: &MessageRow) -> bool {
+    let by_result = message
+        .tool_name
+        .as_deref()
+        .is_some_and(|name| name.contains(REPORT_TOOL));
+    by_result || called_tool_names(&message.tool_calls).any(|name| name.contains(REPORT_TOOL))
+}
+
+fn called_tool_names(calls: &Value) -> impl Iterator<Item = &str> {
+    calls
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|call| call.pointer("/function/name").and_then(Value::as_str))
 }
 
 #[must_use]

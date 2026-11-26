@@ -24,7 +24,7 @@
             android:id="@+id/control_row_icon"
             android:layout_width="@dimen/control_device_icon"
             android:layout_height="@dimen/control_device_icon"
-            android:background="@drawable/control_bg_icon"
+            android:background="@drawable/ds_bg_card_icon"
             android:importantForAccessibility="no"
             android:padding="@dimen/control_device_icon_padding" />
 

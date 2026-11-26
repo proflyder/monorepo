@@ -40,9 +40,8 @@
                         android:id="@+id/control_alarms_slot"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:paddingStart="@dimen/ds_space_l"
-                        android:paddingTop="@dimen/ds_space_s"
-                        android:paddingEnd="@dimen/ds_space_l" />
+                        android:paddingStart="@dimen/control_card_edge"
+                        android:paddingEnd="@dimen/control_card_edge" />
                 </LinearLayout>
             </FrameLayout>
 

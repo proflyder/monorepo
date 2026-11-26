@@ -78,4 +78,6 @@
         <item quantity="one">%1$d phone</item>
         <item quantity="other">%1$d phones</item>
     </plurals>
+    <string name="system_targets_title">Monitoring targets</string>
+    <string name="system_targets_up">%1$d of %2$d up</string>
 </resources>

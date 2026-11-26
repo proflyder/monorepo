@@ -8,7 +8,8 @@ use jiff::Timestamp;
 use mcp_gateway::bb::SpawnAction;
 use mcp_gateway::bb::{
     BbApi, BbFuture, Error as BbError, SendRequest, SendResult, SpawnRequest, SpawnResult,
-    StatusResult, Targets, TurnResultRequest, TurnResultResult, UpdatesRequest, UpdatesResult,
+    StatusQuery, StatusResult, Targets, TurnResultRequest, TurnResultResult, UpdatesRequest,
+    UpdatesResult,
 };
 use mcp_gateway::domain::clock::{Clock, FixedClock};
 use mcp_gateway::domain::state::{AgentMode, KeyedStore, PendingStore};
@@ -73,7 +74,7 @@ impl BbApi for FakeVoice {
         Box::pin(async move { Ok(Targets::default()) })
     }
 
-    fn status(&self, _limit: usize) -> BbFuture<'_, Result<StatusResult, BbError>> {
+    fn status(&self, _query: StatusQuery) -> BbFuture<'_, Result<StatusResult, BbError>> {
         Box::pin(async move { Ok(StatusResult::default()) })
     }
 

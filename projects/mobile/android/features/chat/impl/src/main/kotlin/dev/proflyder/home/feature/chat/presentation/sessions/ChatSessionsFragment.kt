@@ -4,6 +4,7 @@ import dev.proflyder.home.core.designsystem.list.addFullWidthRows
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
+import androidx.activity.addCallback
 import androidx.recyclerview.widget.ConcatAdapter
 import dev.proflyder.home.core.designsystem.list.ListHeaderSpacer
 import dev.proflyder.home.core.model.RemoteFailure
@@ -36,6 +37,7 @@ internal class ChatSessionsFragment :
         chatSessionsList.adapter = ConcatAdapter(ListHeaderSpacer.leading(chatSessionsList, chatSessionsHeader), adapter)
         chatSessionsList.addFullWidthRows(chatSessionsList.resources.getDimensionPixelSize(R.dimen.chat_session_divider_inset))
         chatSessionsSearchReveal.attach(chatSessionsList, chatSessionsSearch)
+        bindSearchBack()
         chatSessionsRefresh.setupPullToRefresh(chatSessionsList, chatSessionsSearchReveal) { dispatch(ChatSessionsIntent.Refresh) }
         chatSessionsRetry.setOnClickListener { dispatch(ChatSessionsIntent.Refresh) }
         chatSessionsNew.setOnClickListener { dispatch(ChatSessionsIntent.Create) }
@@ -45,6 +47,14 @@ internal class ChatSessionsFragment :
         render(SessionRows::build) { adapter.submitList(it) }
         render(ChatSessionsUiState::creating) { chatSessionsNew.isEnabled = !it }
         render(::listStatus, ::renderStatus)
+    }
+
+    private fun bindSearchBack() {
+        val reveal = binding.chatSessionsSearchReveal
+        val back = requireActivity().onBackPressedDispatcher.addCallback(viewLifecycleOwner, reveal.isRevealed) {
+            reveal.dismiss()
+        }
+        reveal.onRevealChanged = { back.isEnabled = it }
     }
 
     override fun onStart() {

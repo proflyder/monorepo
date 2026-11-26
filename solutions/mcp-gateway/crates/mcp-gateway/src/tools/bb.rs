@@ -134,7 +134,7 @@ async fn bb_status(deps: &Deps) -> ToolOutcome {
     let Some(api) = deps.bb() else {
         return failure(bb::SPEECH_NOT_READY, None::<Value>);
     };
-    let status = match api.status(20).await {
+    let status = match api.status(bb::StatusQuery::personal(20)).await {
         Ok(status) => status,
         Err(error) => {
             return failure(

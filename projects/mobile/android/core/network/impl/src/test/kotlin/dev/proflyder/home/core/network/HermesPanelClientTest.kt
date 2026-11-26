@@ -6,6 +6,7 @@ import dev.proflyder.home.core.config.TokenStatus
 import dev.proflyder.home.core.endpoint.EndpointParseResult
 import dev.proflyder.home.core.endpoint.ServerEndpoint
 import dev.proflyder.home.core.model.HermesAgentStatus
+import dev.proflyder.home.core.model.HermesReportChannel
 import dev.proflyder.home.core.model.Outcome
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -56,7 +57,10 @@ class HermesPanelClientTest {
         assertEquals("/v1/hermes/agents", request.path)
         assertEquals("Bearer tok-1", request.getHeader("Authorization"))
         assertTrue(agents.available)
-        assertEquals(listOf(HermesAgentStatus.RUNNING, HermesAgentStatus.FAILED), agents.agents.map { it.status })
+        assertEquals(
+            listOf(HermesAgentStatus.RUNNING, HermesAgentStatus.WAITING, HermesAgentStatus.FAILED),
+            agents.agents.map { it.status },
+        )
         assertEquals(125L, agents.agents.first().runtimeSeconds)
         assertNull(agents.agents.last().runtimeSeconds)
     }
@@ -66,8 +70,9 @@ class HermesPanelClientTest {
         enqueue("reports")
         val reports = (client().reports() as Outcome.Success).value
         assertEquals("/v1/hermes/reports", server.takeRequest().path)
-        assertEquals(1700000030L, reports.reports.single().completedAtUnix)
-        assertEquals("Всё в порядке", reports.reports.single().text)
+        assertEquals(1700000030L, reports.reports.first().completedAtUnix)
+        assertEquals("Всё в порядке", reports.reports.first().text)
+        assertEquals(listOf(HermesReportChannel.APP, HermesReportChannel.UNKNOWN), reports.reports.map { it.channel })
     }
 
     @Test

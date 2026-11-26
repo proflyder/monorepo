@@ -11,9 +11,11 @@ import com.google.android.material.color.MaterialColors
 import dev.proflyder.home.core.theme.AppTheme
 import dev.proflyder.home.core.theme.ColorRole
 import dev.proflyder.home.feature.control.impl.R
+import dev.proflyder.home.feature.control.impl.databinding.ItemControlDeviceBinding
 import dev.proflyder.home.feature.control.impl.databinding.ItemControlHubBinding
 import dev.proflyder.home.feature.control.impl.databinding.ItemControlHubRowBinding
 import java.io.File
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -49,6 +51,10 @@ class HubRowsScreenshotTest {
         }
         save(layout(surface), "control-hub-rows-$mode.png")
         rows.forEach { assertNotNull(it.root.foreground) }
+        val device = ItemControlDeviceBinding.inflate(LayoutInflater.from(context))
+        device.controlDeviceTitle.append(SAMPLE_ROWS.first().second)
+        device.controlDeviceState.append(SAMPLE_ROWS.first().first)
+        assertEquals(layout(device.root).height, rows.first().root.height)
     }
 
     private fun row(hub: ItemControlHubBinding, time: String, label: String): ItemControlHubRowBinding =

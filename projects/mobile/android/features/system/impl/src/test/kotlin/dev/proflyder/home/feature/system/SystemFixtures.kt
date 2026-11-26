@@ -8,6 +8,7 @@ import dev.proflyder.home.core.model.KubePod
 import dev.proflyder.home.core.model.PhoneDevice
 import dev.proflyder.home.core.model.PveGuest
 import dev.proflyder.home.core.model.PveHost
+import dev.proflyder.home.core.model.ScrapeTarget
 import dev.proflyder.home.core.model.StationHealth
 import dev.proflyder.home.core.model.SystemAlert
 import dev.proflyder.home.core.model.SystemDevices
@@ -66,6 +67,11 @@ internal object SystemFixtures {
                 guest(100, "haos", GuestKind.VM, running = true, level = HealthLevel.OK),
                 guest(101, "lab-k3s", GuestKind.VM, running = true, level = HealthLevel.OK),
                 guest(103, "bb", GuestKind.CT, running = true, level = HealthLevel.OK),
+            ),
+            targetsAvailable = true,
+            targets = listOf(
+                ScrapeTarget("station", 0, 1, HealthLevel.CRITICAL),
+                ScrapeTarget("pve-node", 1, 1, HealthLevel.OK),
             ),
         ),
         cluster = KubeCluster(

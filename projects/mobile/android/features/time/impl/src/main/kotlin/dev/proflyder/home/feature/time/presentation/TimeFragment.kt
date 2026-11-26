@@ -33,8 +33,7 @@ internal class TimeFragment :
     }
 
     private fun renderSection(tabs: PillSegmentsBinder<TimeSection>, section: TimeSection) {
-        val index = section.ordinal
-        if (binding.timePager.currentItem != index) binding.timePager.setCurrentItem(index, isResumed)
+        binding.timePager.showPage(section.ordinal, animate = isResumed)
         tabs.render(section)
     }
 

@@ -34,7 +34,7 @@ abstract class BaseFragment<VB : ViewBinding>(
     final override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         onBindingCreated(binding, savedInstanceState)
-        view.contentInsetTarget()?.applyContentInsets(contentInsets())
+        if (ownsWindowInsets) view.contentInsetTarget()?.applyContentInsets(contentInsets())
         view.liftScreenFabs()
     }
 
@@ -47,6 +47,8 @@ abstract class BaseFragment<VB : ViewBinding>(
     protected abstract fun onBindingCreated(binding: VB, savedInstanceState: Bundle?)
 
     protected open fun onBindingDestroyed() = Unit
+
+    protected open val ownsWindowInsets: Boolean = true
 
     protected open fun contentInsets(): ContentInsets = ContentInsets()
 

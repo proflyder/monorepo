@@ -1118,6 +1118,46 @@ test("status includes running threads with profiles and machine", async () => {
   assert.equal(typeof row.runtimeSeconds, "number");
 });
 
+test("status filters by profile before the limit and keeps busy and recent threads", async () => {
+  const { route, world } = await makePlugin();
+  const at = Date.now();
+  const add = (id, projectId, status, updatedAt, extra = {}) =>
+    world.threads.set(id, {
+      id,
+      title: id,
+      projectId,
+      status,
+      originPluginId: null,
+      environmentHostId: "host_mac",
+      createdAt: updatedAt,
+      updatedAt,
+      ...extra,
+    });
+  for (let index = 0; index < 5; index += 1) {
+    add(`thr_work_${index}`, "proj_alpha", "idle", at - index);
+  }
+  add("thr_running", "proj_beta", "active", at - 9 * 3_600_000);
+  add("thr_waiting", "proj_beta", "idle", at - 8 * 3_600_000, {
+    hasPendingInteraction: true,
+  });
+  add("thr_recent", "proj_beta", "idle", at - 60_000);
+  add("thr_old", "proj_beta", "idle", at - 30 * 3_600_000);
+  add("thr_archived", "proj_beta", "idle", at, { archivedAt: at });
+  const response = await callRoute(route, {
+    method: "status",
+    params: { limit: 3, profile: "personal", recentHours: 24 },
+  });
+  assert.equal(response.status, 200);
+  const rows = response.body.result.threads;
+  assert.deepEqual(
+    rows.map((row) => row.threadId),
+    ["thr_waiting", "thr_running", "thr_recent"],
+  );
+  assert.equal(rows.find((row) => row.threadId === "thr_waiting").status, "waiting");
+  assert.ok(rows.every((row) => row.profile === "personal"));
+  assert.equal(rows.find((row) => row.projectName === "Beta").projectName, "Beta");
+});
+
 function addDispatcherThread(world, status = "idle") {
   world.threads.set("thr_dispatcher", {
     id: "thr_dispatcher",

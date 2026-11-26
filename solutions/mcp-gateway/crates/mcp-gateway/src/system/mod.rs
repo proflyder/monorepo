@@ -118,13 +118,20 @@ impl Dashboard {
             .get_or(self.ttl, || {
                 self.bounded(
                     async {
-                        let (host, guests) = tokio::join!(
+                        let (host, guests, targets) = tokio::join!(
                             self.query(build::HOST_QUERIES),
-                            self.query(build::GUEST_QUERIES)
+                            self.query(build::GUEST_QUERIES),
+                            self.query(build::TARGET_QUERIES)
                         );
-                        build::hosts(&host, &guests)
+                        build::hosts(&host, &guests, &targets)
                     },
-                    || build::hosts(&Results::default(), &Results::default()),
+                    || {
+                        build::hosts(
+                            &Results::default(),
+                            &Results::default(),
+                            &Results::default(),
+                        )
+                    },
                 )
             })
             .await

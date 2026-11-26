@@ -7,7 +7,7 @@
     style="@style/Widget.Home.Card"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_margin="6dp"
+    android:layout_margin="@dimen/control_card_margin"
     android:clickable="true"
     android:focusable="true"
     android:foreground="?attr/selectableItemBackground">
@@ -17,7 +17,7 @@
         android:layout_height="wrap_content"
         android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:padding="16dp">
+        android:padding="@dimen/ds_space_l">
 
         <FrameLayout
             android:layout_width="@dimen/control_device_icon"
@@ -27,7 +27,7 @@
                 android:id="@+id/control_device_icon"
                 android:layout_width="@dimen/control_device_icon"
                 android:layout_height="@dimen/control_device_icon"
-                android:background="@drawable/control_bg_icon"
+                android:background="@drawable/ds_bg_card_icon"
                 android:importantForAccessibility="no"
                 android:padding="@dimen/control_device_icon_padding" />
 

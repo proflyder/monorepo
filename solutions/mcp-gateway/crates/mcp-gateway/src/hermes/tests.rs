@@ -91,9 +91,9 @@ fn message(id: i64, role: &str, content: &Value, timestamp: f64) -> Value {
 #[tokio::test]
 async fn agents_list_only_personal_threads_with_status() {
     let answer = json!({"ok": true, "result": {"threads": [
-        {"id": "thr_1", "title": "Fix lights", "project": "Lab", "profile": "personal", "status": "active", "runtimeSeconds": 42},
-        {"id": "thr_2", "title": "Work", "project": "Job", "profile": "work", "status": "idle"},
-        {"id": "thr_3", "title": "Notes", "project": "Notes", "profile": "personal", "status": "idle"}
+        {"threadId": "thr_1", "title": "Fix lights", "projectName": "Lab", "profile": "personal", "status": "active", "runtimeSeconds": 42, "updatedAt": 9},
+        {"threadId": "thr_2", "title": "Work", "projectName": "Job", "profile": "work", "status": "idle"},
+        {"threadId": "thr_3", "title": null, "projectName": "Notes", "profile": "personal", "status": "waiting", "runtimeSeconds": null}
     ]}});
     let agents = panel(Some(bb(answer)), None).agents().await;
     assert!(agents.available);
@@ -104,6 +104,9 @@ async fn agents_list_only_personal_threads_with_status() {
         .collect();
     assert_eq!(ids, vec!["thr_1", "thr_3"]);
     assert_eq!(agents.agents[0].runtime_seconds, Some(42));
+    assert_eq!(agents.agents[0].project, "Lab");
+    assert_eq!(agents.agents[0].updated_at, Some(9));
+    assert_eq!(agents.agents[1].status, "waiting");
 }
 
 #[tokio::test]
@@ -140,6 +143,60 @@ async fn reports_are_the_answers_to_report_invocations() {
     assert_eq!(report.completed_at, Some(130));
     assert!(report.text.starts_with("Всё в порядке"));
     assert!(!report.text.contains("abc123"));
+    assert_eq!(report.channel, model::Channel::Telegram);
+}
+
+#[tokio::test]
+async fn reports_are_found_in_every_channel_by_the_report_tool_call() {
+    let tool_call = json!([{"id": "c1", "type": "function", "function": {"name": "mcp_infra_infra_report", "arguments": "{}"}}]);
+    let history = FakeHistory {
+        sessions: HashMap::from([
+            (
+                model::VOICE_SOURCE,
+                json!({"data": [
+                    {"id": "app_1", "last_active": 300.0},
+                    {"id": "api-1", "last_active": 200.0}
+                ]}),
+            ),
+            (model::TELEGRAM_SOURCE, json!({"data": []})),
+        ]),
+        messages: HashMap::from([
+            (
+                "app_1",
+                json!({"data": [
+                    message(1, "user", &json!("пришли отчёт по дому"), 290.0),
+                    {"id": 2, "role": "assistant", "content": "", "timestamp": 291.0, "tool_calls": tool_call},
+                    {"id": 3, "role": "tool", "content": "{}", "timestamp": 292.0, "tool_name": "mcp_infra_infra_report"},
+                    message(4, "assistant", &json!("Дом: всё работает"), 293.0),
+                    message(5, "user", &json!("спасибо"), 295.0),
+                    message(6, "assistant", &json!("Пожалуйста"), 296.0)
+                ]}),
+            ),
+            (
+                "api-1",
+                json!({"data": [
+                    message(1, "user", &json!("как дела дома"), 190.0),
+                    {"id": 2, "role": "tool", "content": "{}", "timestamp": 191.0, "tool_name": "mcp_infra_infra_report"},
+                    message(3, "assistant", &json!("Всё в порядке"), 192.0)
+                ]}),
+            ),
+        ]),
+        ..FakeHistory::default()
+    };
+    let reports = panel(None, Some(history)).reports().await;
+    assert!(reports.available);
+    let found: Vec<(model::Channel, &str)> = reports
+        .reports
+        .iter()
+        .map(|report| (report.channel, report.text.as_str()))
+        .collect();
+    assert_eq!(
+        found,
+        vec![
+            (model::Channel::App, "Дом: всё работает"),
+            (model::Channel::Voice, "Всё в порядке"),
+        ]
+    );
 }
 
 #[tokio::test]

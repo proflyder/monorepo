@@ -133,7 +133,14 @@ class SecretsScreenshotTest {
     @Config(qualifiers = "ru-w411dp-h891dp-night-xxhdpi")
     fun thePathScreenShowsVersionsAndMasksKeyValuesInDark() = pathScreen("secrets-path-masked-dark.png")
 
-    private fun pathScreen(name: String) {
+    @Test
+    fun aRevealedJsonValueShowsAPreviewAndTheFormattedBody() = pathScreen("secrets-path-json-light.png", revealedJson = true)
+
+    @Test
+    @Config(qualifiers = "ru-w411dp-h891dp-night-xxhdpi")
+    fun aRevealedJsonValueShowsAPreviewAndTheFormattedBodyInDark() = pathScreen("secrets-path-json-dark.png", revealedJson = true)
+
+    private fun pathScreen(name: String, revealedJson: Boolean = false) {
         val context = themed()
         val binding = FragmentSecretPathBinding.inflate(LayoutInflater.from(context))
         val adapter = SecretPathAdapter(
@@ -162,7 +169,15 @@ class SecretsScreenshotTest {
                 ),
             )
             add(SecretPathRow.Note("keys:title", context.getString(dev.proflyder.home.feature.secrets.impl.R.string.secrets_keys)))
-            addAll(keyRows(listOf("token", "endpoint"), revealedKey = null, revealedValue = null, version = 3, revealingKey = null))
+            addAll(
+                keyRows(
+                    listOf("token", "endpoint"),
+                    revealedKey = "token".takeIf { revealedJson },
+                    revealedValue = JSON_VALUE.takeIf { revealedJson },
+                    version = 3,
+                    revealingKey = null,
+                ),
+            )
             add(SecretPathRow.Note("versions:title", context.getString(dev.proflyder.home.feature.secrets.impl.R.string.secrets_versions)))
             addAll(
                 versionRows(
@@ -189,6 +204,7 @@ class SecretsScreenshotTest {
         val bitmap = render(surface(context, binding.root), 411, 891)
         save(bitmap, name)
         assertTrue(bitmap.width > 0)
+        assertEquals(revealedJson, rows.any { it is SecretPathRow.ValueBody })
     }
 
     @Test
@@ -255,4 +271,8 @@ class SecretsScreenshotTest {
     }
 
     private fun exactly(size: Int): Int = View.MeasureSpec.makeMeasureSpec(size, View.MeasureSpec.EXACTLY)
+
+    private companion object {
+        const val JSON_VALUE = "{\n  \"user\": \"svc-push\",\n  \"token\": \"t0k3n\",\n  \"scopes\": [\"send\", \"read\"]\n}"
+    }
 }

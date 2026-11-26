@@ -4,6 +4,7 @@ import dev.proflyder.home.core.model.HermesAgent
 import dev.proflyder.home.core.model.HermesAgentStatus
 import dev.proflyder.home.core.model.HermesAgents
 import dev.proflyder.home.core.model.HermesReport
+import dev.proflyder.home.core.model.HermesReportChannel
 import dev.proflyder.home.core.model.HermesReports
 import dev.proflyder.home.core.model.HermesSkill
 import dev.proflyder.home.core.model.HermesSkills
@@ -34,6 +35,7 @@ internal data class HermesAgentsDto(val available: Boolean = false, val agents: 
 @Serializable
 internal data class HermesReportDto(
     val id: String = "",
+    val channel: String = "",
     val requestedAt: Long = 0,
     val completedAt: Long? = null,
     val text: String = "",
@@ -110,6 +112,7 @@ internal interface HermesPanelApi {
 
 internal fun agentStatus(raw: String): HermesAgentStatus = when (raw) {
     "active", "starting", "pending", "stopping" -> HermesAgentStatus.RUNNING
+    "waiting" -> HermesAgentStatus.WAITING
     "idle" -> HermesAgentStatus.IDLE
     "error" -> HermesAgentStatus.FAILED
     else -> HermesAgentStatus.OTHER
@@ -122,8 +125,15 @@ internal fun HermesAgentsDto.toDomain(): HermesAgents = HermesAgents(
 
 internal fun HermesReportsDto.toDomain(): HermesReports = HermesReports(
     available = available,
-    reports = reports.map { HermesReport(it.id, it.requestedAt, it.completedAt, it.text, it.failed) },
+    reports = reports.map { HermesReport(it.id, reportChannel(it.channel), it.requestedAt, it.completedAt, it.text, it.failed) },
 )
+
+internal fun reportChannel(raw: String): HermesReportChannel = when (raw) {
+    "telegram" -> HermesReportChannel.TELEGRAM
+    "app" -> HermesReportChannel.APP
+    "voice" -> HermesReportChannel.VOICE
+    else -> HermesReportChannel.UNKNOWN
+}
 
 internal fun VoiceStatusDto.toDomain(): VoiceStatus = VoiceStatus(
     relayUp = relayUp,

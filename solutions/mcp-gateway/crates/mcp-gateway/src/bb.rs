@@ -134,7 +134,7 @@ pub trait BbApi: Send + Sync {
         true
     }
     fn targets(&self) -> BbFuture<'_, Result<Targets, Error>>;
-    fn status(&self, limit: usize) -> BbFuture<'_, Result<StatusResult, Error>>;
+    fn status(&self, query: StatusQuery) -> BbFuture<'_, Result<StatusResult, Error>>;
     fn validate_spawn(&self, request: SpawnRequest) -> BbFuture<'_, Result<(), Error>>;
     fn spawn(&self, request: SpawnRequest) -> BbFuture<'_, Result<SpawnResult, Error>>;
     fn send(&self, request: SendRequest) -> BbFuture<'_, Result<SendResult, Error>>;
@@ -150,8 +150,12 @@ impl BbApi for Dispatcher {
         Box::pin(async move { self.decode(method::TARGETS, json!({})).await })
     }
 
-    fn status(&self, limit: usize) -> BbFuture<'_, Result<StatusResult, Error>> {
-        Box::pin(async move { self.decode(method::STATUS, json!({"limit": limit})).await })
+    fn status(&self, query: StatusQuery) -> BbFuture<'_, Result<StatusResult, Error>> {
+        Box::pin(async move {
+            let params = serde_json::to_value(query)
+                .map_err(|_| Error::new("invalid_request", "Некорректный запрос."))?;
+            self.decode(method::STATUS, params).await
+        })
     }
 
     fn validate_spawn(&self, request: SpawnRequest) -> BbFuture<'_, Result<(), Error>> {
@@ -393,23 +397,56 @@ pub struct TurnResultResult {
     pub reference: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StatusQuery {
+    pub limit: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub profile: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub recent_hours: Option<u32>,
+}
+
+impl StatusQuery {
+    #[must_use]
+    pub fn personal(limit: usize) -> Self {
+        Self {
+            limit,
+            profile: Some(PROFILE_PERSONAL.to_owned()),
+            recent_hours: None,
+        }
+    }
+
+    #[must_use]
+    pub fn recent(mut self, hours: u32) -> Self {
+        self.recent_hours = Some(hours);
+        self
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Thread {
-    #[serde(default)]
+    #[serde(default, alias = "threadId", deserialize_with = "text_or_null")]
     pub id: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "text_or_null")]
     pub title: String,
-    #[serde(default)]
+    #[serde(default, alias = "projectName", deserialize_with = "text_or_null")]
     pub project: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "text_or_null")]
     pub project_id: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "text_or_null")]
     pub profile: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "text_or_null")]
     pub status: String,
     #[serde(default)]
     pub runtime_seconds: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub updated_at: Option<i64>,
+}
+
+fn text_or_null<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<String, D::Error> {
+    Ok(Option::<String>::deserialize(deserializer)?.unwrap_or_default())
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -833,20 +870,27 @@ targets:
     async fn the_dispatcher_decodes_a_bridge_answer() {
         let runner = Arc::new(FakeRunner {
             stdout: Mutex::new(
-                br#"{"ok":true,"result":{"threads":[{"id":"thr_1","profile":"personal","status":"running"}]}}"#
+                br#"{"ok":true,"result":{"threads":[{"threadId":"thr_1","title":null,"projectName":"Lab","profile":"personal","status":"waiting","updatedAt":5}]}}"#
                     .to_vec(),
             ),
             exit_code: Some(0),
             payloads: Mutex::new(Vec::new()),
         });
         let dispatcher = Dispatcher::new(runner.clone(), Duration::from_secs(1));
-        let status = dispatcher.status(20).await.expect("status");
+        let status = dispatcher
+            .status(StatusQuery::personal(20))
+            .await
+            .expect("status");
         assert_eq!(status.threads.len(), 1);
         assert_eq!(status.threads[0].id, "thr_1");
+        assert_eq!(status.threads[0].project, "Lab");
+        assert_eq!(status.threads[0].title, "");
+        assert_eq!(status.threads[0].updated_at, Some(5));
         let payload = runner.payloads.lock().expect("lock")[0].clone();
         let payload: Value = serde_json::from_slice(&payload).expect("payload");
         assert_eq!(payload["method"], "status");
         assert_eq!(payload["params"]["limit"], 20);
+        assert_eq!(payload["params"]["profile"], "personal");
     }
 
     #[tokio::test]
@@ -861,7 +905,10 @@ targets:
             payloads: Mutex::new(Vec::new()),
         });
         let dispatcher = Dispatcher::new(runner, Duration::from_secs(1));
-        let error = dispatcher.status(20).await.expect_err("refused");
+        let error = dispatcher
+            .status(StatusQuery::personal(20))
+            .await
+            .expect_err("refused");
         assert_eq!(error.code, "thread_limit");
         assert_eq!(speech_for_error(&error), "Лимит тредов.");
     }

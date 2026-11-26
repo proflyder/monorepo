@@ -80,7 +80,7 @@ internal class ChatAdapter(
             else -> BubbleHolder(ItemChatBubbleBinding.inflate(inflater, parent, false), callback)
         }
 
-    fun bubbleAt(position: Int): ChatItem.Bubble? = currentList.getOrNull(position) as? ChatItem.Bubble
+    fun quoteAt(position: Int): ChatItem.Bubble? = currentList.getOrNull(position)?.quote()
 
     private class DayHolder(
         private val views: ItemChatDayBinding,

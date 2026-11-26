@@ -55,4 +55,6 @@ internal sealed interface SecretPathRow {
     ) : SecretPathRow
 
     data class Note(override val key: String, val text: String) : SecretPathRow
+
+    data class ValueBody(override val key: String, val text: String) : SecretPathRow
 }

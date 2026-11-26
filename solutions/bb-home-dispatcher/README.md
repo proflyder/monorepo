@@ -143,9 +143,14 @@ reasoning:
 
 ### `status`
 
-`{ "limit": 10 }` (1–50). Возвращает работающие и недавние треды: id, title,
-project, profile, machine, status, `runtimeSeconds` (для активных — от
-последнего `turn/started`, иначе `null`). Работающие идут первыми.
+`{ "limit": 10, "profile"?: "personal", "recentHours"?: 24 }` (limit 1–100,
+recentHours 1–168). Фильтры по профилю и окну применяются до `limit`, архивные
+и удалённые треды не входят. Возвращает треды: id, title, project, profile,
+machine, status, `updatedAt`, `runtimeSeconds` (для активных — от последнего
+`turn/started`, иначе `null`). Статус `waiting` — у простаивающего треда есть
+pending interaction (ждёт владельца). С `recentHours` остаются занятые
+(работают или ждут) и обновлённые за окно. Занятые идут первыми, затем по
+`updatedAt`.
 
 У каждого треда есть `compact` — состояние автосжатия для отладки:
 `turnsSinceCompaction`, `lastCompactionAt`, `lastCompactionReason`

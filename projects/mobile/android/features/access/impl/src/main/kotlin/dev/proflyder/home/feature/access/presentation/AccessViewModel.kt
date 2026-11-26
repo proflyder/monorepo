@@ -34,6 +34,8 @@ internal data class AccessEditorState(
 ) {
     val canEditModules: Boolean get() = !owner
 
+    val canRevoke: Boolean get() = id != null && !owner
+
     val cleanName: String get() = name.trim()
 
     val canSave: Boolean get() = cleanName.isNotEmpty() && cleanName.length <= MAX_NAME && !saving
@@ -49,7 +51,7 @@ internal sealed interface AccessIntent {
     data object Refresh : AccessIntent
     data object New : AccessIntent
     data class Edit(val token: AccessToken) : AccessIntent
-    data class RevokeRequest(val token: AccessToken) : AccessIntent
+    data object EditorRevoke : AccessIntent
     data class Revoke(val id: String) : AccessIntent
     data class EditorName(val value: String) : AccessIntent
     data class EditorModule(val module: AppModule, val enabled: Boolean) : AccessIntent
@@ -76,7 +78,7 @@ internal class AccessViewModel(
             AccessIntent.Refresh -> repository.refresh()
             AccessIntent.New -> updateState { copy(editor = newEditor()) }
             is AccessIntent.Edit -> updateState { copy(editor = editorOf(intent.token)) }
-            is AccessIntent.RevokeRequest -> emit(AccessEvent.ConfirmRevoke(intent.token))
+            AccessIntent.EditorRevoke -> revokeFromEditor()
             is AccessIntent.Revoke -> revoke(intent.id)
             is AccessIntent.EditorName -> rename(intent.value)
             is AccessIntent.EditorModule -> toggle(intent.module, intent.enabled)
@@ -94,6 +96,13 @@ internal class AccessViewModel(
         name = token.name,
         modules = token.modules,
     )
+
+    private fun revokeFromEditor() {
+        val id = currentState.editor?.takeIf { it.canRevoke }?.id ?: return
+        val token = currentState.tokens.tokens.firstOrNull { it.id == id } ?: return
+        updateState { copy(editor = null) }
+        emit(AccessEvent.ConfirmRevoke(token))
+    }
 
     private fun applyTokens(tokens: AccessTokensState) {
         val wasLoading = currentState.tokens.loading

@@ -76,9 +76,13 @@ internal class ControlListRenderer(
         filter = state.filter,
         texts = texts,
         expandedDevices = state.expandedDevices,
-        leading = listOf(ControlItem.Hub(state.hub.cards, state.hub.remaining, state.hub.nowUnix)),
+        leading = listOfNotNull(hubItem(state)),
         collapsedRooms = state.collapsedRooms,
     )
+
+    private fun hubItem(state: ControlListInput): ControlItem.Hub? = state.hub
+        .takeIf { it.cards.isNotEmpty() }
+        ?.let { ControlItem.Hub(it.cards, it.remaining, it.nowUnix) }
 
     private fun controlTexts() = ControlTexts(
         otherDevices = context.getString(R.string.control_section_other),

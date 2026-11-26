@@ -63,6 +63,15 @@ data class SystemHosts(
     val host: PveHost?,
     val guestsAvailable: Boolean,
     val guests: List<PveGuest>,
+    val targetsAvailable: Boolean = false,
+    val targets: List<ScrapeTarget> = emptyList(),
+)
+
+data class ScrapeTarget(
+    val job: String,
+    val up: Int,
+    val total: Int,
+    val level: HealthLevel,
 )
 
 data class KubePod(

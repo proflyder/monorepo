@@ -9,6 +9,7 @@ import dev.proflyder.home.core.model.KubeCluster
 import dev.proflyder.home.core.model.KubeNamespace
 import dev.proflyder.home.core.model.KubePod
 import dev.proflyder.home.core.model.PveGuest
+import dev.proflyder.home.core.model.ScrapeTarget
 import dev.proflyder.home.core.model.PveHost
 import dev.proflyder.home.core.model.SystemAlert
 import dev.proflyder.home.core.model.SystemDevices
@@ -221,11 +222,27 @@ internal class SystemRows(private val context: Context) {
         return metric(key, title, ratioLevel(ratio), usageText(usage))
     }
 
-    private fun guestsDetail(hosts: SystemHosts): List<SystemRow> = when {
+    private fun guestsDetail(hosts: SystemHosts): List<SystemRow> = guestRows(hosts) + targetRows(hosts)
+
+    private fun guestRows(hosts: SystemHosts): List<SystemRow> = when {
         !hosts.guestsAvailable -> listOf(SystemRow.Note("guests:none", context.getString(R.string.system_no_data_guests)))
         hosts.guests.isEmpty() -> listOf(SystemRow.Note("guests:empty", context.getString(R.string.system_guests_empty)))
         else -> hosts.guests.map { guestRow(it) }
     }
+
+    private fun targetRows(hosts: SystemHosts): List<SystemRow> {
+        if (!hosts.targetsAvailable) return emptyList()
+        val level = hosts.targets.maxOfOrNull { it.level } ?: HealthLevel.OK
+        val header = SystemRow.Group("targets", level, context.getString(R.string.system_targets_title))
+        return listOf(header) + hosts.targets.map(::targetRow)
+    }
+
+    private fun targetRow(target: ScrapeTarget): SystemRow.Item = SystemRow.Item(
+        "target:${target.job}",
+        target.level,
+        target.job,
+        context.getString(R.string.system_targets_up, target.up, target.total),
+    )
 
     private fun guestRow(guest: PveGuest): SystemRow.Item {
         val kind = context.getString(if (guest.kind == GuestKind.CT) R.string.system_kind_ct else R.string.system_kind_vm)

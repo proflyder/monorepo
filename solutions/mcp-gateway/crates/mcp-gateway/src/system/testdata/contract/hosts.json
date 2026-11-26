@@ -75,5 +75,26 @@
     "up": true,
     "uptimeSeconds": 1491534.0
   },
-  "status": "ok"
+  "status": "ok",
+  "targets": [
+    {
+      "job": "station",
+      "status": "critical",
+      "total": 1,
+      "up": 0
+    },
+    {
+      "job": "kube-state-metrics",
+      "status": "warning",
+      "total": 2,
+      "up": 1
+    },
+    {
+      "job": "pve-node",
+      "status": "ok",
+      "total": 1,
+      "up": 1
+    }
+  ],
+  "targetsAvailable": true
 }

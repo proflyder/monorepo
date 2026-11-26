@@ -87,6 +87,7 @@ metadata="${metadata_file:-$work/metadata.json}"
 echo "== building hermes at ${revision} (SOURCE_DATE_EPOCH=${source_date_epoch})" >&2
 docker buildx build \
   --file "$DOCKERFILE" \
+  --build-context "patches=${SCRIPT_DIR}/patches" \
   --platform "$PLATFORM" \
   --build-arg "SOURCE_DATE_EPOCH=${source_date_epoch}" \
   --label "org.opencontainers.image.revision=${revision}" \

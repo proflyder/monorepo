@@ -102,7 +102,12 @@ class SystemRowsTest {
 
     @Test
     fun guestAndHostDetailsCarryMetricsAndLevels() {
-        val guests = rows.detail(SystemSection.GUESTS, SystemFixtures.snapshot).map { it as SystemRow.Item }
+        val detail = rows.detail(SystemSection.GUESTS, SystemFixtures.snapshot)
+        val guests = detail.takeWhile { it is SystemRow.Item }.map { it as SystemRow.Item }
+        val targets = detail.dropWhile { it is SystemRow.Item }
+        assertEquals(SystemRow.Group("targets", HealthLevel.CRITICAL, "Monitoring targets"), targets.first())
+        assertEquals(listOf("station", "pve-node"), targets.drop(1).map { (it as SystemRow.Item).title })
+        assertEquals("0 of 1 up", (targets[1] as SystemRow.Item).subtitle)
         assertEquals("102 · vpn (CT)", guests.first().title)
         assertEquals("Stopped · starts on boot", guests.first().subtitle)
         assertEquals(HealthLevel.CRITICAL, guests.first().level)

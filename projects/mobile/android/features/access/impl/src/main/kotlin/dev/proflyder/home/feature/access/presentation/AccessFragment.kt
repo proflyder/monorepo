@@ -2,14 +2,11 @@ package dev.proflyder.home.feature.access.presentation
 
 import android.content.DialogInterface
 import android.os.Bundle
-import android.view.Gravity
-import android.view.View
 import android.widget.LinearLayout
 import androidx.appcompat.app.AlertDialog
 import androidx.core.view.isVisible
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.materialswitch.MaterialSwitch
-import dev.proflyder.home.core.designsystem.HomePopupMenu
 import dev.proflyder.home.core.model.AccessToken
 import dev.proflyder.home.core.model.AppModule
 import dev.proflyder.home.core.presentation.ScreenFragment
@@ -31,7 +28,7 @@ internal class AccessFragment :
     ScreenFragment<FragmentAccessBinding, AccessUiState, AccessIntent, AccessEvent>(FragmentAccessBinding.Companion::inflate) {
     override val viewModel: AccessViewModel by screenViewModel()
 
-    private val adapter = AccessAdapter(AccessAdapterCallback(::openToken, ::openMenu))
+    private val adapter = AccessAdapter(AccessAdapterCallback(::openToken))
     private val editorSlot = StateDialogSlot()
     private var editorDialog: AlertDialog? = null
     private var editorViews: DialogAccessEditorBinding? = null
@@ -75,17 +72,6 @@ internal class AccessFragment :
 
     private fun openToken(token: AccessToken) = dispatch(AccessIntent.Edit(token))
 
-    private fun openMenu(anchor: View, token: AccessToken) {
-        HomePopupMenu(anchor, R.menu.access_token_actions) { onMenuAction(it, token) }.show(Gravity.END)
-    }
-
-    private fun onMenuAction(itemId: Int, token: AccessToken) {
-        when (itemId) {
-            R.id.access_action_edit -> dispatch(AccessIntent.Edit(token))
-            R.id.access_action_revoke -> dispatch(AccessIntent.RevokeRequest(token))
-        }
-    }
-
     private fun renderStatus(state: AccessTokensState) = with(binding) {
         val failure = state.failure
         accessRefresh.isRefreshing = state.loading && state.tokens.isNotEmpty()
@@ -118,6 +104,7 @@ internal class AccessFragment :
             .setView(views.root)
             .setNegativeButton(android.R.string.cancel) { dialog, _ -> dialog.cancel() }
             .setPositiveButton(R.string.access_editor_save, null)
+            .apply { if (editor.canRevoke) setNeutralButton(R.string.access_action_revoke) { _, _ -> dispatch(AccessIntent.EditorRevoke) } }
             .create()
             .also { dialog -> dialog.setOnShowListener { bindSave(dialog) } }
             .also { editorDialog = it }

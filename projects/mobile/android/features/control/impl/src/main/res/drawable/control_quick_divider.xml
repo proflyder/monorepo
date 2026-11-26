@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <shape xmlns:android="http://schemas.android.com/apk/res/android">
-    <size android:height="@dimen/ds_space_s" />
+    <size android:height="@dimen/control_card_gap" />
     <solid android:color="@android:color/transparent" />
 </shape>

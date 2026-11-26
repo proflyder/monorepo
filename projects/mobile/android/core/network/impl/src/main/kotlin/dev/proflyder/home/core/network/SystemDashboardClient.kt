@@ -16,6 +16,7 @@ import dev.proflyder.home.core.model.PveHost
 import dev.proflyder.home.core.model.StationHealth
 import dev.proflyder.home.core.model.SystemAlert
 import dev.proflyder.home.core.model.SystemDevices
+import dev.proflyder.home.core.model.ScrapeTarget
 import dev.proflyder.home.core.model.SystemHosts
 import dev.proflyder.home.core.model.SystemSections
 import dev.proflyder.home.core.model.SystemSummary
@@ -84,6 +85,16 @@ internal data class SystemHostsDto(
     val host: PveHostDto? = null,
     val guestsAvailable: Boolean = false,
     val guests: List<PveGuestDto> = emptyList(),
+    val targetsAvailable: Boolean = false,
+    val targets: List<ScrapeTargetDto> = emptyList(),
+)
+
+@Serializable
+internal data class ScrapeTargetDto(
+    val job: String = "",
+    val up: Int = 0,
+    val total: Int = 0,
+    val status: String = "",
 )
 
 @Serializable
@@ -213,6 +224,8 @@ internal fun SystemHostsDto.toDomain(): SystemHosts = SystemHosts(
     host = host?.toDomain(),
     guestsAvailable = guestsAvailable,
     guests = guests.map { it.toDomain() },
+    targetsAvailable = targetsAvailable,
+    targets = targets.map { ScrapeTarget(it.job, it.up, it.total, it.status.toHealthLevel()) },
 )
 
 internal fun KubePodDto.toDomain(): KubePod = KubePod(

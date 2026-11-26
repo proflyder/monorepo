@@ -42,6 +42,8 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginStart="@dimen/ds_space_s"
+        android:ellipsize="end"
+        android:maxWidth="@dimen/ds_list_row_value_max_width"
         android:maxLines="1"
         android:textAppearance="?attr/textAppearanceBodyMedium"
         android:textColor="?attr/colorOnSurfaceVariant"

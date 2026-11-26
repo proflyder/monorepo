@@ -3,6 +3,8 @@
     android:id="@+id/control_hub_rows"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
+    android:layout_marginHorizontal="@dimen/control_card_margin"
+    android:layout_marginTop="@dimen/control_card_gap"
     android:divider="@drawable/control_quick_divider"
     android:orientation="vertical"
     android:showDividers="middle" />

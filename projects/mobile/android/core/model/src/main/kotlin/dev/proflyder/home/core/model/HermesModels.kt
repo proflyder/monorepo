@@ -2,6 +2,7 @@ package dev.proflyder.home.core.model
 
 enum class HermesAgentStatus {
     RUNNING,
+    WAITING,
     IDLE,
     FAILED,
     OTHER,
@@ -17,8 +18,16 @@ data class HermesAgent(
 
 data class HermesAgents(val available: Boolean, val agents: List<HermesAgent>)
 
+enum class HermesReportChannel {
+    TELEGRAM,
+    APP,
+    VOICE,
+    UNKNOWN,
+}
+
 data class HermesReport(
     val id: String,
+    val channel: HermesReportChannel,
     val requestedAtUnix: Long,
     val completedAtUnix: Long?,
     val text: String,

@@ -23,7 +23,7 @@
             android:id="@+id/control_tile_icon"
             android:layout_width="@dimen/control_tile_icon"
             android:layout_height="@dimen/control_tile_icon"
-            android:background="@drawable/control_bg_icon"
+            android:background="@drawable/ds_bg_card_icon"
             android:importantForAccessibility="no"
             android:padding="@dimen/control_tile_icon_padding" />
 
