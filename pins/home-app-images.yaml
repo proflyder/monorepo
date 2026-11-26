@@ -7,7 +7,7 @@ metadata:
     proflyder.dev/source: "initial pin from live cluster 2026-11-10"
     proflyder.dev/source-commit: "cae2cdaefa2d9c714d31685d108371148cb2c18f"
     proflyder.dev/source-tree: "2c79c5a3f48d11beffd5d23ec34231bbc5a3ac55"
-    proflyder.dev/verified-at: "2026-11-26T16:30:34Z"
+    proflyder.dev/verified-at: "2026-11-26T16:31:29Z"
     proflyder.dev/run: "https://github.com/proflyder/monorepo/actions/runs/45859290646"
 data:
   BUILD_ID: "cae2cdaefa2d"
@@ -18,7 +18,7 @@ data:
   HA_SCENARIO_IMAGE: "ghcr.io/proflyder/ha-scenario@sha256:86b3d632549aedce4d9736207ba5bf089f1323ce73f514395b55191e56c4359f"
   HEALTH_EXPORTER_IMAGE: "ghcr.io/proflyder/health-exporter@sha256:b9a1d0a8ffb24c6e27cc1a0f51381f83741ae69302ceaba1b1044279dfaad96f"
   HERMES_CONFIG_IMAGE: "ghcr.io/proflyder/hermes-config@sha256:d1171219a8ddb3743f3376369e9e37adb610fed893b66fc0a21b2f4ef7cbae48"
-  HERMES_IMAGE: "ghcr.io/proflyder/hermes@sha256:d07c039eb5a02b567a115b08e308d08d872512ef55b8895ecc0a7783be64b466"
+  HERMES_IMAGE: "ghcr.io/proflyder/hermes@sha256:279eb49ba33287da637e8febc209ccf88aa95d5c3072814bb499b9c50c87d7b3"
   HOME_DEPLOY_IMAGE: "ghcr.io/proflyder/home-deploy@sha256:1dc177dfc2c40f04d21384974a4a4dbd81b9712b3df446cd7dea82e8a5848150"
   INTERCOM_IMAGE: "ghcr.io/proflyder/intercom@sha256:566aa3e9efef900ec1536632036333917bbc344f0d8eb3a281af50f2c7720179"
   MCP_GATEWAY_IMAGE: "ghcr.io/proflyder/mcp-gateway@sha256:8d26bda2a636db29d6b1b0968bb5184e79dbbc976894816b4e76fe64cc1d0b3b"
