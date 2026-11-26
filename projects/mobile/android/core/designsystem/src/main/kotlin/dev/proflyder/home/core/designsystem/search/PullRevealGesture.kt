@@ -24,7 +24,7 @@ internal class PullRevealGesture(
 
     override fun onTouchEvent(rv: RecyclerView, e: MotionEvent) {
         when (e.actionMasked) {
-            MotionEvent.ACTION_MOVE -> search.dragTo(startOffset + search.dragOffsetFor(e.y - downY - slop))
+            MotionEvent.ACTION_MOVE -> search.dragTo(startOffset + search.dragOffsetFor(beyondSlop(e.y - downY)))
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> finish()
         }
     }
@@ -39,12 +39,20 @@ internal class PullRevealGesture(
         downY = e.y
         startOffset = search.offset
         active = false
+        search.releaseFocusIfBlank()
     }
 
     private fun shouldStart(distance: Float): Boolean {
         val atTop = list.isAtStart()
         val pullingDown = distance > slop && search.offset < search.fullHeight
-        return active || (atTop && pullingDown)
+        val pushingUp = distance < -slop && search.offset > 0 && search.blank
+        return active || (atTop && (pullingDown || pushingUp))
+    }
+
+    private fun beyondSlop(distance: Float): Float = when {
+        distance > slop -> distance - slop
+        distance < -slop -> distance + slop
+        else -> 0f
     }
 
     private fun RecyclerView.isAtStart(): Boolean {

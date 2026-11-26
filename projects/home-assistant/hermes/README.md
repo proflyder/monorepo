@@ -38,6 +38,24 @@ lives in [`HERMES.md`](HERMES.md); the TTS sanitizer is the
 [`solutions/voice-proxy`](../../../solutions/voice-proxy/README.md) service.
 Do not copy secrets into this directory.
 
+## Upstream patch at image build
+
+`deploy/images/hermes/patches/apply.py` runs in the Dockerfile after the
+upstream checkout and fails the build if an anchor drifts
+(`deploy/test_hermes_upstream_patch.py`). It fixes two `api_server` handlers
+that upstream still ships broken or incomplete (checked against `main` on
+2026-11-26):
+
+- `GET /v1/skills` calls `find_all_skills(include_editorial=True)`, a keyword
+  `tools/skills_tool.py` does not accept, so the endpoint always returned 500.
+  The patch drops the keyword.
+- `GET /v1/toolsets` lists only built-in configurable toolsets. The patch
+  appends every `mcp_servers` entry as `mcp-<server>` with its registered
+  tools, enabled when it is in `platform_toolsets.api_server`.
+
+Remove the patch once upstream fixes both; bumping `revision` re-runs the
+anchors.
+
 ## Delivery: Flux init container
 
 `config.yaml`, `.hermes.md`, `SOUL.md`, `skills/` and both prompts live on the

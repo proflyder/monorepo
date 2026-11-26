@@ -4,6 +4,7 @@ import dev.proflyder.home.core.model.HermesAgent
 import dev.proflyder.home.core.model.HermesAgentStatus
 import dev.proflyder.home.core.model.HermesAgents
 import dev.proflyder.home.core.model.HermesReport
+import dev.proflyder.home.core.model.HermesReportChannel
 import dev.proflyder.home.core.model.HermesReports
 import dev.proflyder.home.core.model.HermesSkill
 import dev.proflyder.home.core.model.HermesSkills
@@ -19,6 +20,7 @@ internal object HermesFixtures {
         available = true,
         agents = listOf(
             HermesAgent("thr_1", "Почини свет в коридоре", "Station Lab", HermesAgentStatus.RUNNING, 754),
+            HermesAgent("thr_4", "Разбор бэкапов", "Home Lab", HermesAgentStatus.WAITING, null),
             HermesAgent("thr_2", "Конспект по английскому", "English Notes", HermesAgentStatus.IDLE, null),
             HermesAgent("thr_3", "Обнови прошивку", "Station Lab", HermesAgentStatus.FAILED, null),
         ),
@@ -27,8 +29,8 @@ internal object HermesFixtures {
     val reports = HermesReports(
         available = true,
         reports = listOf(
-            HermesReport("41", NOON, NOON + 34, "Дом в порядке.\nK3s: 42 пода, проблем нет.\nКолонка: Pulsar 3.4, онлайн.", false),
-            HermesReport("17", NOON - 86_400, null, "", true),
+            HermesReport("41", HermesReportChannel.APP, NOON, NOON + 34, "Дом в порядке.\nK3s: 42 пода, проблем нет.\nКолонка: Pulsar 3.4, онлайн.", false),
+            HermesReport("17", HermesReportChannel.TELEGRAM, NOON - 86_400, null, "", true),
         ),
     )
 

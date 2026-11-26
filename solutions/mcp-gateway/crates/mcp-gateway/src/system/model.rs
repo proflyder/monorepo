@@ -55,6 +55,17 @@ pub struct Hosts {
     pub host: Option<Host>,
     pub guests_available: bool,
     pub guests: Vec<Guest>,
+    pub targets_available: bool,
+    pub targets: Vec<Target>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Target {
+    pub job: String,
+    pub up: u32,
+    pub total: u32,
+    pub status: Level,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]

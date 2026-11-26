@@ -22,10 +22,8 @@ import dev.zacsweers.metro.ClassKey
 import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.binding
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 
@@ -94,8 +92,7 @@ internal class AlarmsViewModel(
     private val repository: AlarmRepository,
     wallMillis: () -> Long = System::currentTimeMillis,
 ) : StateViewModel<AlarmsUiState, AlarmsIntent, AlarmsEvent>(AlarmsUiState()) {
-    val minute: StateFlow<Long> = minuteTicks(wallMillis)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), wallMillis() / MILLIS_PER_MINUTE)
+    val minute: StateFlow<Long> = viewModelScope.minuteState(wallMillis)
 
     private val bulk = ExclusiveActions(viewModelScope, ::onBusy) { emit(AlarmsEvent.Failure(it)) }
 
@@ -159,7 +156,6 @@ internal class AlarmsViewModel(
 
     private companion object {
         const val BULK = "selection"
-        const val MILLIS_PER_MINUTE = 60_000L
     }
 }
 

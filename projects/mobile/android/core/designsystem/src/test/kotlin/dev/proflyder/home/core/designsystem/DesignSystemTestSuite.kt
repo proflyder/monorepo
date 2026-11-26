@@ -1,6 +1,7 @@
 package dev.proflyder.home.core.designsystem
 
 import dev.proflyder.home.core.designsystem.glass.GlassChromeTest
+import dev.proflyder.home.core.designsystem.search.PullRevealSearchTest
 import org.junit.runner.RunWith
 import org.junit.runners.Suite
 
@@ -21,5 +22,6 @@ import org.junit.runners.Suite
     FullWidthRowsTest::class,
     SliderStylesTest::class,
     StickyHeadersLayoutManagerTest::class,
+    PullRevealSearchTest::class,
 )
 class DesignSystemTestSuite

@@ -17,6 +17,7 @@ import dev.proflyder.home.feature.secrets.impl.R
 import dev.proflyder.home.feature.secrets.impl.databinding.ItemSecretHeaderBinding
 import dev.proflyder.home.feature.secrets.impl.databinding.ItemSecretKeyBinding
 import dev.proflyder.home.feature.secrets.impl.databinding.ItemSecretNoteBinding
+import dev.proflyder.home.feature.secrets.impl.databinding.ItemSecretValueBinding
 import dev.proflyder.home.feature.secrets.impl.databinding.ItemSecretVersionBinding
 
 internal interface SecretPathActions {
@@ -42,7 +43,7 @@ internal class SecretPathAdapter(
 ) : BaseListAdapter<SecretPathRow, ViewBinding, PathCallback>(BaseAdapterCallback(), PathDiff),
     SectionedAdapter {
     override fun isSectionHeader(position: Int): Boolean = getItem(position).let {
-        it !is SecretPathRow.KeyRow && it !is SecretPathRow.VersionRow
+        it !is SecretPathRow.KeyRow && it !is SecretPathRow.VersionRow && it !is SecretPathRow.ValueBody
     }
 
     override fun viewTypeOf(item: SecretPathRow): Int = when (item) {
@@ -50,6 +51,7 @@ internal class SecretPathAdapter(
         is SecretPathRow.KeyRow -> TYPE_KEY
         is SecretPathRow.VersionRow -> TYPE_VERSION
         is SecretPathRow.Note -> TYPE_NOTE
+        is SecretPathRow.ValueBody -> TYPE_VALUE
     }
 
     override fun onCreateHolder(inflater: LayoutInflater, parent: ViewGroup, viewType: Int): PathHolder =
@@ -57,6 +59,7 @@ internal class SecretPathAdapter(
             TYPE_HEADER -> HeaderHolder(ItemSecretHeaderBinding.inflate(inflater, parent, false))
             TYPE_KEY -> KeyHolder(ItemSecretKeyBinding.inflate(inflater, parent, false))
             TYPE_VERSION -> VersionHolder(ItemSecretVersionBinding.inflate(inflater, parent, false))
+            TYPE_VALUE -> ValueHolder(ItemSecretValueBinding.inflate(inflater, parent, false))
             else -> NoteHolder(ItemSecretNoteBinding.inflate(inflater, parent, false))
         }
 
@@ -91,7 +94,7 @@ internal class SecretPathAdapter(
             views.secretKeyRow.title = row.name
             views.secretKeyRow.subtitle = views.root.context.getString(R.string.secrets_key_version, row.version)
             views.secretKeyRow.value = when {
-                row.value != null -> row.value
+                row.value != null -> SecretValueText.preview(row.value)
                 row.revealing -> views.root.context.getString(R.string.secrets_revealing)
                 else -> views.root.context.getString(R.string.secrets_masked_value)
             }
@@ -125,11 +128,20 @@ internal class SecretPathAdapter(
         }
     }
 
+    private class ValueHolder(
+        private val views: ItemSecretValueBinding,
+    ) : PathHolder(views, BaseAdapterCallback()) {
+        override fun bind(item: SecretPathRow) {
+            views.secretValueText.text = (item as SecretPathRow.ValueBody).text
+        }
+    }
+
     private companion object {
         const val TYPE_HEADER = 0
         const val TYPE_KEY = 1
         const val TYPE_VERSION = 2
         const val TYPE_NOTE = 3
+        const val TYPE_VALUE = 4
     }
 }
 
@@ -139,14 +151,18 @@ internal fun keyRows(
     revealedValue: String?,
     version: Long,
     revealingKey: String?,
-): List<SecretPathRow> = keys.map { key ->
-    SecretPathRow.KeyRow(
-        key = "key:$key",
-        name = key,
-        value = revealedValue.takeIf { key == revealedKey },
-        revealed = key == revealedKey,
-        version = version,
-        revealing = key == revealingKey,
+): List<SecretPathRow> = keys.flatMap { key ->
+    val value = revealedValue.takeIf { key == revealedKey }
+    listOfNotNull(
+        SecretPathRow.KeyRow(
+            key = "key:$key",
+            name = key,
+            value = value,
+            revealed = key == revealedKey,
+            version = version,
+            revealing = key == revealingKey,
+        ),
+        value?.let(SecretValueText::full)?.let { SecretPathRow.ValueBody("value:$key", it) },
     )
 }
 

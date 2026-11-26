@@ -52,6 +52,12 @@ class AccessScreenshotTest {
         save(bitmap, "access-tokens.png")
         assertEquals(2, binding.accessList.adapter?.itemCount)
         assertTrue(bitmap.width > 0)
+        val card = binding.accessList.getChildAt(0)
+        val badge = card.findViewById<View>(dev.proflyder.home.feature.access.impl.R.id.access_item_owner)
+        val badgeRight = generateSequence(badge) { it.parent as? View }.takeWhile { it !== card }.sumOf { it.left } + badge.width
+        val cardRight = card.width
+        val rowPadding = context.resources.getDimensionPixelSize(dev.proflyder.home.feature.access.impl.R.dimen.access_row_padding)
+        assertEquals(rowPadding, cardRight - badgeRight)
     }
 
     @Test

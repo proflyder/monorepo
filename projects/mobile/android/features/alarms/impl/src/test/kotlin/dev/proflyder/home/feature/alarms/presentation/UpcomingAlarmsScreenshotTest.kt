@@ -10,6 +10,7 @@ import dev.proflyder.home.core.testing.ScheduleFixtures.schedule
 import dev.proflyder.home.feature.alarms.impl.databinding.FragmentAlarmsUpcomingBinding
 import dev.proflyder.home.feature.alarms.impl.databinding.ItemAlarmsUpcomingBinding
 import java.io.File
+import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneId
 import org.junit.Assert.assertEquals
@@ -45,9 +46,11 @@ class UpcomingAlarmsScreenshotTest {
             UpcomingAlarm(schedule("work", hour = 7, label = "Работа", repeat = RepeatKind.WEEKDAYS).copy(nextDueUnix = now + 36_000), ringing = false),
         )
         binding.root.visibility = View.VISIBLE
-        rows.forEachIndexed { index, row -> row.bind(alarms.getOrNull(index), now) }
+        rows.forEachIndexed { index, row -> row.bind(alarms.getOrNull(index), now, Instant.ofEpochSecond(now)) }
         assertEquals(View.GONE, binding.alarmsUpcomingThird.visibility)
         assertTrue(ItemAlarmsUpcomingBinding.bind(binding.alarmsUpcomingFirst).alarmsUpcomingLabel.text.contains("Подъём"))
+        val next = ItemAlarmsUpcomingBinding.bind(binding.alarmsUpcomingSecond).alarmsUpcomingLabel.text.toString()
+        assertTrue(next, next.startsWith("Работа · через "))
         savePng(binding.root, name, 411, 140)
         assertNotNull(binding.alarmsUpcomingFirst.foreground)
     }

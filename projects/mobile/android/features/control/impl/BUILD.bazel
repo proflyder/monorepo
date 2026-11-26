@@ -57,6 +57,7 @@ home_android_local_test(
         "dev.proflyder.home.feature.control.presentation.DeviceStateScreenshotTest",
         "dev.proflyder.home.feature.control.presentation.HomeScrolledGlassTest",
         "dev.proflyder.home.feature.control.presentation.HubRowsScreenshotTest",
+        "dev.proflyder.home.feature.control.presentation.HomeCardGridTest",
         "dev.proflyder.home.feature.control.presentation.LightSheetScreenshotTest",
     ],
     deps = [

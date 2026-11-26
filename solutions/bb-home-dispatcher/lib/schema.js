@@ -2,7 +2,7 @@ import { DispatchError } from "./errors.js";
 
 export const METHOD_PARAMS = {
   targets: { required: [], optional: [] },
-  status: { required: [], optional: ["limit"] },
+  status: { required: [], optional: ["limit", "profile", "recentHours"] },
   validate_spawn: {
     required: ["profile", "projectId", "providerId", "model", "reasoningLevel"],
     optional: [],
@@ -66,8 +66,16 @@ function parseParams(method, params) {
       const limit =
         params.limit === undefined
           ? 10
-          : expectInteger(params.limit, "limit", 1, 50);
-      return { limit };
+          : expectInteger(params.limit, "limit", 1, 100);
+      const profile =
+        params.profile === undefined
+          ? null
+          : expectString(params.profile, "profile", 1, 64);
+      const recentHours =
+        params.recentHours === undefined
+          ? null
+          : expectInteger(params.recentHours, "recentHours", 1, 168);
+      return { limit, profile, recentHours };
     }
     case "validate_spawn":
       return parseSpawnTarget(params);

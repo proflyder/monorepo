@@ -6,8 +6,8 @@ use home_contracttest::Options;
 use jiff::Timestamp;
 use mcp_gateway::bb::{
     BbApi, BbFuture, BbResolver, Error as BbError, SendRequest, SendResult, SpawnAction,
-    SpawnRequest, SpawnResult, StatusResult, Targets, Thread, TurnResultRequest, TurnResultResult,
-    UpdatesRequest, UpdatesResult,
+    SpawnRequest, SpawnResult, StatusQuery, StatusResult, Targets, Thread, TurnResultRequest,
+    TurnResultResult, UpdatesRequest, UpdatesResult,
 };
 use mcp_gateway::domain::alert::Alert;
 use mcp_gateway::domain::catalog::{Catalog, Service};
@@ -547,7 +547,7 @@ impl BbApi for ContractBb {
         })
     }
 
-    fn status(&self, _limit: usize) -> BbFuture<'_, Result<StatusResult, BbError>> {
+    fn status(&self, _query: StatusQuery) -> BbFuture<'_, Result<StatusResult, BbError>> {
         Box::pin(async move {
             if let Some(error) = self.status_error.lock().expect("bb").clone() {
                 return Err(error);

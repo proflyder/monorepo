@@ -109,6 +109,26 @@ class NotificationHistorySwipeFragmentTest {
     }
 
     @Test
+    fun rightRightThenLeftTogglesTwiceAndDeletesTheSameRow() {
+        val list = show()
+        val key = firstItemKey(list)
+        val before = readOf(key)
+
+        swipe(list, rowOf(list, key), 1)
+        assertEquals(!before, readOf(key))
+        assertEquals(0f, rowOf(list, key).translationX)
+
+        val row = rowOf(list, key)
+        assertEquals("a fresh swipe starts from the row's edge", 0f, startedTranslation(list, row, 1))
+        assertEquals(before, readOf(key))
+        assertEquals(0f, rowOf(list, key).translationX)
+
+        val revealed = swipe(list, rowOf(list, key), -1)
+        assertEquals(color(row, MaterialR.attr.colorError), revealed)
+        assertFalse(key in keys())
+    }
+
+    @Test
     fun headersDoNotSwipe() {
         val list = show()
         val manager = list.layoutManager as StickyHeadersLayoutManager
@@ -171,6 +191,22 @@ class NotificationHistorySwipeFragmentTest {
         list.dispatchTouchEvent(MotionEvent.obtain(start, start + (STEPS + 1) * STEP_MS, MotionEvent.ACTION_UP, endX, y, 0))
         settle(list)
         return revealed
+    }
+
+    private fun readOf(key: String): Boolean = repository.paged.state.value.items.first { it.key == key }.read
+
+    private fun startedTranslation(list: RecyclerView, row: View, sign: Int): Float {
+        val y = row.top + row.height / 2f
+        val startX = list.width / 2f
+        val start = SystemClock.uptimeMillis()
+        list.dispatchTouchEvent(MotionEvent.obtain(start, start, MotionEvent.ACTION_DOWN, startX, y, 0))
+        move(list, start, startX, y, 1)
+        val first = row.translationX
+        (1..STEPS).forEach { step -> move(list, start, startX + sign * step * list.width / (2f * STEPS), y, step + 1) }
+        val endX = startX + sign * list.width / 2f
+        list.dispatchTouchEvent(MotionEvent.obtain(start, start + (STEPS + 2) * STEP_MS, MotionEvent.ACTION_UP, endX, y, 0))
+        settle(list)
+        return first
     }
 
     private fun move(list: RecyclerView, start: Long, x: Float, y: Float, step: Int) {

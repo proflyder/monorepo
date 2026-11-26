@@ -19,6 +19,7 @@ use crate::tools::{AlertLister, BoxFuture, PromQuerier, Sample};
 
 const HOSTS: &str = include_str!("testdata/hosts.json");
 const GUESTS: &str = include_str!("testdata/guests.json");
+const TARGETS: &str = include_str!("testdata/targets.json");
 const K8S: &str = include_str!("testdata/k8s.json");
 const STATION: &str = include_str!("testdata/station.json");
 
@@ -66,6 +67,7 @@ impl FixtureProm {
             (GUESTS, build::GUEST_QUERIES),
             (K8S, build::K8S_QUERIES),
             (STATION, build::STATION_QUERIES),
+            (TARGETS, build::TARGET_QUERIES),
         ] {
             let answers: HashMap<String, Value> = serde_json::from_str(fixture).expect("fixture");
             for (key, promql) in table {
@@ -180,10 +182,30 @@ async fn get(app: &Router, path: &str) -> Value {
 }
 
 #[test]
+fn every_scrape_job_is_a_target_row_worst_first() {
+    let targets =
+        build::targets(&fixture_results(TARGETS, build::TARGET_QUERIES)).expect("targets");
+    let rows: Vec<(&str, u32, u32, Level)> = targets
+        .iter()
+        .map(|target| (target.job.as_str(), target.up, target.total, target.status))
+        .collect();
+    assert_eq!(
+        rows,
+        vec![
+            ("station", 0, 1, Level::Critical),
+            ("kube-state-metrics", 1, 2, Level::Warning),
+            ("pve-node", 1, 1, Level::Ok),
+        ]
+    );
+    assert!(build::targets(&Results::default()).is_none());
+}
+
+#[test]
 fn host_fixture_maps_to_the_contract() {
     let hosts = build::hosts(
         &fixture_results(HOSTS, build::HOST_QUERIES),
         &fixture_results(GUESTS, build::GUEST_QUERIES),
+        &fixture_results(TARGETS, build::TARGET_QUERIES),
     );
     let value = serde_json::to_value(&hosts).expect("json");
     assert_eq!(
@@ -225,11 +247,15 @@ fn host_fixture_maps_to_the_contract() {
 
 #[test]
 fn host_without_exporters_is_unknown() {
-    let hosts = build::hosts(&Results::default(), &Results::default());
+    let hosts = build::hosts(
+        &Results::default(),
+        &Results::default(),
+        &Results::default(),
+    );
     let value = serde_json::to_value(&hosts).expect("json");
     assert_eq!(
         value,
-        json!({"status": "unknown", "guestsStatus": "unknown", "guestsAvailable": false, "guests": []})
+        json!({"status": "unknown", "guestsStatus": "unknown", "guestsAvailable": false, "guests": [], "targetsAvailable": false, "targets": []})
     );
 }
 

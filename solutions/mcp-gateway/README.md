@@ -216,7 +216,7 @@ Read-only агрегатор для вкладки «Система» Android-п
 | Маршрут | Источник | Содержимое |
 |---|---|---|
 | `GET /v1/system/summary` | все секции + Alertmanager | `status`, `generatedAt`, `sections{host,guests,k8s,devices}`, `alerts[]`, `alertsAvailable` |
-| `GET /v1/system/hosts` | node exporter PVE (`job="pve-node"`), prometheus-pve-exporter (`job="pve-guests"`) | хост: CPU, ОЗУ, диск `/`, max coretemp, аптайм; гости: VMID, имя, VM/CT, running, onboot, CPU/ОЗУ/диск/аптайм. Остановленный гость с автозапуском — `critical`, проблемные первыми |
+| `GET /v1/system/hosts` | node exporter PVE (`job="pve-node"`), prometheus-pve-exporter (`job="pve-guests"`) | хост: CPU, ОЗУ, диск `/`, max coretemp, аптайм; гости: VMID, имя, VM/CT, running, onboot, CPU/ОЗУ/диск/аптайм. Остановленный гость с автозапуском — `critical`, проблемные первыми; `targets[]` — каждый scrape-job Prometheus (`count/sum by (job) (up)`): `job`, `up`, `total`, `status` (0 живых — `critical`, часть — `warning`) |
 | `GET /v1/system/k8s` | kube-state-metrics + cAdvisor | неймспейсы → поды: phase, ready/containers, рестарты (всего и за час), waiting reason, CPU, working set, возраст. `Succeeded` скрыты; проблемные неймспейсы и поды первыми |
 | `GET /v1/system/devices` | экспортёр Pulsar (`job="station"`), `phone-push` | колонка: up, версия/модель из `pulsar_info`, задержка = `scrape_duration_seconds`, Wi-Fi RSSI (`pulsar_wifi_rssi_dbm`, если экспортируется), температура, аптайм; телефоны из реестра push (без токенов) |
 
@@ -366,11 +366,11 @@ Read-only экран «Hermes» Android-приложения (вход стро�
 
 | Маршрут | Источник | Содержимое |
 |---|---|---|
-| `GET /v1/hermes/agents` | bb-диспетчер, метод `status` (limit 20) | треды личного профиля: `id`, `title`, `project`, `status` (как в bb), `runtimeSeconds`; `available` |
-| `GET /v1/hermes/reports` | relay → Hermes `GET /api/sessions?source=telegram`, 5 последних сессий → `GET /api/sessions/<id>/messages` | ответы на `/report`: сообщение пользователя, которое начинается с маркера вызова скилла `report` (или `/report`), и последний непустой ответ ассистента до следующего сообщения; `requestedAt`, `completedAt`, `text` (через `redact`), `failed` |
+| `GET /v1/hermes/agents` | bb-диспетчер, метод `status` `{limit: 60, profile: "personal", recentHours: 24}` | треды личного профиля всех проектов: работающие, ждущие ответа (`waiting` — у треда есть pending interaction) и обновлённые за 24 ч; занятые первыми, затем по `updatedAt`. Поля: `id`, `title`, `project`, `status`, `runtimeSeconds`, `updatedAt`; `available` |
+| `GET /v1/hermes/reports` | relay → Hermes `GET /api/sessions?source=telegram` и `source=api_server`, по 10 последних сессий → `GET /api/sessions/<id>/messages` | отчёты из любого канала: ход, в котором вызван инструмент `infra_report` (`tool_calls`/`tool_name`), либо сообщение с маркером скилла `report`/`/report`; ответ — последний непустой ответ ассистента хода. `channel`: `telegram`, `app` (`app_*`, `home-app`), `voice` (`api-…`); `requestedAt`, `completedAt`, `text` (через `redact`), `failed`. В голосе ответ — короткая озвучка, а не полный текст отчёта |
 | `GET /v1/hermes/voice` | relay `GET /v1/health`; сессии `source=api_server` с id `api-…` (голосовые ходы HA без `X-Hermes-Session-Id`), 10 последних | `relayUp` (ответил voice-proxy), `hermesUp`/`hermesVersion`, `agentMode` (голосовой режим агента шлюза), `requests[]`: `at`, `text`, `reply`, `latencyMs` (между временем сообщения пользователя и ответа), `failed` |
 
-| `GET /v1/hermes/toolsets` | relay → Hermes `GET /v1/toolsets` | наборы платформы `api_server`: `name`, `label` (пустой → `name`), `description`, `enabled`, `configured` (ключи заданы), `toolCount`, `tools[]`; включённые первыми; `available` |
+| `GET /v1/hermes/toolsets` | relay → Hermes `GET /v1/toolsets` | наборы платформы `api_server` (у `telegram` тот же список): встроенные configurable-наборы и, благодаря патчу образа Hermes, MCP-серверы `mcp-<server>` из `mcp_servers` (`enabled` — есть в `platform_toolsets.api_server`); `name`, `label` (пустой → `name`), `description`, `enabled`, `configured`, `toolCount`, `tools[]`; включённые первыми; `available` |
 | `GET /v1/hermes/skills` | relay → Hermes `GET /v1/skills` | установленные навыки: `name`, `description`, `category?`; по категории, затем по имени; `available` |
 
 Эталоны навыков и наборов — `crates/mcp-gateway/src/hermes/testdata/contract/*.json`

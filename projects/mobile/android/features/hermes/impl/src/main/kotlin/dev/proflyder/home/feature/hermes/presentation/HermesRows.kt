@@ -7,6 +7,7 @@ import dev.proflyder.home.core.model.HermesAgent
 import dev.proflyder.home.core.model.HermesAgentStatus
 import dev.proflyder.home.core.model.HermesAgents
 import dev.proflyder.home.core.model.HermesReport
+import dev.proflyder.home.core.model.HermesReportChannel
 import dev.proflyder.home.core.model.HermesReports
 import dev.proflyder.home.core.model.HermesSkill
 import dev.proflyder.home.core.model.HermesSkills
@@ -82,10 +83,17 @@ internal class HermesRows(private val context: Context) {
     private fun reportRow(report: HermesReport): HermesRow.Entry = HermesRow.Entry(
         key = "report:${report.id}",
         title = dateTime(report.requestedAtUnix),
-        subtitle = preview(report),
+        subtitle = join(channelLabel(report.channel), preview(report)),
         tone = if (report.failed) Tone.ERROR else Tone.NEUTRAL,
         target = HermesReportDestination(report.id),
     )
+
+    private fun channelLabel(channel: HermesReportChannel): String? = when (channel) {
+        HermesReportChannel.TELEGRAM -> context.getString(R.string.hermes_channel_telegram)
+        HermesReportChannel.APP -> context.getString(R.string.hermes_channel_app)
+        HermesReportChannel.VOICE -> context.getString(R.string.hermes_channel_voice)
+        HermesReportChannel.UNKNOWN -> null
+    }
 
     private fun preview(report: HermesReport): String = when {
         report.failed -> context.getString(R.string.hermes_report_failed)
@@ -113,6 +121,7 @@ internal class HermesRows(private val context: Context) {
     private fun agentModeRow(active: Boolean): HermesRow.Entry = HermesRow.Entry(
         key = "voice:mode",
         title = context.getString(R.string.hermes_voice_agent_mode),
+        subtitle = context.getString(R.string.hermes_voice_agent_mode_hint),
         value = context.getString(if (active) R.string.hermes_mode_on else R.string.hermes_mode_off),
     )
 
@@ -184,6 +193,7 @@ internal class HermesRows(private val context: Context) {
 
     private fun agentStatusLabel(status: HermesAgentStatus): Int = when (status) {
         HermesAgentStatus.RUNNING -> R.string.hermes_agent_running
+        HermesAgentStatus.WAITING -> R.string.hermes_agent_waiting
         HermesAgentStatus.IDLE -> R.string.hermes_agent_idle
         HermesAgentStatus.FAILED -> R.string.hermes_agent_failed
         HermesAgentStatus.OTHER -> R.string.hermes_agent_other
@@ -191,6 +201,7 @@ internal class HermesRows(private val context: Context) {
 
     private fun agentTone(status: HermesAgentStatus): Tone = when (status) {
         HermesAgentStatus.RUNNING -> Tone.SUCCESS
+        HermesAgentStatus.WAITING -> Tone.WARNING
         HermesAgentStatus.FAILED -> Tone.ERROR
         HermesAgentStatus.IDLE, HermesAgentStatus.OTHER -> Tone.NEUTRAL
     }

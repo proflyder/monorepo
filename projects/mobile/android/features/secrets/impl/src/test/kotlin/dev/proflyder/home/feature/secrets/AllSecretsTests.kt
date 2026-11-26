@@ -14,5 +14,6 @@ import org.junit.runners.Suite
     RemoteSecretsRepositoryTest::class,
     SecretsScreenSecureTest::class,
     SecretsScreenshotTest::class,
+    SecretValueTextTest::class,
 )
 class AllSecretsTests

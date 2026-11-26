@@ -20,6 +20,7 @@ const SAMPLE_VALUES = {
   threadId: "thr_1",
   text: "hello",
   limit: 5,
+  recentHours: 24,
   afterSeq: 0,
   waitSeconds: 5,
 };

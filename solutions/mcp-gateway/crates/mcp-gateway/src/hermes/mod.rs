@@ -11,12 +11,12 @@ use axum::http::{Response, StatusCode, header};
 use axum::routing::get;
 use serde::Serialize;
 
-use crate::bb::{BbApi, PROFILE_PERSONAL, Thread};
+use crate::bb::{BbApi, PROFILE_PERSONAL, StatusQuery, Thread};
 use crate::domain::state::AgentMode;
 
 use catalog::{CatalogApi, Skills, Toolsets};
 use history::{Health, HistoryApi};
-use model::{Agent, Agents, MessageRow, Reports, Voice};
+use model::{Agent, Agents, Channel, MessageRow, Reports, SessionPage, Voice};
 
 pub struct Sources {
     pub bb: Option<Arc<dyn BbApi>>,
@@ -42,7 +42,8 @@ impl Panel {
                 agents: Vec::new(),
             };
         };
-        match bb.status(model::AGENT_LIMIT).await {
+        let query = StatusQuery::personal(model::AGENT_LIMIT).recent(model::RECENT_AGENT_HOURS);
+        match bb.status(query).await {
             Ok(status) => Agents {
                 available: true,
                 agents: status
@@ -63,13 +64,33 @@ impl Panel {
     }
 
     pub async fn reports(&self) -> Reports {
-        let pages = self
-            .pages(model::TELEGRAM_SOURCE, model::REPORT_SESSIONS, "")
-            .await;
+        let (telegram, api) = tokio::join!(
+            self.channel_pages(model::TELEGRAM_SOURCE),
+            self.channel_pages(model::VOICE_SOURCE)
+        );
+        let available = telegram.is_some() || api.is_some();
+        let pages = telegram.into_iter().chain(api).flatten().collect();
         Reports {
-            available: pages.is_some(),
-            reports: pages.map(model::reports).unwrap_or_default(),
+            available,
+            reports: model::reports(pages),
         }
+    }
+
+    async fn channel_pages(&self, source: &str) -> Option<Vec<SessionPage>> {
+        let ids = self.session_ids(source, model::REPORT_SESSIONS, "").await?;
+        let history = self.sources.history.as_ref()?;
+        let pages = futures::future::join_all(ids.iter().map(|id| history.messages(id))).await;
+        Some(
+            ids.iter()
+                .zip(pages)
+                .filter_map(|(id, page)| {
+                    page.ok().map(|rows| SessionPage {
+                        channel: Channel::of_session(source, id),
+                        rows,
+                    })
+                })
+                .collect(),
+        )
     }
 
     pub async fn voice(&self) -> Voice {
@@ -121,15 +142,22 @@ impl Panel {
         limit: usize,
         prefix: &str,
     ) -> Option<Vec<Vec<MessageRow>>> {
+        let ids = self.session_ids(source, limit, prefix).await?;
+        let history = self.sources.history.as_ref()?;
+        let pages = futures::future::join_all(ids.iter().map(|id| history.messages(id))).await;
+        Some(pages.into_iter().filter_map(Result::ok).collect())
+    }
+}
+
+impl Panel {
+    async fn session_ids(&self, source: &str, limit: usize, prefix: &str) -> Option<Vec<String>> {
         let history = self.sources.history.as_ref()?;
         let list = history
             .sessions(source)
             .await
             .inspect_err(|error| tracing::warn!(?error, source, "hermes panel: sessions failed"))
             .ok()?;
-        let ids = model::recent_sessions(list, limit, prefix);
-        let pages = futures::future::join_all(ids.iter().map(|id| history.messages(id))).await;
-        Some(pages.into_iter().filter_map(Result::ok).collect())
+        Some(model::recent_sessions(list, limit, prefix))
     }
 }
 
@@ -140,6 +168,7 @@ fn agent(thread: Thread) -> Agent {
         project: thread.project,
         status: thread.status,
         runtime_seconds: thread.runtime_seconds,
+        updated_at: thread.updated_at,
     }
 }
 

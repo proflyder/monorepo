@@ -35,7 +35,10 @@ class HermesRowsTest {
         assertEquals("Station Lab · 12 min", agents[0].subtitle)
         assertEquals("Running", agents[0].value)
         assertEquals(Tone.SUCCESS, agents[0].tone)
-        assertEquals(Tone.ERROR, agents[2].tone)
+        assertEquals("Waiting for you", agents[1].value)
+        assertEquals(Tone.WARNING, agents[1].tone)
+        assertEquals("Done", agents[2].value)
+        assertEquals(Tone.ERROR, agents[3].tone)
         assertTrue(agents.all { it.target == null })
     }
 
@@ -49,9 +52,9 @@ class HermesRowsTest {
     @Test
     fun reportsPreviewTheFirstLineAndOpenTheReport() {
         val reports = rows.section(HermesSection.REPORTS, HermesFixtures.state).map { it as HermesRow.Entry }
-        assertEquals("Дом в порядке.", reports[0].subtitle)
+        assertEquals("App chat · Дом в порядке.", reports[0].subtitle)
         assertEquals(HermesReportDestination("41"), reports[0].target)
-        assertEquals("Hermes failed to finish the report", reports[1].subtitle)
+        assertEquals("Telegram · Hermes failed to finish the report", reports[1].subtitle)
         assertEquals(Tone.ERROR, reports[1].tone)
         val detail = rows.report(HermesFixtures.reports.reports.first())
         assertEquals(HermesFixtures.reports.reports.first().text, (detail.last() as HermesRow.Body).text)
@@ -72,6 +75,10 @@ class HermesRowsTest {
         assertEquals("No reply", failed.subtitle)
         assertEquals(Tone.ERROR, failed.tone)
         assertNull(failed.target)
+        val mode = entries.first { it.key == "voice:mode" }
+        assertEquals("Station voice to a bb thread", mode.title)
+        assertEquals("When on, speaker phrases go to the bb thread created by voice instead of Hermes", mode.subtitle)
+        assertEquals("Off", mode.value)
     }
 
     @Test

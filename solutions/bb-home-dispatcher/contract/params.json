@@ -7,7 +7,7 @@
     },
     "status": {
       "required": [],
-      "optional": ["limit"]
+      "optional": ["limit", "profile", "recentHours"]
     },
     "validate_spawn": {
       "required": [

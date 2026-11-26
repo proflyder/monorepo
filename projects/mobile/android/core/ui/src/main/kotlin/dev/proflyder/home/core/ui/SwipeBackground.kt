@@ -49,9 +49,10 @@ enum class SwipeStyle(
     @DrawableRes val icon: Int,
     @AttrRes val colorAttr: Int,
     @AttrRes val tintAttr: Int,
+    val removesRow: Boolean,
 ) {
-    Delete(R.drawable.ui_ic_delete, com.google.android.material.R.attr.colorError, com.google.android.material.R.attr.colorOnError),
-    ToggleRead(R.drawable.ui_ic_mail, androidx.appcompat.R.attr.colorPrimary, com.google.android.material.R.attr.colorOnPrimary),
+    Delete(R.drawable.ui_ic_delete, com.google.android.material.R.attr.colorError, com.google.android.material.R.attr.colorOnError, true),
+    ToggleRead(R.drawable.ui_ic_mail, androidx.appcompat.R.attr.colorPrimary, com.google.android.material.R.attr.colorOnPrimary, false),
 }
 
 data class SwipeAction(

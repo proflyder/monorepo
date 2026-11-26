@@ -4,6 +4,7 @@ import android.animation.ValueAnimator
 import android.content.Context
 import android.util.AttributeSet
 import android.view.View
+import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.FrameLayout
 import androidx.core.widget.doAfterTextChanged
@@ -30,6 +31,8 @@ class PullRevealSearch @JvmOverloads constructor(
 
     val isRevealed: Boolean get() = expanded && !dragging
 
+    var onRevealChanged: ((Boolean) -> Unit)? = null
+
     fun attach(list: RecyclerView, field: EditText) {
         input = field
         val gesture = PullRevealGesture(this, list)
@@ -50,6 +53,25 @@ class PullRevealSearch @JvmOverloads constructor(
         if (idle) collapse()
     }
 
+    val blank: Boolean get() = input?.text.isNullOrEmpty()
+
+    fun releaseFocusIfBlank() {
+        if (blank) releaseFocus()
+    }
+
+    fun dismiss() {
+        input?.text?.clear()
+        releaseFocus()
+        collapse()
+    }
+
+    private fun releaseFocus() {
+        val field = input ?: return
+        if (!field.hasFocus()) return
+        field.clearFocus()
+        context.getSystemService(InputMethodManager::class.java)?.hideSoftInputFromWindow(field.windowToken, 0)
+    }
+
     override fun canScrollVertically(direction: Int): Boolean = when {
         direction < 0 -> !isRevealed
         else -> super.canScrollVertically(direction)
@@ -68,6 +90,7 @@ class PullRevealSearch @JvmOverloads constructor(
     }
 
     private fun settle(open: Boolean, animate: Boolean) {
+        if (expanded != open) onRevealChanged?.invoke(open)
         expanded = open
         animator?.cancel()
         val target = if (open) fullHeight else 0

@@ -102,9 +102,15 @@ class SystemScreenshotTest {
     }
 
     @Test
+    fun guestsDetailLight() {
+        val list = render("system-guests-light") { it.detail(SystemSection.GUESTS, SystemFixtures.snapshot) }
+        assertEquals(7, list.adapter?.itemCount)
+    }
+
+    @Test
     @Config(qualifiers = "ru-w411dp-h891dp-night-xxhdpi")
     fun guestsDetailDark() {
         val list = render("system-guests-dark") { it.detail(SystemSection.GUESTS, SystemFixtures.snapshot) }
-        assertEquals(4, list.adapter?.itemCount)
+        assertEquals(7, list.adapter?.itemCount)
     }
 }

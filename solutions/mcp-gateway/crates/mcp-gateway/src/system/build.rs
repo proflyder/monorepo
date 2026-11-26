@@ -6,7 +6,7 @@ use crate::tools::Sample;
 
 use super::model::{
     AlertItem, Devices, Guest, GuestKind, Host, Hosts, Kubernetes, Level, Namespace, Phone, Pod,
-    Station,
+    Station, Target,
 };
 
 #[derive(Debug, Default, Clone)]
@@ -146,6 +146,11 @@ pub const STATION_QUERIES: &[(&str, &str)] = &[
         r#"max(pulsar_cpu_temperature_celsius{job="station"})"#,
     ),
     ("uptime", r#"max(pulsar_uptime_seconds{job="station"})"#),
+];
+
+pub const TARGET_QUERIES: &[(&str, &str)] = &[
+    ("total", "count by (job) (up)"),
+    ("up", "sum by (job) (up)"),
 ];
 
 pub const SAMPLE_LIMIT: usize = 2000;
@@ -423,16 +428,59 @@ pub fn devices(station_results: &Results, phones: Option<Vec<Device>>) -> Device
 }
 
 #[must_use]
-pub fn hosts(host_results: &Results, guest_results: &Results) -> Hosts {
+pub fn hosts(host_results: &Results, guest_results: &Results, target_results: &Results) -> Hosts {
     let (status, host) = host(host_results);
     let (guests_status, guests) = guests(guest_results);
+    let targets = targets(target_results);
     Hosts {
         status,
         guests_status,
         host,
         guests_available: guests.is_some(),
         guests: guests.unwrap_or_default(),
+        targets_available: targets.is_some(),
+        targets: targets.unwrap_or_default(),
     }
+}
+
+#[must_use]
+pub fn targets(results: &Results) -> Option<Vec<Target>> {
+    let total = results.by_label("total", "job");
+    if total.is_empty() {
+        return None;
+    }
+    let up = results.by_label("up", "job");
+    let mut targets: Vec<Target> = total
+        .into_iter()
+        .map(|(job, count)| target(&job, up.get(&job).copied().unwrap_or_default(), count))
+        .collect();
+    targets.sort_by(|left, right| {
+        right
+            .status
+            .cmp(&left.status)
+            .then_with(|| left.job.cmp(&right.job))
+    });
+    Some(targets)
+}
+
+fn target(job: &str, up: f64, total: f64) -> Target {
+    let up = whole_count(up);
+    let total = whole_count(total);
+    let status = match up {
+        0 => Level::Critical,
+        _ if up < total => Level::Warning,
+        _ => Level::Ok,
+    };
+    Target {
+        job: job.to_owned(),
+        up,
+        total,
+        status,
+    }
+}
+
+fn whole_count(value: f64) -> u32 {
+    u32::try_from(value.max(0.0).round() as i64).unwrap_or(u32::MAX)
 }
 
 const QUIET_ALERTS: &[&str] = &["Watchdog", "InfoInhibitor"];

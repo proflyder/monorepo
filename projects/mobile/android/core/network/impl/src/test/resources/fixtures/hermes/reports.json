@@ -1,1 +1,1 @@
-{"available":true,"reports":[{"id":"42","requestedAt":1700000000,"completedAt":1700000030,"text":"Всё в порядке","failed":false}]}
+{"available":true,"reports":[{"id":"42","channel":"app","requestedAt":1700000000,"completedAt":1700000030,"text":"Всё в порядке","failed":false},{"id":"43","channel":"pager","requestedAt":1690000000,"text":"","failed":true}]}

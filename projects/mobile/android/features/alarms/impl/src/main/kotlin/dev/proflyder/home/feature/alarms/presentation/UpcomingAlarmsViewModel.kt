@@ -22,6 +22,7 @@ import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.ContributesIntoSet
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.binding
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 
@@ -59,7 +60,10 @@ internal class UpcomingAlarmsViewModel(
     private val repository: AlarmRepository,
     snoozeAlarm: SnoozeAlarm,
     private val clock: ServerClock,
+    wallMillis: () -> Long = System::currentTimeMillis,
 ) : StateViewModel<UpcomingAlarmsState, UpcomingAlarmsIntent, UpcomingAlarmsEvent>(UpcomingAlarmsState()) {
+    val minute: StateFlow<Long> = viewModelScope.minuteState(wallMillis)
+
     private val actions = AlarmActions(repository, snoozeAlarm, viewModelScope, { emit(UpcomingAlarmsEvent.Action(it)) }, { })
 
     init {

@@ -3,6 +3,7 @@
     <dimen name="access_screen_margin">16dp</dimen>
     <dimen name="access_row_padding">16dp</dimen>
     <dimen name="access_row_gap">8dp</dimen>
+    <dimen name="access_badge_end_margin">@dimen/ds_space_m</dimen>
     <dimen name="access_dialog_padding">24dp</dimen>
     <dimen name="access_dialog_gap">12dp</dimen>
     <dimen name="access_token_text">16sp</dimen>

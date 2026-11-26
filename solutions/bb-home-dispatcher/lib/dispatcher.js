@@ -7,6 +7,23 @@ import {
 
 const ACTIVE_STATUSES = new Set(["active", "starting", "pending"]);
 const RUNNING_STATUSES = new Set(["active", "starting", "pending", "stopping"]);
+const WAITING_STATUS = "waiting";
+
+function isWaiting(thread) {
+  return thread.hasPendingInteraction === true && !ACTIVE_STATUSES.has(thread.status);
+}
+
+function isBusy(thread) {
+  return ACTIVE_STATUSES.has(thread.status) || isWaiting(thread);
+}
+
+function busyRank(thread) {
+  return isBusy(thread) ? 0 : 1;
+}
+
+function displayStatus(thread) {
+  return isWaiting(thread) ? WAITING_STATUS : thread.status;
+}
 
 const VOICE_ANSWER_RULE =
   "Если ждёшь ответа владельца, 🔊-строка заканчивается вопросом со знаком «?»; " +
@@ -588,12 +605,17 @@ export function createDispatcher({
     }
     const hostMap = new Map(hosts.map((host) => [host.id, host]));
     const projectMap = new Map(projects.map((project) => [project.id, project]));
+    const recentSince =
+      params.recentHours === null ? null : now() - params.recentHours * 3_600_000;
+    const inProfile = (thread) =>
+      params.profile === null || profileMap.get(thread.projectId) === params.profile;
+    const isRecent = (thread) =>
+      recentSince === null || isBusy(thread) || (thread.updatedAt ?? 0) >= recentSince;
     const rows = (Array.isArray(threads) ? threads : [])
-      .slice()
-      .sort((a, b) => {
-        const rank = (thread) => (ACTIVE_STATUSES.has(thread.status) ? 0 : 1);
-        return rank(a) - rank(b) || (b.updatedAt ?? 0) - (a.updatedAt ?? 0);
-      })
+      .filter((thread) => !thread.archivedAt && !thread.deletedAt)
+      .filter(inProfile)
+      .filter(isRecent)
+      .sort((a, b) => busyRank(a) - busyRank(b) || (b.updatedAt ?? 0) - (a.updatedAt ?? 0))
       .slice(0, params.limit);
 
     const compactionSettings = await readCompactionSettings();
@@ -625,7 +647,7 @@ export function createDispatcher({
                 name: host?.name ?? hostId,
                 status: host?.status ?? "disconnected",
               },
-        status: thread.status,
+        status: displayStatus(thread),
         runtimeSeconds: runningSeconds,
         updatedAt: thread.updatedAt ?? null,
         compact: compactSummary(await readCompactState(thread.id)),

@@ -13,6 +13,13 @@ class SwipeActions(
     private val itemAt: (Int) -> Keyed?,
 ) : ItemTouchHelper.SimpleCallback(0, ItemTouchHelper.LEFT or ItemTouchHelper.RIGHT) {
     private val background = SwipeBackground(context)
+    private val helper = ItemTouchHelper(this)
+    private var attached: RecyclerView? = null
+
+    fun attachTo(list: RecyclerView) {
+        attached = list
+        helper.attachToRecyclerView(list)
+    }
 
     override fun onMove(
         recyclerView: RecyclerView,
@@ -27,8 +34,9 @@ class SwipeActions(
 
     override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) {
         val position = viewHolder.bindingAdapterPosition
-        if (direction == ItemTouchHelper.LEFT) left.onSwiped(position) else right.onSwiped(position)
-        recover(viewHolder)
+        val action = if (direction == ItemTouchHelper.LEFT) left else right
+        action.onSwiped(position)
+        if (!action.style.removesRow) settleInPlace(viewHolder)
     }
 
     override fun clearView(recyclerView: RecyclerView, viewHolder: RecyclerView.ViewHolder) {
@@ -54,9 +62,8 @@ class SwipeActions(
         super.onChildDraw(canvas, recyclerView, viewHolder, dX, dY, actionState, isCurrentlyActive)
     }
 
-    private fun recover(viewHolder: RecyclerView.ViewHolder) {
-        val recyclerView = viewHolder.itemView.parent as? RecyclerView ?: return
-        clearView(recyclerView, viewHolder)
+    private fun settleInPlace(viewHolder: RecyclerView.ViewHolder) {
+        if (attached != null) helper.onChildViewDetachedFromWindow(viewHolder.itemView)
         reset(viewHolder)
     }
 

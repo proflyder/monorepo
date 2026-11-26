@@ -112,6 +112,8 @@ RUN ln -sf libsqlite3.so.3.53.4 /usr/local/lib/libsqlite3.so.0 && ldconfig && \
     python3 -c "import sqlite3; assert sqlite3.sqlite_version_info >= (3, 51, 3)"
 WORKDIR /opt/hermes
 COPY . /opt/hermes
+COPY --from=patches apply.py /tmp/hermes-patches/apply.py
+RUN python3 /tmp/hermes-patches/apply.py /opt/hermes && rm -rf /tmp/hermes-patches
 ENV UV_PROJECT_ENVIRONMENT=/opt/venv UV_PYTHON_DOWNLOADS=never PYTHONUNBUFFERED=1 \
     UV_COMPILE_BYTECODE=0 PYTHONDONTWRITEBYTECODE=1
 RUN --mount=type=cache,target=/root/.cache/uv,sharing=locked \

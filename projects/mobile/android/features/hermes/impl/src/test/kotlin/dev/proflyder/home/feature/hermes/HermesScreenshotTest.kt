@@ -79,11 +79,11 @@ class HermesScreenshotTest {
     fun overviewDark() = assertEquals(5, render("hermes-overview-dark") { it.overview() }.adapter?.itemCount)
 
     @Test
-    fun agentsLight() = assertEquals(3, render("hermes-agents-light", section(HermesSection.AGENTS)).adapter?.itemCount)
+    fun agentsLight() = assertEquals(4, render("hermes-agents-light", section(HermesSection.AGENTS)).adapter?.itemCount)
 
     @Test
     @Config(qualifiers = "ru-w411dp-h891dp-night-xxhdpi")
-    fun agentsDark() = assertEquals(3, render("hermes-agents-dark", section(HermesSection.AGENTS)).adapter?.itemCount)
+    fun agentsDark() = assertEquals(4, render("hermes-agents-dark", section(HermesSection.AGENTS)).adapter?.itemCount)
 
     @Test
     fun reportsLight() = assertEquals(2, render("hermes-reports-light", section(HermesSection.REPORTS)).adapter?.itemCount)

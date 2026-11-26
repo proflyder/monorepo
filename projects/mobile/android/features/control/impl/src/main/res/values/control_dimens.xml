@@ -36,4 +36,7 @@
     <dimen name="control_header_padding_top">14dp</dimen>
     <dimen name="control_header_padding_bottom">6dp</dimen>
     <dimen name="control_profile_chip_gap">8dp</dimen>
+    <dimen name="control_card_margin">6dp</dimen>
+    <dimen name="control_card_gap">12dp</dimen>
+    <dimen name="control_card_edge">22dp</dimen>
 </resources>

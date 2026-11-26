@@ -51,7 +51,7 @@ internal class NotificationHistoryFragment :
             failureText = { it.userMessage(requireContext()) },
             dispatch = viewModel::dispatch,
         )
-        ItemTouchHelper(swipes()).attachToRecyclerView(binding.historyList)
+        swipes().attachTo(binding.historyList)
         binding.historyList.addHistoryDecorations()
         binding.historyClear.setOnClickListener { confirmClear() }
         binding.historyReadAll.setOnClickListener { viewModel.dispatch(HistoryIntent.ReadAll) }
