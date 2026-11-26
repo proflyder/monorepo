@@ -34,9 +34,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.launch
 import org.junit.After
 import org.junit.Before
 import org.junit.Assert.assertEquals
@@ -277,8 +275,13 @@ class HistorySwipeTest {
     ): NotificationHistoryViewModel =
         NotificationHistoryViewModel(repository, testTargets(), access, FakeClock(now), CoroutineScope(Dispatchers.Main))
 
-    private fun nextEvent(model: NotificationHistoryViewModel): HistoryEvent? =
-        runBlocking { withTimeoutOrNull(EVENT_TIMEOUT_MS) { model.events.first() } }
+    private fun nextEvent(model: NotificationHistoryViewModel): HistoryEvent? {
+        val received = mutableListOf<HistoryEvent>()
+        val collector = CoroutineScope(dispatcher).launch { model.events.collect { received += it } }
+        dispatcher.scheduler.runCurrent()
+        collector.cancel()
+        return received.firstOrNull()
+    }
 
     private fun accessState(vararg modules: AppModule): AppAccessState =
         AppAccessState.Ready(AppAccess(name = "test", modules = modules.toSet(), owner = false))
@@ -322,6 +325,5 @@ class HistorySwipeTest {
         const val HEIGHT_DP = 891
         const val SWIPE_PX = 360f
         const val PNG_QUALITY = 100
-        const val EVENT_TIMEOUT_MS = 50L
     }
 }

@@ -253,6 +253,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
+      actions: read
       contents: read
       pull-requests: read
     outputs:
@@ -291,21 +292,28 @@ jobs:
         with:
           script: |
             const affected = await import(`${process.env.GITHUB_WORKSPACE}/platform/ci/affected.mjs`);
-            let computed;
-            if (process.env.MODE === 'manual') {
-              computed = await affected.compute(['--all', '--format', 'github']);
-            } else {
-              try {
-                computed = await affected.compute([
-                  '--base', process.env.BEFORE_SHA,
-                  '--head', process.env.HEAD_SHA,
-                  '--format', 'github',
-                ]);
-              } catch (error) {
+            const deployBase = await import(`${process.env.GITHUB_WORKSPACE}/platform/ci/deploy_base.mjs`);
+            const everyUnit = () => affected.compute(['--all', '--format', 'github']);
+            const routeFrom = async () => {
+              const picked = await deployBase.resolveDeployBase({
+                github,
+                context,
+                core,
+                root: process.env.GITHUB_WORKSPACE,
+                headSha: process.env.HEAD_SHA,
+                beforeSha: process.env.BEFORE_SHA,
+              });
+              core.notice(picked.all ? `deploy base: every unit (${picked.reason})` : `deploy base: ${picked.base} (${picked.source})`);
+              return picked.all
+                ? everyUnit()
+                : affected.compute(['--base', picked.base, '--head', process.env.HEAD_SHA, '--format', 'github']);
+            };
+            const computed = process.env.MODE === 'manual'
+              ? await everyUnit()
+              : await routeFrom().catch((error) => {
                 core.warning(`routing failed; falling back to every deployable unit: ${error.message}`);
-                computed = await affected.compute(['--all', '--format', 'github']);
-              }
-            }
+                return everyUnit();
+              });
             const outputs = affected.githubOutputs(computed);
             core.setOutput('deploy_units', outputs.deploy_units);
             core.setOutput('native_units', outputs.native_units);
