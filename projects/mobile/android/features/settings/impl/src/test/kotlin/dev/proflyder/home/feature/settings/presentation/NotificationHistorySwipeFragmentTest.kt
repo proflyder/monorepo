@@ -28,6 +28,10 @@ import org.robolectric.annotation.Config
 import com.google.android.material.color.MaterialColors
 import com.google.android.material.R as MaterialR
 import org.robolectric.annotation.GraphicsMode
+import java.time.LocalDate
+import java.time.LocalTime
+import java.time.ZoneId
+import kotlin.math.abs
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import androidx.core.graphics.Insets
@@ -38,7 +42,7 @@ import androidx.core.view.WindowInsetsCompat
 @Config(sdk = [35], qualifiers = "w411dp-h891dp-xxhdpi")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class NotificationHistorySwipeFragmentTest {
-    private val now = System.currentTimeMillis()
+    private val now = LocalDate.now().atTime(LocalTime.NOON).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
     private lateinit var repository: FakeHistoryRepository
 
     @Before
@@ -79,9 +83,7 @@ class NotificationHistorySwipeFragmentTest {
         list.scrollBy(0, list.height / 2)
         settle(list)
         val pinned = assertNotNullAnd(manager.stickyHeaderView) { "a day header is pinned" }
-        val row = (0 until list.childCount).map(list::getChildAt)
-            .filter { it !== pinned && it.top >= pinned.bottom && it.bottom < list.height }
-            .first { rowAt(list, it) is HistoryRow.Item }
+        val row = rowClearOfScrims(list, pinned)
         val key = keyOf(list, row)
 
         val revealed = swipe(list, row, -1)
@@ -96,9 +98,7 @@ class NotificationHistorySwipeFragmentTest {
         list.scrollBy(0, list.height / 2)
         settle(list)
         val pinned = checkNotNull((list.layoutManager as StickyHeadersLayoutManager).stickyHeaderView)
-        val row = (0 until list.childCount).map(list::getChildAt)
-            .filter { it !== pinned && it.top >= pinned.bottom && it.bottom < list.height }
-            .first { rowAt(list, it) is HistoryRow.Item }
+        val row = rowClearOfScrims(list, pinned)
         val key = keyOf(list, row)
         val before = repository.paged.state.value.items.first { it.key == key }.read
 
@@ -140,6 +140,10 @@ class NotificationHistorySwipeFragmentTest {
         assertTrue(list.childCount > 0)
         return list
     }
+
+    private fun rowClearOfScrims(list: RecyclerView, pinned: View): View = (0 until list.childCount).map(list::getChildAt)
+        .filter { it !== pinned && rowAt(list, it) is HistoryRow.Item && it.top >= pinned.bottom && it.bottom < list.height }
+        .minBy { abs((it.top + it.bottom) / 2 - list.height / 2) }
 
     private fun keys(): List<String> = repository.paged.state.value.items.map { it.key }
 

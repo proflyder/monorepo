@@ -346,6 +346,14 @@ approve (решения 36, 54, 55). Релиз native-юнита запуска
 проверяет до merge, что вычисленная версия ещё не занята другим содержимым
 (`promote.mjs`, `verifyReleaseVersion`).
 
+База диффа `deploy-home` (`platform/ci/deploy_base.mjs`) — `head_sha`
+последнего успешного push-запуска `deploy-home.yml` на `develop`, а не
+`github.event.before`: группа `deploy-home-plan` отменяет ожидающий запуск при
+следующем merge, и его изменения иначе терялись бы. Ручной
+`deploy-home-manual.yml` базой не служит — он частичный. Нет успешного
+запуска или API недоступен — `event.before`; база не предок HEAD или
+невалидна — `--all`. Job `plan` поэтому требует `actions: read`.
+
 ### Локальное воспроизведение
 
 ```bash
