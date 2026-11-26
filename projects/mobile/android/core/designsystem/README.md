@@ -162,7 +162,9 @@ the new theme automatically.
 - `addFullWidthRows(dividerInset)` (`list`) is the edge-to-edge list pattern
   (notification history, secrets, chat sessions): no card surface, a thin
   divider from `dividerInset` to the end edge between rows of one section
-  (sectioned adapters) or of one adapter, following swipe translation. It only
+  (sectioned adapters) or of one adapter, following swipe translation; a
+  divider under the pinned sticky header is skipped so the hairline is never
+  doubled (`FullWidthRowsTest`). It only
   draws; clickable rows get the full-row rectangular ripple from
   `View.applyFullRowRipple()` in their holder or `?attr/selectableItemBackground`
   in the layout.

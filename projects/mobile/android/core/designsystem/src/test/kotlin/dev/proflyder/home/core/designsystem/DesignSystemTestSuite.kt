@@ -18,6 +18,7 @@ import org.junit.runners.Suite
     LightParamsEditorScreenshotTest::class,
     RevealBinderTest::class,
     SectionsTest::class,
+    FullWidthRowsTest::class,
     SliderStylesTest::class,
     StickyHeadersLayoutManagerTest::class,
 )
