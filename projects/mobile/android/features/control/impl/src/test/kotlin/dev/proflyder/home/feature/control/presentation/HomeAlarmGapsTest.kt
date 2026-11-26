@@ -67,6 +67,7 @@ class HomeAlarmGapsTest {
         assertEquals("gap from the alarm to the filters", step, chips.top - card.bottom)
         assertEquals("alarm card edge", edge, card.left)
         assertEquals("device card edge", edge, home.window(home.device).left)
+        assertEquals("same row height as a device card", home.window(home.device).height(), card.height())
     }
 
     private fun open(): Home {
@@ -130,8 +131,8 @@ class HomeAlarmGapsTest {
         override fun onViewReady(binding: FragmentAlarmsUpcomingBinding, savedInstanceState: Bundle?) {
             binding.root.visibility = View.VISIBLE
             val first = ItemAlarmsUpcomingBinding.bind(binding.alarmsUpcomingFirst)
-            first.alarmsUpcomingTime.append(TIME)
-            first.alarmsUpcomingLabel.append(LABEL)
+            first.alarmsUpcomingTitle.append(TITLE)
+            first.alarmsUpcomingDetail.append(DETAIL)
             binding.alarmsUpcomingSecond.visibility = View.GONE
             binding.alarmsUpcomingThird.visibility = View.GONE
         }
@@ -164,8 +165,8 @@ class HomeAlarmGapsTest {
         const val BAR = 300
         const val PASSES = 4
         const val PNG_QUALITY = 100
-        const val TIME = "завтра 10:00"
-        const val LABEL = "Работа · через 18 ч 33 мин"
+        const val TITLE = "завтра 10:00 · Работа"
+        const val DETAIL = "через 16 ч 40 мин"
         val DEVICES = listOf("Лампа", "Светильник")
     }
 }

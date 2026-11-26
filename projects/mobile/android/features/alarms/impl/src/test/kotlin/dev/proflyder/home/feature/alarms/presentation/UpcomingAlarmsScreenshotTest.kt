@@ -48,10 +48,17 @@ class UpcomingAlarmsScreenshotTest {
         binding.root.visibility = View.VISIBLE
         rows.forEachIndexed { index, row -> row.bind(alarms.getOrNull(index), now, Instant.ofEpochSecond(now)) }
         assertEquals(View.GONE, binding.alarmsUpcomingThird.visibility)
-        assertTrue(ItemAlarmsUpcomingBinding.bind(binding.alarmsUpcomingFirst).alarmsUpcomingLabel.text.contains("Подъём"))
-        val next = ItemAlarmsUpcomingBinding.bind(binding.alarmsUpcomingSecond).alarmsUpcomingLabel.text.toString()
-        assertTrue(next, next.startsWith("Работа · через "))
-        savePng(binding.root, name, 411, 140)
+        val ringing = ItemAlarmsUpcomingBinding.bind(binding.alarmsUpcomingFirst)
+        assertTrue(ringing.alarmsUpcomingTitle.text.endsWith("Подъём"))
+        assertEquals("Звонит", ringing.alarmsUpcomingDetail.text.toString())
+        val next = ItemAlarmsUpcomingBinding.bind(binding.alarmsUpcomingSecond)
+        assertTrue(next.alarmsUpcomingTitle.text.toString(), next.alarmsUpcomingTitle.text.endsWith(" · Работа"))
+        assertTrue(next.alarmsUpcomingDetail.text.toString(), next.alarmsUpcomingDetail.text.startsWith("через "))
+        assertEquals(
+            com.google.android.material.color.MaterialColors.getColor(next.root, androidx.appcompat.R.attr.colorPrimary),
+            next.alarmsUpcomingDetail.currentTextColor,
+        )
+        savePng(binding.root, name, 411, 200)
         assertNotNull(binding.alarmsUpcomingFirst.foreground)
     }
 

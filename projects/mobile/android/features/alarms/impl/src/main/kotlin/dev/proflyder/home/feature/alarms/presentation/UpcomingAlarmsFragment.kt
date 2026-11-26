@@ -2,6 +2,8 @@ package dev.proflyder.home.feature.alarms.presentation
 
 import android.content.Context
 import android.os.Bundle
+import androidx.annotation.AttrRes
+import com.google.android.material.color.MaterialColors
 import dev.proflyder.home.core.presentation.SectionFragment
 import dev.proflyder.home.core.presentation.SwitchBinder
 import dev.proflyder.home.core.presentation.screenViewModel
@@ -64,8 +66,11 @@ internal class UpcomingAlarmRow(
         views.root.setVisible(item != null)
         id = item?.alarm?.id
         item ?: return
-        views.alarmsUpcomingTime.text = texts.time(item, nowUnix)
-        views.alarmsUpcomingLabel.text = texts.label(item, now)
+        val detail = texts.detail(item, now)
+        views.alarmsUpcomingTitle.text = texts.headline(item, nowUnix)
+        views.alarmsUpcomingDetail.text = detail.text
+        views.alarmsUpcomingDetail.setTextColor(MaterialColors.getColor(views.alarmsUpcomingDetail, detail.colorAttr))
+        views.alarmsUpcomingIcon.isActivated = item.alarm.enabled
         views.alarmsUpcomingSwitch.contentDescription = texts.title(item)
         enabled.render(item.alarm.enabled)
     }
@@ -84,19 +89,28 @@ internal class UpcomingAlarmTexts(private val context: Context) : DueTextStrings
 
     fun title(item: UpcomingAlarm): String = item.alarm.label.ifBlank { context.getString(R.string.alarms_label_default) }
 
-    fun label(item: UpcomingAlarm, now: Instant): String =
-        context.getString(R.string.alarms_upcoming_subtitle, title(item), suffix(item, now))
+    fun headline(item: UpcomingAlarm, nowUnix: Long): String =
+        context.getString(R.string.alarms_upcoming_subtitle, time(item, nowUnix), title(item))
 
-    private fun suffix(item: UpcomingAlarm, now: Instant): String = when {
-        item.ringing -> context.getString(R.string.alarms_upcoming_ringing)
-        else -> countdown(item, now) ?: AlarmFormat.repeatSummary(context, item.alarm)
+    fun detail(item: UpcomingAlarm, now: Instant): UpcomingDetail = when {
+        item.ringing -> UpcomingDetail.accent(context.getString(R.string.alarms_upcoming_ringing))
+        else -> countdown(item, now)?.let(UpcomingDetail::accent)
+            ?: UpcomingDetail.quiet(AlarmFormat.repeatSummary(context, item.alarm))
     }
 
     private fun countdown(item: UpcomingAlarm, now: Instant): String? =
         AlarmCountdownText.card(context.resources, item.alarm, now, ZoneId.systemDefault())
 
-    fun time(item: UpcomingAlarm, nowUnix: Long): String {
+    private fun time(item: UpcomingAlarm, nowUnix: Long): String {
         val due = if (item.ringing) item.alarm.activeOccurrenceUnix else item.alarm.nextDueUnix
         return DueText.format(due, ZoneId.systemDefault(), nowUnix, this)
+    }
+}
+
+internal data class UpcomingDetail(val text: String, @AttrRes val colorAttr: Int) {
+    companion object {
+        fun accent(text: String) = UpcomingDetail(text, androidx.appcompat.R.attr.colorPrimary)
+
+        fun quiet(text: String) = UpcomingDetail(text, com.google.android.material.R.attr.colorOnSurfaceVariant)
     }
 }

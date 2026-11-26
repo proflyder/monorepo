@@ -28,9 +28,9 @@
     <dimen name="control_group_untitled_gap">-4dp</dimen>
     <dimen name="control_card_padding_bottom_with_settings">8dp</dimen>
     <dimen name="control_card_padding_bottom_plain">16dp</dimen>
-    <dimen name="control_device_icon">48dp</dimen>
-    <dimen name="control_device_icon_padding">12dp</dimen>
-    <dimen name="control_device_text_gap">16dp</dimen>
+    <dimen name="control_device_icon">@dimen/ds_card_icon</dimen>
+    <dimen name="control_device_icon_padding">@dimen/ds_card_icon_padding</dimen>
+    <dimen name="control_device_text_gap">@dimen/ds_card_text_gap</dimen>
     <dimen name="control_device_progress">32dp</dimen>
     <dimen name="control_header_min_height">44dp</dimen>
     <dimen name="control_header_padding_top">14dp</dimen>
