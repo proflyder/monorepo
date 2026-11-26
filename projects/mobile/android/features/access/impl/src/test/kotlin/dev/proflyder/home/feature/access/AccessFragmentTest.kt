@@ -171,7 +171,9 @@ class AccessFragmentTest {
     fun revokingATokenAsksForConfirmationBeforeItReachesTheRepository() {
         show()
         repository.revoked = null
-        viewModel.dispatch(AccessIntent.RevokeRequest(phone))
+        viewModel.dispatch(AccessIntent.Edit(phone))
+        idle()
+        dialog().getButton(DialogInterface.BUTTON_NEUTRAL).performClick()
         idle()
 
         val confirm = dialog()

@@ -129,6 +129,21 @@ class NotificationHistorySwipeFragmentTest {
     }
 
     @Test
+    fun aQuickShortFlingTriggersTheActionAndASlowOneSettlesBack() {
+        val list = show()
+        val key = firstItemKey(list)
+        val before = readOf(key)
+
+        drag(list, rowOf(list, key), sign = 1, fraction = SHORT_FRACTION, stepMs = SLOW_STEP_MS)
+        assertEquals(before, readOf(key))
+        assertEquals(0f, rowOf(list, key).translationX)
+
+        drag(list, rowOf(list, key), sign = 1, fraction = SHORT_FRACTION, stepMs = FAST_STEP_MS)
+        assertEquals(!before, readOf(key))
+        assertEquals(0f, rowOf(list, key).translationX)
+    }
+
+    @Test
     fun headersDoNotSwipe() {
         val list = show()
         val manager = list.layoutManager as StickyHeadersLayoutManager
@@ -191,6 +206,21 @@ class NotificationHistorySwipeFragmentTest {
         list.dispatchTouchEvent(MotionEvent.obtain(start, start + (STEPS + 1) * STEP_MS, MotionEvent.ACTION_UP, endX, y, 0))
         settle(list)
         return revealed
+    }
+
+    private fun drag(list: RecyclerView, row: View, sign: Int, fraction: Float, stepMs: Long) {
+        val y = row.top + row.height / 2f
+        val startX = list.width / 2f
+        val distance = sign * list.width * fraction
+        val start = SystemClock.uptimeMillis()
+        list.dispatchTouchEvent(MotionEvent.obtain(start, start, MotionEvent.ACTION_DOWN, startX, y, 0))
+        (1..STEPS).forEach { step ->
+            val at = start + step * stepMs
+            list.dispatchTouchEvent(MotionEvent.obtain(start, at, MotionEvent.ACTION_MOVE, startX + distance * step / STEPS, y, 0))
+            frame(list)
+        }
+        list.dispatchTouchEvent(MotionEvent.obtain(start, start + (STEPS + 1) * stepMs, MotionEvent.ACTION_UP, startX + distance, y, 0))
+        settle(list)
     }
 
     private fun readOf(key: String): Boolean = repository.paged.state.value.items.first { it.key == key }.read
@@ -271,6 +301,9 @@ class NotificationHistorySwipeFragmentTest {
         const val MILLIS_PER_SECOND = 1_000L
         const val STEPS = 10
         const val STEP_MS = 16L
+        const val SHORT_FRACTION = 0.2f
+        const val FAST_STEP_MS = 4L
+        const val SLOW_STEP_MS = 160L
         const val FRAME_MS = 400L
         const val PASSES = 5
         const val BAR = 300

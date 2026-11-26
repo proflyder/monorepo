@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Canvas
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.RecyclerView
+import dev.proflyder.home.core.designsystem.HomeMotion
 import dev.proflyder.home.core.model.Keyed
 
 class SwipeActions(
@@ -32,6 +33,12 @@ class SwipeActions(
 
     override fun getSwipeThreshold(viewHolder: RecyclerView.ViewHolder): Float = SWIPE_THRESHOLD
 
+    override fun getAnimationDuration(recyclerView: RecyclerView, animationType: Int, animateDx: Float, animateDy: Float): Long =
+        when (animationType) {
+            ItemTouchHelper.ANIMATION_TYPE_SWIPE_SUCCESS -> HomeMotion.exitDuration(recyclerView.context)
+            else -> HomeMotion.enterDuration(recyclerView.context)
+        }.toLong()
+
     override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) {
         val position = viewHolder.bindingAdapterPosition
         val action = if (direction == ItemTouchHelper.LEFT) left else right
@@ -53,12 +60,7 @@ class SwipeActions(
         actionState: Int,
         isCurrentlyActive: Boolean,
     ) {
-        if (!isCurrentlyActive) {
-            reset(viewHolder)
-            return
-        }
-        val action = if (dX < 0) left else right
-        background.draw(canvas, viewHolder.itemView, dX, action)
+        if (dX != 0f) background.draw(canvas, viewHolder.itemView, dX, if (dX < 0) left else right)
         super.onChildDraw(canvas, recyclerView, viewHolder, dX, dY, actionState, isCurrentlyActive)
     }
 

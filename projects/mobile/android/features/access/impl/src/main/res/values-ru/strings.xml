@@ -14,7 +14,6 @@
     <string name="access_owner_note">У owner-токена всегда все модули. Его можно переименовать, но нельзя отозвать.</string>
     <string name="access_modules_label">Модули</string>
     <string name="access_editor_save">Сохранить</string>
-    <string name="access_action_edit">Переименовать и модули</string>
     <string name="access_action_revoke">Отозвать</string>
     <string name="access_created_title">Токен создан</string>
     <string name="access_created_warning">Скопируйте токен сейчас. Сервер хранит только его хэш и больше не покажет значение.</string>

@@ -28,6 +28,16 @@ class ChatItemsTest {
     }
 
     @Test
+    fun everythingALongPressCanQuoteIsAlsoSwipeQuotable() {
+        val messages = ChatFixtures.conversation + ChatFixtures.alert("m9", 9, "critical", resolved = false)
+        val items = ChatItems.build(ChatTimeline(messages = messages), zone)
+        val alert = items.filterIsInstance<ChatItem.Alert>().single()
+        assertEquals("m9", alert.quote()?.messageId)
+        items.filterIsInstance<ChatItem.Bubble>().forEach { assertEquals(it.takeIf { b -> b.quotable }, it.quote()) }
+        assertEquals(null, items.first { it is ChatItem.Day }.quote())
+    }
+
+    @Test
     fun alertsBecomeCardsAndRoutesFocusAMessage() {
         val items = ChatItems.build(ChatTimeline(messages = listOf(ChatFixtures.alert("m1", 1, "critical", resolved = false))), zone)
         val card = items.filterIsInstance<ChatItem.Alert>().single()

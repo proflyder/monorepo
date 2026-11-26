@@ -238,10 +238,10 @@ internal class ChatFragment : ScreenFragment<FragmentChatBinding, ChatUiState, C
         if (smooth) binding.chatList.smoothScrollToPosition(target) else binding.chatList.scrollToPosition(target)
     }
 
-    private fun isQuotable(position: Int): Boolean = adapter.bubbleAt(position)?.quotable == true
+    private fun isQuotable(position: Int): Boolean = adapter.quoteAt(position) != null
 
     private fun onSwipeReply(position: Int) {
-        adapter.bubbleAt(position)?.takeIf { it.quotable }?.let(::replyTo)
+        adapter.quoteAt(position)?.let(::replyTo)
         adapter.notifyItemChanged(position)
     }
 
@@ -306,7 +306,9 @@ internal class ChatFragment : ScreenFragment<FragmentChatBinding, ChatUiState, C
 
         override fun bindWave(media: BubbleMedia, target: VoiceWaveView) = loadWave(media, target)
 
-        override fun onAlertReply(alert: ChatItem.Alert) = replyTo(alert.asBubble())
+        override fun onAlertReply(alert: ChatItem.Alert) {
+            alert.quote()?.let(::replyTo)
+        }
 
         override fun onLink(url: String) = openLink(url)
     }

@@ -127,8 +127,13 @@ class AccessViewModelTest {
         val events = mutableListOf<AccessEvent>()
         backgroundScope.launch { viewModel.events.toList(events) }
 
-        viewModel.dispatch(AccessIntent.RevokeRequest(phone))
+        viewModel.dispatch(AccessIntent.Edit(owner))
+        viewModel.dispatch(AccessIntent.EditorRevoke)
+        assertTrue("the owner cannot revoke itself", events.isEmpty())
+        viewModel.dispatch(AccessIntent.Edit(phone))
+        viewModel.dispatch(AccessIntent.EditorRevoke)
         assertEquals(AccessEvent.ConfirmRevoke(phone), events.single())
+        assertEquals(null, viewModel.state.value.editor)
 
         repository.mutable.value = repository.mutable.value.copy(tokens = listOf(owner))
         viewModel.dispatch(AccessIntent.Revoke(phone.id))

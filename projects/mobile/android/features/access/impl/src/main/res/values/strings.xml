@@ -14,7 +14,6 @@
     <string name="access_owner_note">The owner token always has every module. You can rename it, but it cannot be revoked.</string>
     <string name="access_modules_label">Modules</string>
     <string name="access_editor_save">Save</string>
-    <string name="access_action_edit">Rename and modules</string>
     <string name="access_action_revoke">Revoke</string>
     <string name="access_created_title">Token created</string>
     <string name="access_created_warning">Copy the token now. The server stores only its hash and will never show it again.</string>

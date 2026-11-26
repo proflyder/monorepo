@@ -163,3 +163,9 @@ internal object ChatItems {
         media = attachments.map { BubbleMedia("l-${it.path}", it.uploadedId, it.path, it.kind, it.name, it.size, it.durationMs) },
     )
 }
+
+internal fun ChatItem.quote(): ChatItem.Bubble? = when (this) {
+    is ChatItem.Bubble -> this
+    is ChatItem.Alert -> asBubble()
+    else -> null
+}?.takeIf { it.quotable }

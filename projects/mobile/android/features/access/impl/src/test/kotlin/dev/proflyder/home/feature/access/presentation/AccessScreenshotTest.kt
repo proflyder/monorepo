@@ -36,7 +36,7 @@ class AccessScreenshotTest {
     fun theAccessScreenListsOwnerAndNamedTokensWithTheirModules() {
         val context = themed()
         val binding = FragmentAccessBinding.inflate(LayoutInflater.from(context))
-        val adapter = AccessAdapter(AccessAdapterCallback({}, { _, _ -> }))
+        val adapter = AccessAdapter(AccessAdapterCallback {})
         binding.accessList.adapter = adapter
         adapter.submitList(tokens)
         shadowOf(android.os.Looper.getMainLooper()).idle()

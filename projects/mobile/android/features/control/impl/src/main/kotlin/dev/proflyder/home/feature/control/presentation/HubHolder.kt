@@ -48,6 +48,7 @@ internal class HubRowBinder(
         row.hubRowTime.text = texts.timeText(card, hub.remaining[card.key], hub.nowUnix)
         row.hubRowLabel.text = texts.label(card)
         row.hubRowAction.setVisible(card is HubCard.TimerCard)
+        row.hubRowIcon.isActivated = card.isLive
         when (card) {
             is HubCard.TimerCard -> bindTimer(card)
             is HubCard.Reminder -> Unit
@@ -62,6 +63,12 @@ internal class HubRowBinder(
         )
     }
 }
+
+internal val HubCard.isLive: Boolean
+    get() = when (this) {
+        is HubCard.TimerCard -> timer.state == TimerState.RUNNING
+        is HubCard.Reminder -> schedule.enabled
+    }
 
 internal val HubCard.icon: Int
     get() = when (this) {

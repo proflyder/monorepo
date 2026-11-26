@@ -9,22 +9,13 @@
     android:focusable="true"
     tools:ignore="SelectableText">
 
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:gravity="center_vertical"
-        android:minHeight="72dp"
-        android:orientation="horizontal"
-        android:paddingStart="@dimen/access_row_padding"
-        android:paddingTop="@dimen/access_row_padding"
-        android:paddingEnd="4dp"
-        android:paddingBottom="@dimen/access_row_padding">
-
         <LinearLayout
-            android:layout_width="0dp"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:orientation="vertical">
+            android:gravity="center_vertical"
+            android:minHeight="72dp"
+            android:orientation="vertical"
+            android:padding="@dimen/access_row_padding">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -48,7 +39,6 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="@dimen/ds_space_s"
-                    android:layout_marginEnd="@dimen/access_badge_end_margin"
                     android:background="@drawable/access_owner_badge"
                     android:paddingStart="@dimen/ds_space_s"
                     android:paddingTop="2dp"
@@ -70,14 +60,4 @@
                 android:textColor="?attr/colorOnSurfaceVariant"
                 tools:text="Дом · Будильники и таймеры · Уведомления" />
         </LinearLayout>
-
-        <ImageButton
-            android:id="@+id/access_item_menu"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@string/access_action_edit"
-            android:src="@drawable/access_ic_overflow"
-            tools:ignore="SpeakableTextPresentCheck" />
-    </LinearLayout>
 </com.google.android.material.card.MaterialCardView>
