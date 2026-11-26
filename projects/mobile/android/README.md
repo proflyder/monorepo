@@ -664,8 +664,8 @@ badges are selectors in `render`.
   through typed `ResultKey`s.
 - Sectioned lists: the adapter implements `SectionedAdapter`, the list uses
   `StickyHeadersLayoutManager` (XML `app:layoutManager` or code) and
-  `addGroupedRows()` (cards, dividers and a row ripple clipped
-  to each row's card shape).
+  `addFullWidthRows()` (edge-to-edge rows, inset dividers, rows call
+  `applyFullRowRipple()`); grouped card backdrops are banned.
 - A notice with an action is a `RouteNotice(message, route)` shown by
   `showNotice`: a snackbar with "Open" that opens the typed `Route`.
 - Back handlers are registered with `addBackCallback`; `backDispatcher`
@@ -871,6 +871,4 @@ receives raw system insets (`MainInsets.showChrome`). The chat conversation is
 the immersive user: `FloatingGlassHeader` (a `GlassHeader` inside
 `GlassHeaderLayout`, so the list gets the header height as its top inset) and
 `GlassPillLayout` pills for the header buttons, title and composer;
-`pinAboveKeyboard` keeps the composer on the IME. `GroupDividers` skips a row
-divider that falls under a pinned sticky header, so the header hairline is
-never doubled.
+`pinAboveKeyboard` keeps the composer on the IME.

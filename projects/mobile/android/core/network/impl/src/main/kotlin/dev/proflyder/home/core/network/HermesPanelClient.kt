@@ -128,7 +128,7 @@ internal fun HermesReportsDto.toDomain(): HermesReports = HermesReports(
 internal fun VoiceStatusDto.toDomain(): VoiceStatus = VoiceStatus(
     relayUp = relayUp,
     hermesUp = hermesUp,
-    hermesVersion = hermesVersion,
+    hermesVersion = hermesVersion.takeUnless { it.equals(UNKNOWN_VERSION, ignoreCase = true) }.orEmpty(),
     agentMode = agentMode,
     requestsAvailable = requestsAvailable,
     requests = requests.map { VoiceRequest(it.id, it.at, it.text, it.reply, it.latencyMs, it.failed) },
@@ -162,3 +162,5 @@ class HttpHermesPanelClient(private val http: HomeHttp) : HermesPanelClient {
 
     override suspend fun toolsets(): Outcome<HermesToolsets> = api.toolsets().mapResult { it.toDomain() }
 }
+
+private const val UNKNOWN_VERSION = "unknown"

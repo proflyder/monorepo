@@ -9,15 +9,8 @@ interface SectionedAdapter {
     fun isStickyHeader(position: Int): Boolean = isSectionHeader(position)
 }
 
-data class GroupSlot(val first: Boolean, val last: Boolean)
-
-fun SectionedAdapter.slotOf(position: Int, count: Int): GroupSlot? {
-    if (position !in 0 until count || isSectionHeader(position)) return null
-    return GroupSlot(
-        first = position == 0 || isSectionHeader(position - 1),
-        last = position == count - 1 || isSectionHeader(position + 1),
-    )
-}
+fun SectionedAdapter.hasRowBelow(position: Int, count: Int): Boolean =
+    position in 0 until count - 1 && !isSectionHeader(position) && !isSectionHeader(position + 1)
 
 fun SectionedAdapter.stickyHeaderAtOrBefore(position: Int): Int? =
     (position downTo 0).firstOrNull(::isStickyHeader)
@@ -44,10 +37,4 @@ private class ConcatSections(private val concat: ConcatAdapter) : SectionedAdapt
         val sections = wrapped.first.sections() ?: return outside
         return sections.check(wrapped.second)
     }
-}
-
-internal fun RecyclerView.slotOfChild(child: android.view.View): GroupSlot? {
-    val (adapter, sections) = sectionedAdapter() ?: return null
-    val position = getChildAdapterPosition(child)
-    return sections.slotOf(position, adapter.itemCount)
 }

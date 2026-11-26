@@ -6,6 +6,7 @@ import android.view.ViewGroup
 import androidx.core.view.doOnLayout
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.textfield.TextInputLayout
+import dev.proflyder.home.core.designsystem.list.applyFullRowRipple
 
 object DesignCatalog {
     val sections: List<Pair<String, Int>> = listOf(
@@ -50,6 +51,7 @@ object DesignCatalog {
         }
         root.findViewById<TextInputLayout>(R.id.ds_catalog_field_error).error = resources.getString(R.string.ds_catalog_field_error)
         root.findViewById<ListRow>(R.id.ds_catalog_row_switch).switch.isChecked = true
+        root.findViewById<ListRow>(R.id.ds_catalog_row_click).applyFullRowRipple()
         val pills = root.findViewById<PillSegments>(R.id.ds_catalog_pills)
         pills.setLabels(listOf(R.string.ds_catalog_chip_filter, R.string.ds_catalog_chip_assist).map(resources::getText))
         pills.select(0)

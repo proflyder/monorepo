@@ -1,26 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
-<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
-    style="@style/Widget.Home.Card"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
+    android:divider="@drawable/alarms_upcoming_divider"
+    android:orientation="vertical"
+    android:showDividers="middle"
     android:visibility="gone">
 
-    <dev.proflyder.home.core.designsystem.list.GroupedRowsLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:divider="@drawable/alarms_upcoming_divider"
-        android:showDividers="middle">
+    <include
+        android:id="@+id/alarms_upcoming_first"
+        layout="@layout/item_alarms_upcoming" />
 
-        <include
-            android:id="@+id/alarms_upcoming_first"
-            layout="@layout/item_alarms_upcoming" />
+    <include
+        android:id="@+id/alarms_upcoming_second"
+        layout="@layout/item_alarms_upcoming" />
 
-        <include
-            android:id="@+id/alarms_upcoming_second"
-            layout="@layout/item_alarms_upcoming" />
-
-        <include
-            android:id="@+id/alarms_upcoming_third"
-            layout="@layout/item_alarms_upcoming" />
-    </dev.proflyder.home.core.designsystem.list.GroupedRowsLayout>
-</com.google.android.material.card.MaterialCardView>
+    <include
+        android:id="@+id/alarms_upcoming_third"
+        layout="@layout/item_alarms_upcoming" />
+</LinearLayout>

@@ -5,8 +5,7 @@ import android.graphics.Color
 import android.graphics.drawable.RippleDrawable
 import android.view.View
 import androidx.core.content.ContextCompat
-import dev.proflyder.home.core.designsystem.list.GroupSlot
-import dev.proflyder.home.core.designsystem.list.GroupedRowRipple
+import dev.proflyder.home.core.designsystem.list.applyFullRowRipple
 import dev.proflyder.home.core.theme.AppTheme
 import kotlin.math.abs
 import org.junit.Assert.assertEquals
@@ -30,50 +29,16 @@ class RowRippleTest {
     fun theRowRippleUsesTheThemeAccentInLightThemes() = AppTheme.entries.forEach(::assertTokens)
 
     @Test
-    fun theRippleMaskFollowsTheGroupedRowCorners() {
+    fun aClickableRowGetsTheFullRowRipple() {
         val view = View(themed(AppTheme.EMERALD)).apply { isClickable = true }
-        val ripple = GroupedRowRipple(view, RADIUS)
-
-        ripple.bind(GroupSlot(first = true, last = false))
+        view.applyFullRowRipple()
         assertTrue(view.foreground is RippleDrawable)
-        assertCorners(ripple, top = RADIUS, bottom = 0f)
-
-        ripple.bind(GroupSlot(first = false, last = false))
-        assertCorners(ripple, top = 0f, bottom = 0f)
-
-        ripple.bind(GroupSlot(first = false, last = true))
-        assertCorners(ripple, top = 0f, bottom = RADIUS)
-    }
-
-    @Test
-    fun aSlotChangeSwapsTheRippleShape() {
-        val view = View(themed(AppTheme.EMERALD)).apply { isClickable = true }
-        val ripple = GroupedRowRipple(view, RADIUS)
-
-        ripple.bind(GroupSlot(first = true, last = true))
-        val single = view.foreground
-        ripple.bind(GroupSlot(first = false, last = false))
-
-        assertTrue(single !== view.foreground)
-        assertCorners(ripple, top = 0f, bottom = 0f)
-    }
-
-    private fun assertCorners(ripple: GroupedRowRipple, top: Float, bottom: Float) {
-        val model = checkNotNull(ripple.mask).shapeAppearanceModel
-        val bounds = android.graphics.RectF(0f, 0f, MASK_SIZE, MASK_SIZE)
-        assertEquals(top, model.topLeftCornerSize.getCornerSize(bounds), 0.5f)
-        assertEquals(top, model.topRightCornerSize.getCornerSize(bounds), 0.5f)
-        assertEquals(bottom, model.bottomLeftCornerSize.getCornerSize(bounds), 0.5f)
-        assertEquals(bottom, model.bottomRightCornerSize.getCornerSize(bounds), 0.5f)
     }
 
     @Test
     fun aRowThatIsNotClickableHasNoRipple() {
         val view = View(themed(AppTheme.EMERALD))
-        val ripple = GroupedRowRipple(view, RADIUS)
-
-        ripple.bind(GroupSlot(first = true, last = true))
-
+        view.applyFullRowRipple()
         assertNull(view.foreground)
         assertFalse(view.isClickable)
     }
@@ -100,8 +65,6 @@ class RowRippleTest {
     }
 
     private companion object {
-        const val RADIUS = 16f
-        const val MASK_SIZE = 100f
         const val PRESSED_ALPHA = 0.2f
         const val HOVER_ALPHA = 0.08f
         const val MAX_ALPHA = 255

@@ -5,5 +5,7 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:focusable="true"
+    android:paddingTop="@dimen/ds_space_m"
+    android:paddingBottom="@dimen/ds_space_m"
     tools:rowTitle="Agents"
     tools:rowSubtitle="bb threads started by voice" />

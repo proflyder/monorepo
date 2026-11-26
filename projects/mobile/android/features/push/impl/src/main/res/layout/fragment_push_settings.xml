@@ -10,102 +10,102 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:paddingStart="@dimen/ds_space_l"
         android:paddingTop="@dimen/ds_space_l"
-        android:paddingEnd="@dimen/ds_space_l"
         android:paddingBottom="@dimen/ds_space_xl">
 
         <TextView
             android:id="@+id/push_intro"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:paddingStart="@dimen/ds_space_l"
+            android:paddingEnd="@dimen/ds_space_l"
             android:text="@string/push_intro"
             android:textIsSelectable="true"
             android:textAppearance="?attr/textAppearanceBodyMedium"
+            android:textColor="?attr/colorOnSurfaceVariant" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/ds_space_s"
+            android:divider="@drawable/ds_full_row_divider_after_icon"
+            android:orientation="vertical"
+            android:showDividers="middle">
+
+            <dev.proflyder.home.core.designsystem.ListRow
+                android:id="@+id/push_notifications_row"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:clickable="true"
+                android:focusable="true"
+                app:rowIcon="@drawable/push_ic_section_notifications"
+                app:rowIconTint="?attr/colorPrimary"
+                app:rowTitle="@string/push_notifications_title">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/push_notifications_action"
+                    style="@style/Widget.Home.IconButton.Tonal.M"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    app:icon="@drawable/ds_ic_open_in_new" />
+            </dev.proflyder.home.core.designsystem.ListRow>
+
+            <dev.proflyder.home.core.designsystem.ListRow
+                android:id="@+id/push_dnd_row"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:clickable="true"
+                android:focusable="true"
+                app:rowIcon="@drawable/push_ic_dnd"
+                app:rowIconTint="?attr/colorPrimary"
+                app:rowTitle="@string/push_dnd_title">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/push_dnd_action"
+                    style="@style/Widget.Home.IconButton.Tonal.M"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    app:icon="@drawable/ds_ic_open_in_new" />
+            </dev.proflyder.home.core.designsystem.ListRow>
+
+            <dev.proflyder.home.core.designsystem.ListRow
+                android:id="@+id/push_full_screen_row"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:clickable="true"
+                android:focusable="true"
+                app:rowIcon="@drawable/push_ic_fullscreen"
+                app:rowIconTint="?attr/colorPrimary"
+                app:rowTitle="@string/push_full_screen_title">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/push_full_screen_action"
+                    style="@style/Widget.Home.IconButton.Tonal.M"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    app:icon="@drawable/ds_ic_open_in_new" />
+            </dev.proflyder.home.core.designsystem.ListRow>
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/push_ring_summary"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingStart="@dimen/ds_space_l"
+            android:paddingEnd="@dimen/ds_space_l"
+            android:paddingTop="@dimen/ds_space_s"
+            android:paddingBottom="@dimen/ds_space_s"
+            android:textIsSelectable="true"
+            android:textAppearance="?attr/textAppearanceBodySmall"
             android:textColor="?attr/colorOnSurfaceVariant" />
 
         <com.google.android.material.card.MaterialCardView
             style="@style/Widget.Home.Card"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="@dimen/ds_space_l">
-
-            <dev.proflyder.home.core.designsystem.list.GroupedRowsLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content">
-
-                <dev.proflyder.home.core.designsystem.ListRow
-                    android:id="@+id/push_notifications_row"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:clickable="true"
-                    android:focusable="true"
-                    app:rowIcon="@drawable/push_ic_section_notifications"
-                    app:rowIconTint="?attr/colorPrimary"
-                    app:rowTitle="@string/push_notifications_title">
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/push_notifications_action"
-                        style="@style/Widget.Home.IconButton.Tonal.M"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        app:icon="@drawable/ds_ic_open_in_new" />
-                </dev.proflyder.home.core.designsystem.ListRow>
-
-                <dev.proflyder.home.core.designsystem.ListRow
-                    android:id="@+id/push_dnd_row"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:clickable="true"
-                    android:focusable="true"
-                    app:rowIcon="@drawable/push_ic_dnd"
-                    app:rowIconTint="?attr/colorPrimary"
-                    app:rowTitle="@string/push_dnd_title">
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/push_dnd_action"
-                        style="@style/Widget.Home.IconButton.Tonal.M"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        app:icon="@drawable/ds_ic_open_in_new" />
-                </dev.proflyder.home.core.designsystem.ListRow>
-
-                <dev.proflyder.home.core.designsystem.ListRow
-                    android:id="@+id/push_full_screen_row"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:clickable="true"
-                    android:focusable="true"
-                    app:rowIcon="@drawable/push_ic_fullscreen"
-                    app:rowIconTint="?attr/colorPrimary"
-                    app:rowTitle="@string/push_full_screen_title">
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/push_full_screen_action"
-                        style="@style/Widget.Home.IconButton.Tonal.M"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        app:icon="@drawable/ds_ic_open_in_new" />
-                </dev.proflyder.home.core.designsystem.ListRow>
-
-                <TextView
-                    android:id="@+id/push_ring_summary"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:paddingStart="@dimen/ds_space_l"
-                    android:paddingEnd="@dimen/ds_space_l"
-                    android:paddingBottom="@dimen/ds_space_l"
-                    android:textIsSelectable="true"
-                    android:textAppearance="?attr/textAppearanceBodySmall"
-                    android:textColor="?attr/colorOnSurfaceVariant" />
-            </dev.proflyder.home.core.designsystem.list.GroupedRowsLayout>
-        </com.google.android.material.card.MaterialCardView>
-
-        <com.google.android.material.card.MaterialCardView
-            style="@style/Widget.Home.Card"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="@dimen/ds_space_s">
+            android:layout_marginStart="@dimen/ds_space_l"
+            android:layout_marginTop="@dimen/ds_space_s"
+            android:layout_marginEnd="@dimen/ds_space_l">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -150,7 +150,9 @@
             style="@style/Widget.Home.Card"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="@dimen/ds_space_s">
+            android:layout_marginStart="@dimen/ds_space_l"
+            android:layout_marginTop="@dimen/ds_space_s"
+            android:layout_marginEnd="@dimen/ds_space_l">
 
             <LinearLayout
                 android:layout_width="match_parent"

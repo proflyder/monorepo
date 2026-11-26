@@ -64,12 +64,22 @@ class HermesRowsTest {
         assertEquals(listOf("Health", "Recent requests"), voice.filterIsInstance<HermesRow.Header>().map { it.title })
         val entries = voice.filterIsInstance<HermesRow.Entry>()
         assertEquals("Version 0.12.0", entries[1].subtitle)
+        assertEquals(Tone.NEUTRAL, entries[1].tone)
+        assertEquals(Tone.NEUTRAL, entries[1].valueTone)
         val request = entries.first { it.key == "request:9" }
         assertEquals("Будильник на 07:00 поставлен · 2.4 s", request.subtitle)
         val failed = entries.first { it.key == "request:7" }
         assertEquals("No reply", failed.subtitle)
         assertEquals(Tone.ERROR, failed.tone)
         assertNull(failed.target)
+    }
+
+    @Test
+    fun aMissingVersionHidesTheSubtitleAndADownServiceIsRed() {
+        val state = HermesFixtures.state.copy(voice = Loaded(value = HermesFixtures.voice.copy(hermesUp = false, hermesVersion = "")))
+        val hermes = rows.section(HermesSection.VOICE, state).filterIsInstance<HermesRow.Entry>()[1]
+        assertEquals("", hermes.subtitle)
+        assertEquals(Tone.ERROR, hermes.valueTone)
     }
 
     @Test

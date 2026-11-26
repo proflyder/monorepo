@@ -107,7 +107,7 @@ internal class HermesRows(private val context: Context) {
         title = context.getString(title),
         subtitle = version?.let { context.getString(R.string.hermes_version, it) }.orEmpty(),
         value = context.getString(if (up) R.string.hermes_state_up else R.string.hermes_state_down),
-        tone = if (up) Tone.SUCCESS else Tone.ERROR,
+        valueTone = if (up) Tone.NEUTRAL else Tone.ERROR,
     )
 
     private fun agentModeRow(active: Boolean): HermesRow.Entry = HermesRow.Entry(

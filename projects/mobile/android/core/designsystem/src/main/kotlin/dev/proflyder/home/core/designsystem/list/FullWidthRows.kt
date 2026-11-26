@@ -33,11 +33,15 @@ class FullWidthRows(@Px private val dividerInset: Int) : RecyclerView.ItemDecora
 }
 
 private fun RecyclerView.hasRowBelow(child: View): Boolean {
-    if (sectionedAdapter() != null) return slotOfChild(child)?.last == false
+    sectionedAdapter()?.let { (adapter, sections) ->
+        return sections.hasRowBelow(getChildAdapterPosition(child), adapter.itemCount)
+    }
     val holder = getChildViewHolder(child)
     val count = holder.bindingAdapter?.itemCount ?: return false
     return holder.bindingAdapterPosition in 0 until count - 1
 }
+
+private fun RecyclerView.children(): List<View> = (0 until childCount).map(::getChildAt)
 
 fun View.applyFullRowRipple() {
     foreground = fullRowRipple().takeIf { isClickable }

@@ -8,7 +8,7 @@ import androidx.appcompat.view.ContextThemeWrapper
 import dev.proflyder.home.feature.push.impl.R
 import dev.proflyder.home.feature.push.impl.databinding.FragmentPushSettingsBinding
 import java.io.File
-import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -42,7 +42,7 @@ class PushSettingsScreenshotTest {
         binding.pushDeviceName.text = SAMPLE_DEVICE_NAME
         binding.pushRegistration.text = themed.getString(R.string.push_not_registered)
         savePng(binding.root, name)
-        assertNotNull(binding.pushNotificationsRow.foreground)
+        assertNull(binding.pushNotificationsRow.background)
     }
 
     private fun savePng(root: View, name: String) {

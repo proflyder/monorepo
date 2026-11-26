@@ -14,6 +14,7 @@ internal sealed interface HermesRow {
         val subtitle: String = "",
         val value: String = "",
         val tone: Tone = Tone.NEUTRAL,
+        val valueTone: Tone = Tone.NEUTRAL,
         val target: Destination? = null,
     ) : HermesRow
 
