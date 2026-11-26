@@ -11,7 +11,7 @@ import com.google.android.material.color.MaterialColors
 import dev.proflyder.home.core.designsystem.R as DesignSystemR
 import dev.proflyder.home.core.designsystem.list.StickyHeadersLayoutManager
 import dev.proflyder.home.core.theme.AppTheme
-import dev.proflyder.home.core.designsystem.list.addGroupedRows
+import dev.proflyder.home.core.designsystem.list.addFullWidthRows
 import dev.proflyder.home.core.ui.BaseAdapterCallback
 import dev.proflyder.home.feature.hermes.presentation.HermesAdapter
 import dev.proflyder.home.feature.hermes.presentation.HermesRow
@@ -43,8 +43,8 @@ class HermesScreenshotTest {
         list.layoutManager = StickyHeadersLayoutManager(context)
         val adapter = HermesAdapter(BaseAdapterCallback())
         list.adapter = adapter
-        list.addGroupedRows()
-        list.setPadding(PADDING, PADDING, PADDING, PADDING)
+        list.addFullWidthRows()
+        list.setPadding(0, PADDING, 0, PADDING)
         list.setBackgroundColor(MaterialColors.getColor(list, com.google.android.material.R.attr.colorSurface))
         adapter.submitList(rowsOf(HermesRows(context)))
         shadowOf(Looper.getMainLooper()).idle()

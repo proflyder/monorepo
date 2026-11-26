@@ -83,6 +83,12 @@ class HermesPanelClientTest {
     }
 
     @Test
+    fun anUnknownHermesVersionIsDropped() {
+        val voice = VoiceStatusDto(hermesUp = true, hermesVersion = "Unknown").toDomain()
+        assertEquals("", voice.hermesVersion)
+    }
+
+    @Test
     fun skillsKeepCategoryOrder() = runBlocking {
         enqueue("skills")
         val skills = (client().skills() as Outcome.Success).value

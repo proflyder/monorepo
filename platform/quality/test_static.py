@@ -330,6 +330,18 @@ class AndroidThemeColorTests(unittest.TestCase):
             problems.extend(f"{path.relative_to(ROOT)}: {name}" for name in banned if name in text)
         self.assertEqual(problems, [], "use core/designsystem PillSegments instead:\n" + "\n".join(problems))
 
+    def test_no_grouped_row_backdrops(self) -> None:
+        banned = ("GroupedRows", "GroupCards", "GroupDividers", "GroupRowRipples", "GroupedRowRipple",
+                  "GroupSlot", "addGroupedRows", "ds_grouped_row_ripple")
+        problems = []
+        for path in sorted(self.ANDROID.glob("**/src/**/*")):
+            if path.suffix not in {".xml", ".kt"}:
+                continue
+            text = path.read_text(encoding="utf-8")
+            problems.extend(f"{path.relative_to(ROOT)}: {name}" for name in banned if name in text)
+        self.assertEqual(problems, [], "rows on a shared rounded backdrop are banned; use addFullWidthRows "
+                         "and applyFullRowRipple or standalone cards (core/designsystem README):\n" + "\n".join(problems))
+
     def test_kotlin_does_not_parse_or_build_colours(self) -> None:
         pattern = __import__("re").compile(r"Color\.(parseColor|rgb|argb)\(|0xFF[0-9A-Fa-f]{6}")
         problems = []

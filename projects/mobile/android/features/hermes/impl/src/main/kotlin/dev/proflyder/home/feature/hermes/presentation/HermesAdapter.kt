@@ -3,6 +3,7 @@ package dev.proflyder.home.feature.hermes.presentation
 import android.view.LayoutInflater
 import android.view.ViewGroup
 import dev.proflyder.home.core.designsystem.list.SectionedAdapter
+import dev.proflyder.home.core.designsystem.list.applyFullRowRipple
 import dev.proflyder.home.core.presentation.KeyedDiff
 import dev.proflyder.home.core.ui.AdapterCallback
 import dev.proflyder.home.core.ui.BaseListAdapter
@@ -58,9 +59,11 @@ internal class HermesAdapter(
             row.subtitle = entry.subtitle
             row.value = entry.value
             row.subtitleTone = entry.tone
+            row.valueTone = entry.valueTone
             row.chevron = entry.target != null
             row.isClickable = entry.target != null
             row.setOnClickListener(entry.target?.let { { callback.onItemClick(entry) } })
+            row.applyFullRowRipple()
         }
     }
 

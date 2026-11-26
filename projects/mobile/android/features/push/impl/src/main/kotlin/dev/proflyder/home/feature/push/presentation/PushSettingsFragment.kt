@@ -4,6 +4,7 @@ import android.os.Bundle
 import com.google.android.material.button.MaterialButton
 import dev.proflyder.home.core.designsystem.ListRow
 import dev.proflyder.home.core.designsystem.Tone
+import dev.proflyder.home.core.designsystem.list.applyFullRowRipple
 import dev.proflyder.home.core.presentation.ScreenFragment
 import dev.proflyder.home.core.presentation.screenViewModel
 import dev.proflyder.home.core.ui.keepFocusedVisible
@@ -67,6 +68,7 @@ internal class PushSettingsFragment :
     private fun bindRow(row: ListRow, action: MaterialButton, screen: PushSettingsScreen) {
         action.contentDescription = getString(R.string.push_permission_open_settings, row.title)
         row.setOnClickListener { dispatch(PushSettingsIntent.OpenSettings(screen)) }
+        row.applyFullRowRipple()
         action.setOnClickListener { dispatch(PushSettingsIntent.OpenSettings(screen)) }
     }
 

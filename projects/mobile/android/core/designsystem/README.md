@@ -23,7 +23,7 @@ the colour roles.
 | Stroke `ds_stroke_*` | thin 1, thick 2 dp |
 | Typography | Material 3 roles through the theme (`?attr/textAppearanceTitleMedium`, `…BodyLarge`, `…LabelLarge`, …) plus `TextAppearance.Home.{Time,Countdown,ToolbarTitle,Pill,PillTab,ChatMeta,PopupMenuItem}` |
 | Popup `homePopup*` | surface `colorSurfaceContainerHighest` (lighter than card surfaces in dark themes, darker in light), stroke `colorPrimary` at 50% alpha, stroke width 1 dp, radius `ds_radius_xl` 28 dp, elevation `ds_popup_elevation` 8 dp; item text `colorOnSurface`, item icons `colorPrimary`, pressed/hover ripple `colorPrimary` at 20%/8% |
-| Row ripple `homeRowItemRippleColor` | `colorPrimary` at 20% pressed, 8% hovered; `addGroupedRows` clips it to each row's card shape |
+| Row ripple `homeRowItemRippleColor` | `colorPrimary` at 20% pressed, 8% hovered; `applyFullRowRipple` paints it over the whole row rectangle |
 | Motion | `HomeMotion` (enter/exit/selection durations and easings from the theme) |
 
 ## Components
@@ -44,7 +44,7 @@ the colour roles.
 | Slider | `Slider` without `style` (theme default `Widget.Home.Slider`) | Active track `colorPrimary`, inactive `colorSurfaceContainerHighest`, active ticks `colorOnPrimary`, inactive ticks `colorOnSurfaceVariant`, thumb `colorPrimary`. Gradient sliders: `GradientSlider` + `Widget.Home.Slider.Gradient`; the gradient is the track and ticks are hidden. |
 | Pills | `PillSegments` | The only choice-between-options control; no segmented buttons. |
 | Popup menu | `HomePopupMenu(anchor, menuRes)` | Card with 48 dp rows and icons. Every popup in the app goes through it: toolbar overflow, chat attach and message actions, access token actions; context-style menus are the same card. `popupMenuStyle`, `actionOverflowMenuStyle`, `android:contextPopupMenuStyle` and `listPopupWindowStyle` point at the same background and elevation, so any native `PopupMenu`, `ListPopupWindow` or exposed dropdown (`AutoCompleteTextView`) inherits it. The card surface is `homePopupSurface` (`colorSurfaceContainerHighest`), the 1 dp `homePopupStroke` is the accent at 50% alpha, icons use `homePopupItemIconTint` (`colorPrimary`), labels `homePopupItemTextColor` (`colorOnSurface`), and the ripple `homePopupItemRippleColor` shows pressed and hover states. Opens below the anchor when it fits, otherwise above; stays inside the window insets (system bars, IME, cutout) and never covers a view marked with `HomePopupMenu.markObstacle` (the bottom navigation); scrolls inside when neither side fits. |
-| List row | `ListRow` (`app:rowIcon`, `rowTitle`, `rowSubtitle`, `rowValue`, `rowChevron`, `rowSwitch`); child views in XML become the trailing slot | Min height 56 dp; `subtitleTone` = `NEUTRAL`/`ERROR`/`WARNING`/`SUCCESS`; `app:rowIconTint` (default `colorOnSurfaceVariant`, `colorPrimary` for accent icons such as permissions); titles use a 20sp line height so a wrapped title stays compact. |
+| List row | `ListRow` (`app:rowIcon`, `rowTitle`, `rowSubtitle`, `rowValue`, `rowChevron`, `rowSwitch`); child views in XML become the trailing slot | Min height 56 dp; `subtitleTone` and `valueTone` = `NEUTRAL`/`ERROR`/`WARNING`/`SUCCESS`; `app:rowIconTint` (default `colorOnSurfaceVariant`, `colorPrimary` for accent icons such as permissions); titles use a 20sp line height so a wrapped title stays compact. |
 | Section header | `TextView` + `Widget.Home.SectionHeader` | TitleSmall in `colorPrimary`. |
 | Empty state | `EmptyState` (`app:emptyIcon`, `emptyText`, `emptyAction`) | Main action Filled M (`action`, `app:emptyAction`), optional secondary Tonal M (`secondaryAction`, `app:emptySecondaryAction`) in a centred equal-width `ButtonRow`. |
 | Status chip | `TextView` + `Widget.Home.StatusChip.<Error\|Warning\|Success\|Neutral>` | 24 dp pill. |
@@ -152,37 +152,27 @@ the new theme automatically.
   `ds_bg_popup_menu` paints the inset card from `homePopupSurface` with a 1dp
   `homePopupStroke`; `PopupStylesTest` checks both tokens in every theme, dark
   and light.
-- `addGroupedRows()` (`list`) is the one entry point for grouped lists: it adds
-  `GroupCards`, `GroupDividers` and `GroupRowRipples`. `GroupRowRipples`
-  resolves each row's `GroupSlot` in `getItemOffsets`, which RecyclerView calls
-  after every bind and after every adapter change, so a row that moves from the
-  middle to the edge of a group gets the new shape without a rebind. The
-  per-view `GroupedRowRipple` (kept in the `ds_grouped_row_ripple` tag) is a
-  `RippleDrawable` in `homeRowItemRippleColor` whose mask is the same
-  `GroupSlot.shape(radius)` the card uses: rounded top for the first row,
-  rounded bottom for the last, the plain row rectangle in between. Only
-  clickable rows get the ripple, so the adapter sets `isClickable`; rows must
-  not declare `selectableItemBackground` themselves.
+- Grouped rows on a shared rounded backdrop (several rows on one card surface
+  with inner dividers, iOS-settings style) are banned everywhere. A list of
+  rows uses `addFullWidthRows` + `applyFullRowRipple` with plain-text section
+  headers; large heterogeneous blocks (dashboards, devices with controls,
+  timers) are standalone cards, one `Widget.Home.Card` per block with a gap
+  between them. `test_no_grouped_row_backdrops` in
+  `platform/quality/test_static.py` rejects the removed group classes.
 - `addFullWidthRows(dividerInset)` (`list`) is the edge-to-edge list pattern
   (notification history, secrets, chat sessions): no card surface, a thin
   divider from `dividerInset` to the end edge between rows of one section
-  (sectioned adapters) or of one adapter, following swipe translation. It only
+  (sectioned adapters) or of one adapter, following swipe translation; a
+  divider under the pinned sticky header is skipped so the hairline is never
+  doubled (`FullWidthRowsTest`). It only
   draws; clickable rows get the full-row rectangular ripple from
   `View.applyFullRowRipple()` in their holder or `?attr/selectableItemBackground`
   in the layout.
-- `GroupedRowsLayout` (`list`) is the same contract for a static card: a
-  vertical `LinearLayout` placed inside a `MaterialCardView` that binds a
-  `GroupedRowRipple` to every visible child on layout, using the card's corner
-  radius. Non-clickable children (a summary line) keep the slot order but get
-  no ripple.
+- A static list of rows (no RecyclerView) is a vertical `LinearLayout` with
+  `android:divider="@drawable/ds_full_row_divider_after_icon"` and
+  `showDividers="middle"`; each clickable row calls `applyFullRowRipple()`.
 - `ListRow` carries its own `ds_space_l` horizontal padding
-  (`Widget.Home.ListRow`), so a row inside a grouped card needs no per-layout
-  padding. A row inside a container that already pads its content uses
+  (`Widget.Home.ListRow`), so a full-width row needs no per-layout padding. A row inside a container that already pads its content uses
   `style="@style/Widget.Home.ListRow.Embedded"`.
 - `Context.joinMeta(parts)` joins metadata fragments with `ds_meta_separator`;
   features do not hard-code the separator.
-- `GroupedRowsScreenshotTest` renders first, middle and last pressed rows over
-  the theme window background in dark and light. Robolectric does not paint the
-  patterned API 35 ripple on a software canvas, so the test paints the row's
-  real ripple mask (shape and bounds taken from its `foreground`) in the
-  pressed colour and checks that corners outside the shape stay untouched.

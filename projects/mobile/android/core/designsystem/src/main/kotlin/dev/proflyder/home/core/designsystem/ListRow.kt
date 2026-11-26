@@ -68,6 +68,12 @@ class ListRow @JvmOverloads constructor(
             subtitleView.setTextColor(MaterialColors.getColor(subtitleView, value.attr))
         }
 
+    var valueTone: Tone = Tone.NEUTRAL
+        set(value) {
+            field = value
+            valueView.setTextColor(MaterialColors.getColor(valueView, value.attr))
+        }
+
     var chevron: Boolean
         get() = chevronView.isVisible
         set(value) {

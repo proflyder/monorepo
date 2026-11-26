@@ -138,7 +138,7 @@ class GlassChromeTest {
         assertFalse(sections.isStickyHeader(1))
         assertTrue(sections.isStickyHeader(SECTION))
         assertFalse("footer never pins", sections.isStickyHeader(SECTION * 2))
-        assertTrue("footer is outside every group", sections.isSectionHeader(SECTION * 2))
+        assertTrue("footer is outside every section", sections.isSectionHeader(SECTION * 2))
     }
 
     @Test

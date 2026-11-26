@@ -13,12 +13,12 @@ import org.junit.runners.Suite
     PopupStylesTest::class,
     PopupScreenshotTest::class,
     RowRippleTest::class,
-    GroupedRowsScreenshotTest::class,
     FabStylesTest::class,
     CatalogScreenshotTest::class,
     LightParamsEditorScreenshotTest::class,
     RevealBinderTest::class,
     SectionsTest::class,
+    FullWidthRowsTest::class,
     SliderStylesTest::class,
     StickyHeadersLayoutManagerTest::class,
 )

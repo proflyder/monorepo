@@ -1,7 +1,7 @@
 package dev.proflyder.home.feature.hermes.presentation
 
 import android.os.Bundle
-import dev.proflyder.home.core.designsystem.list.addGroupedRows
+import dev.proflyder.home.core.designsystem.list.addFullWidthRows
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.navigation.destination
 import dev.proflyder.home.core.presentation.IntentAdapterCallback
@@ -29,7 +29,7 @@ internal abstract class HermesScreenFragment :
 
     override fun onViewReady(binding: FragmentHermesBinding, savedInstanceState: Bundle?) {
         binding.hermesList.adapter = adapter
-        binding.hermesList.addGroupedRows()
+        binding.hermesList.addFullWidthRows()
         binding.hermesRefresh.isEnabled = panel != null
         binding.hermesRefresh.setupPullToRefresh(binding.hermesList) { refresh() }
         binding.hermesRetry.setOnClickListener { refresh() }
