@@ -42,6 +42,8 @@ class HermesViewModelTest {
         override suspend fun agents() = Outcome.Success(HermesFixtures.agents)
         override suspend fun reports() = Outcome.Success(HermesFixtures.reports)
         override suspend fun voice() = voice
+        override suspend fun skills() = Outcome.Success(HermesFixtures.skills)
+        override suspend fun toolsets() = Outcome.Success(HermesFixtures.toolsets)
     }
 
     @Before
@@ -101,5 +103,16 @@ class HermesViewModelTest {
         assertEquals(RemoteFailure.Offline("down"), failing.state.value.voice.failure)
         failing.refresh(HermesPanel.AGENTS)
         assertEquals(HermesFixtures.agents, failing.state.value.agents.value)
+    }
+
+    @Test
+    fun theCatalogPanelsLoadIndependently() = runTest(UnconfinedTestDispatcher()) {
+        val repository = HttpHermesRepository(FakeClient(Outcome.Success(HermesFixtures.voice)), backgroundScope)
+        repository.refresh(HermesPanel.TOOLSETS)
+        assertEquals(HermesFixtures.toolsets, repository.state.value.toolsets.value)
+        assertNull(repository.state.value.skills.value)
+        repository.refresh(HermesPanel.SKILLS)
+        assertEquals(HermesFixtures.skills, repository.state.value.skills.value)
+        assertFalse(repository.state.value.skills.loading)
     }
 }

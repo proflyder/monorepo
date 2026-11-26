@@ -1,3 +1,4 @@
+pub mod catalog;
 pub mod history;
 pub mod model;
 
@@ -13,12 +14,14 @@ use serde::Serialize;
 use crate::bb::{BbApi, PROFILE_PERSONAL, Thread};
 use crate::domain::state::AgentMode;
 
+use catalog::{CatalogApi, Skills, Toolsets};
 use history::{Health, HistoryApi};
 use model::{Agent, Agents, MessageRow, Reports, Voice};
 
 pub struct Sources {
     pub bb: Option<Arc<dyn BbApi>>,
     pub history: Option<Arc<dyn HistoryApi>>,
+    pub catalog: Option<Arc<dyn CatalogApi>>,
     pub mode: Arc<AgentMode>,
 }
 
@@ -93,6 +96,18 @@ impl Panel {
         }
     }
 
+    pub async fn skills(&self) -> Skills {
+        let catalog = self.sources.catalog.as_ref();
+        catalog::skills(futures::future::OptionFuture::from(catalog.map(|api| api.skills())).await)
+    }
+
+    pub async fn toolsets(&self) -> Toolsets {
+        let catalog = self.sources.catalog.as_ref();
+        catalog::toolsets(
+            futures::future::OptionFuture::from(catalog.map(|api| api.toolsets())).await,
+        )
+    }
+
     async fn health(&self) -> Health {
         match self.sources.history.as_ref() {
             Some(history) => history.health().await,
@@ -133,6 +148,8 @@ pub fn router<S: Clone + Send + Sync + 'static>(panel: Arc<Panel>) -> Router<S> 
         .route("/v1/hermes/agents", get(agents))
         .route("/v1/hermes/reports", get(reports))
         .route("/v1/hermes/voice", get(voice))
+        .route("/v1/hermes/skills", get(skills))
+        .route("/v1/hermes/toolsets", get(toolsets))
         .with_state(panel)
 }
 
@@ -146,6 +163,14 @@ async fn reports(State(panel): State<Arc<Panel>>) -> Response<Body> {
 
 async fn voice(State(panel): State<Arc<Panel>>) -> Response<Body> {
     json(&panel.voice().await)
+}
+
+async fn skills(State(panel): State<Arc<Panel>>) -> Response<Body> {
+    json(&panel.skills().await)
+}
+
+async fn toolsets(State(panel): State<Arc<Panel>>) -> Response<Body> {
+    json(&panel.toolsets().await)
 }
 
 fn json<T: Serialize>(value: &T) -> Response<Body> {

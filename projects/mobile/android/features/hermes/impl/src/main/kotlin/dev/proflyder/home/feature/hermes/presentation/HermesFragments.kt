@@ -14,6 +14,7 @@ import dev.proflyder.home.feature.hermes.HermesPanel
 import dev.proflyder.home.feature.hermes.HermesReportDestination
 import dev.proflyder.home.feature.hermes.HermesSectionDestination
 import dev.proflyder.home.feature.hermes.HermesState
+import dev.proflyder.home.feature.hermes.HermesToolsetDestination
 import dev.proflyder.home.feature.hermes.impl.databinding.FragmentHermesBinding
 
 internal abstract class HermesScreenFragment :
@@ -91,6 +92,15 @@ internal class HermesReportFragment : HermesScreenFragment() {
 
     override fun rows(rows: HermesRows, state: HermesState): List<HermesRow> =
         rows.report(state.reports.value?.reports?.firstOrNull { it.id == destination?.id })
+}
+
+internal class HermesToolsetFragment : HermesScreenFragment() {
+    private val destination by destination(HermesToolsetDestination)
+
+    override val panel: HermesPanel = HermesPanel.TOOLSETS
+
+    override fun rows(rows: HermesRows, state: HermesState): List<HermesRow> =
+        rows.toolset(state.toolsets.value?.named(destination?.name.orEmpty()))
 }
 
 internal data class HermesStatus(val loading: Boolean, val failure: RemoteFailure?, val hasValue: Boolean)

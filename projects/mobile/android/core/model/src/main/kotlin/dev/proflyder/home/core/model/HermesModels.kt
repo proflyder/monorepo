@@ -44,3 +44,30 @@ data class VoiceStatus(
     val requestsAvailable: Boolean,
     val requests: List<VoiceRequest>,
 )
+
+data class HermesSkill(
+    val name: String,
+    val description: String,
+    val category: String?,
+)
+
+data class HermesSkills(
+    val available: Boolean,
+    val skills: List<HermesSkill>,
+)
+
+data class HermesToolset(
+    val name: String,
+    val label: String,
+    val description: String,
+    val enabled: Boolean,
+    val configured: Boolean,
+    val tools: List<String>,
+)
+
+data class HermesToolsets(
+    val available: Boolean,
+    val toolsets: List<HermesToolset>,
+) {
+    fun named(name: String): HermesToolset? = toolsets.firstOrNull { it.name == name }
+}

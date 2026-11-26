@@ -8,11 +8,16 @@ import dev.proflyder.home.core.model.HermesAgentStatus
 import dev.proflyder.home.core.model.HermesAgents
 import dev.proflyder.home.core.model.HermesReport
 import dev.proflyder.home.core.model.HermesReports
+import dev.proflyder.home.core.model.HermesSkill
+import dev.proflyder.home.core.model.HermesSkills
+import dev.proflyder.home.core.model.HermesToolset
+import dev.proflyder.home.core.model.HermesToolsets
 import dev.proflyder.home.core.model.VoiceRequest
 import dev.proflyder.home.core.model.VoiceStatus
 import dev.proflyder.home.feature.hermes.HermesReportDestination
 import dev.proflyder.home.feature.hermes.HermesSectionDestination
 import dev.proflyder.home.feature.hermes.HermesState
+import dev.proflyder.home.feature.hermes.HermesToolsetDestination
 import dev.proflyder.home.feature.hermes.impl.R
 import java.util.Date
 
@@ -32,6 +37,18 @@ internal class HermesRows(private val context: Context) {
         HermesSection.AGENTS -> state.agents.value?.let(::agents).orEmpty()
         HermesSection.REPORTS -> state.reports.value?.let(::reports).orEmpty()
         HermesSection.VOICE -> state.voice.value?.let(::voice).orEmpty()
+        HermesSection.TOOLSETS -> state.toolsets.value?.let(::toolsets).orEmpty()
+        HermesSection.SKILLS -> state.skills.value?.let(::skills).orEmpty()
+    }
+
+    fun toolset(toolset: HermesToolset?): List<HermesRow> {
+        if (toolset == null) return listOf(note("toolset:none", R.string.hermes_toolset_missing))
+        val (status, tone) = toolsetState(toolset)
+        return listOfNotNull(
+            HermesRow.Entry("toolset:${toolset.name}", toolset.label, status, tone = tone),
+            toolset.description.takeIf(String::isNotBlank)?.let { HermesRow.Note("toolset:description", it) },
+            HermesRow.Header("toolset:tools", counted(R.string.hermes_toolset_tools, toolset.tools.size)),
+        ) + toolRows(toolset)
     }
 
     fun report(report: HermesReport?): List<HermesRow> = when (report) {
@@ -115,6 +132,50 @@ internal class HermesRows(private val context: Context) {
         value = time(request.atUnix),
         tone = if (request.failed) Tone.ERROR else Tone.NEUTRAL,
     )
+
+    private fun toolsets(toolsets: HermesToolsets): List<HermesRow> = when {
+        !toolsets.available -> listOf(note("toolsets:none", R.string.hermes_toolsets_unavailable))
+        toolsets.toolsets.isEmpty() -> listOf(note("toolsets:empty", R.string.hermes_toolsets_empty))
+        else -> toolsets.toolsets.map(::toolsetRow)
+    }
+
+    private fun toolsetRow(toolset: HermesToolset): HermesRow.Entry {
+        val (status, tone) = toolsetState(toolset)
+        return HermesRow.Entry(
+            key = "toolset:${toolset.name}",
+            title = toolset.label,
+            subtitle = status,
+            value = context.resources.getQuantityString(R.plurals.hermes_tool_count, toolset.tools.size, toolset.tools.size),
+            tone = tone,
+            target = HermesToolsetDestination(toolset.name),
+        )
+    }
+
+    private fun toolsetState(toolset: HermesToolset): Pair<String, Tone> = when {
+        !toolset.enabled -> context.getString(R.string.hermes_toolset_disabled) to Tone.NEUTRAL
+        !toolset.configured -> context.getString(R.string.hermes_toolset_unconfigured) to Tone.WARNING
+        else -> context.getString(R.string.hermes_toolset_enabled) to Tone.SUCCESS
+    }
+
+    private fun toolRows(toolset: HermesToolset): List<HermesRow> = when {
+        toolset.tools.isEmpty() -> listOf(note("tools:empty", R.string.hermes_tools_empty))
+        else -> toolset.tools.map { HermesRow.Entry("tool:$it", it) }
+    }
+
+    private fun skills(skills: HermesSkills): List<HermesRow> = when {
+        !skills.available -> listOf(note("skills:none", R.string.hermes_skills_unavailable))
+        skills.skills.isEmpty() -> listOf(note("skills:empty", R.string.hermes_skills_empty))
+        else -> skills.skills.groupBy(HermesSkill::category).flatMap { (category, group) -> skillGroup(category, group) }
+    }
+
+    private fun skillGroup(category: String?, skills: List<HermesSkill>): List<HermesRow> {
+        val name = category ?: context.getString(R.string.hermes_skills_uncategorized)
+        val header = HermesRow.Header("skills:$name", context.getString(R.string.hermes_counted, name, skills.size))
+        return listOf(header) + skills.map { HermesRow.Entry("skill:${it.name}", it.name, it.description) }
+    }
+
+    private fun counted(title: Int, count: Int): String =
+        context.getString(R.string.hermes_counted, context.getString(title), count)
 
     private fun reportTime(report: HermesReport): String = join(
         context.getString(R.string.hermes_report_requested, dateTime(report.requestedAtUnix)),

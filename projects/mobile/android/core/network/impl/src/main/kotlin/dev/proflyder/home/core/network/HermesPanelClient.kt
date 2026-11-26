@@ -5,6 +5,10 @@ import dev.proflyder.home.core.model.HermesAgentStatus
 import dev.proflyder.home.core.model.HermesAgents
 import dev.proflyder.home.core.model.HermesReport
 import dev.proflyder.home.core.model.HermesReports
+import dev.proflyder.home.core.model.HermesSkill
+import dev.proflyder.home.core.model.HermesSkills
+import dev.proflyder.home.core.model.HermesToolset
+import dev.proflyder.home.core.model.HermesToolsets
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.VoiceRequest
 import dev.proflyder.home.core.model.VoiceStatus
@@ -59,6 +63,29 @@ internal data class VoiceStatusDto(
     val requests: List<VoiceRequestDto> = emptyList(),
 )
 
+@Serializable
+internal data class HermesSkillDto(
+    val name: String = "",
+    val description: String = "",
+    val category: String? = null,
+)
+
+@Serializable
+internal data class HermesSkillsDto(val available: Boolean = false, val skills: List<HermesSkillDto> = emptyList())
+
+@Serializable
+internal data class HermesToolsetDto(
+    val name: String = "",
+    val label: String = "",
+    val description: String = "",
+    val enabled: Boolean = false,
+    val configured: Boolean = false,
+    val tools: List<String> = emptyList(),
+)
+
+@Serializable
+internal data class HermesToolsetsDto(val available: Boolean = false, val toolsets: List<HermesToolsetDto> = emptyList())
+
 internal interface HermesPanelApi {
     @Idempotent
     @GET("v1/hermes/agents")
@@ -71,6 +98,14 @@ internal interface HermesPanelApi {
     @Idempotent
     @GET("v1/hermes/voice")
     suspend fun voice(): Outcome<VoiceStatusDto>
+
+    @Idempotent
+    @GET("v1/hermes/skills")
+    suspend fun skills(): Outcome<HermesSkillsDto>
+
+    @Idempotent
+    @GET("v1/hermes/toolsets")
+    suspend fun toolsets(): Outcome<HermesToolsetsDto>
 }
 
 internal fun agentStatus(raw: String): HermesAgentStatus = when (raw) {
@@ -99,6 +134,18 @@ internal fun VoiceStatusDto.toDomain(): VoiceStatus = VoiceStatus(
     requests = requests.map { VoiceRequest(it.id, it.at, it.text, it.reply, it.latencyMs, it.failed) },
 )
 
+internal fun HermesSkillsDto.toDomain(): HermesSkills = HermesSkills(
+    available = available,
+    skills = skills.map { HermesSkill(it.name, it.description, it.category?.takeIf(String::isNotBlank)) },
+)
+
+internal fun HermesToolsetsDto.toDomain(): HermesToolsets = HermesToolsets(
+    available = available,
+    toolsets = toolsets.map {
+        HermesToolset(it.name, it.label.ifBlank { it.name }, it.description, it.enabled, it.configured, it.tools)
+    },
+)
+
 @SingleIn(AppScope::class)
 @ContributesBinding(AppScope::class)
 @Inject
@@ -110,4 +157,8 @@ class HttpHermesPanelClient(private val http: HomeHttp) : HermesPanelClient {
     override suspend fun reports(): Outcome<HermesReports> = api.reports().mapResult { it.toDomain() }
 
     override suspend fun voice(): Outcome<VoiceStatus> = api.voice().mapResult { it.toDomain() }
+
+    override suspend fun skills(): Outcome<HermesSkills> = api.skills().mapResult { it.toDomain() }
+
+    override suspend fun toolsets(): Outcome<HermesToolsets> = api.toolsets().mapResult { it.toDomain() }
 }

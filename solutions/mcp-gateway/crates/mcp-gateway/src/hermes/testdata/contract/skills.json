@@ -1,0 +1,24 @@
+{
+  "available": true,
+  "skills": [
+    {
+      "description": "Plain notes without a category",
+      "name": "notes"
+    },
+    {
+      "category": "home",
+      "description": "Explain alarm options",
+      "name": "alarm-helper"
+    },
+    {
+      "category": "home",
+      "description": "Full house report to Telegram",
+      "name": "report"
+    },
+    {
+      "category": "research",
+      "description": "Search arXiv papers",
+      "name": "arxiv"
+    }
+  ]
+}

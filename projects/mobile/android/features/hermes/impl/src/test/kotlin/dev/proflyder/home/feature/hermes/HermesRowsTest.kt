@@ -22,7 +22,7 @@ class HermesRowsTest {
     @Test
     fun theOverviewLinksEverySection() {
         val overview = rows.overview().map { it as HermesRow.Entry }
-        assertEquals(listOf("Agents", "Reports", "Voice"), overview.map { it.title })
+        assertEquals(listOf("Agents", "Reports", "Voice", "Toolsets", "Skills"), overview.map { it.title })
         assertEquals(
             HermesSection.entries.map(::HermesSectionDestination),
             overview.map { it.target },
@@ -70,5 +70,52 @@ class HermesRowsTest {
         assertEquals("No reply", failed.subtitle)
         assertEquals(Tone.ERROR, failed.tone)
         assertNull(failed.target)
+    }
+
+    @Test
+    fun toolsetsShowStateAndToolCountAndOpenTheirTools() {
+        val toolsets = rows.section(HermesSection.TOOLSETS, HermesFixtures.state).map { it as HermesRow.Entry }
+        assertEquals(listOf("Web search", "Image generation", "Browser"), toolsets.map { it.title })
+        assertEquals("Enabled", toolsets[0].subtitle)
+        assertEquals("2 tools", toolsets[0].value)
+        assertEquals(Tone.SUCCESS, toolsets[0].tone)
+        assertEquals(Tone.WARNING, toolsets[1].tone)
+        assertEquals("Disabled", toolsets[2].subtitle)
+        assertEquals(HermesToolsetDestination("web"), toolsets[0].target)
+    }
+
+    @Test
+    fun aToolsetListsItsToolsAndAMissingOneIsExplained() {
+        val detail = rows.toolset(HermesFixtures.toolsets.named("browser"))
+        assertEquals(
+            listOf("toolset:browser", "toolset:description", "toolset:tools", "tool:browser_click", "tool:browser_open", "tool:browser_type"),
+            detail.map { it.key },
+        )
+        assertEquals("Tools · 3", (detail[2] as HermesRow.Header).title)
+        assertEquals(listOf("toolset:none"), rows.toolset(null).map { it.key })
+    }
+
+    @Test
+    fun skillsAreGroupedByCategory() {
+        val skills = rows.section(HermesSection.SKILLS, HermesFixtures.state)
+        assertEquals(
+            listOf(
+                "skills:No category", "skill:notes",
+                "skills:home", "skill:alarm-helper", "skill:report",
+                "skills:research", "skill:arxiv",
+            ),
+            skills.map { it.key },
+        )
+        assertEquals("home · 2", (skills[2] as HermesRow.Header).title)
+    }
+
+    @Test
+    fun anUnavailableCatalogIsANote() {
+        val state = HermesState(
+            toolsets = Loaded(value = HermesFixtures.toolsets.copy(available = false)),
+            skills = Loaded(value = HermesFixtures.skills.copy(available = false, skills = emptyList())),
+        )
+        assertEquals(listOf("toolsets:none"), rows.section(HermesSection.TOOLSETS, state).map { it.key })
+        assertEquals(listOf("skills:none"), rows.section(HermesSection.SKILLS, state).map { it.key })
     }
 }

@@ -38,4 +38,25 @@
     <string name="hermes_agent_other">Unknown</string>
     <string name="hermes_runtime_hours">%1$d h %2$d min</string>
     <string name="hermes_runtime_minutes">%1$d min</string>
+    <string name="hermes_toolsets_title">Toolsets</string>
+    <string name="hermes_toolsets_subtitle">What Hermes can use: state and tools</string>
+    <string name="hermes_skills_title">Skills</string>
+    <string name="hermes_skills_subtitle">Installed skills by category</string>
+    <string name="hermes_toolset_title">Toolset</string>
+    <string name="hermes_toolset_tools">Tools</string>
+    <string name="hermes_counted">%1$s · %2$d</string>
+    <string name="hermes_skills_uncategorized">No category</string>
+    <string name="hermes_toolset_enabled">Enabled</string>
+    <string name="hermes_toolset_disabled">Disabled</string>
+    <string name="hermes_toolset_unconfigured">Enabled, keys not configured</string>
+    <string name="hermes_toolset_missing">Hermes no longer reports this toolset.</string>
+    <string name="hermes_toolsets_unavailable">Hermes did not answer. Toolsets are unavailable.</string>
+    <string name="hermes_toolsets_empty">Hermes reports no toolsets.</string>
+    <string name="hermes_skills_unavailable">Hermes did not answer. Skills are unavailable.</string>
+    <string name="hermes_skills_empty">No skills installed.</string>
+    <string name="hermes_tools_empty">This toolset has no tools.</string>
+    <plurals name="hermes_tool_count">
+        <item quantity="one">%d tool</item>
+        <item quantity="other">%d tools</item>
+    </plurals>
 </resources>

@@ -53,6 +53,7 @@ rust_library(
     compile_data = glob([
         "src/system/testdata/**/*.json",
         "src/chat/testdata/**/*.json",
+        "src/hermes/testdata/**/*.json",
     ]),
     crate_name = "mcp_gateway",
     edition = "2024",

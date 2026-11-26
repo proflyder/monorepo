@@ -13,6 +13,8 @@ internal enum class HermesSection(
     AGENTS("agents", HermesPanel.AGENTS, R.string.hermes_agents_title, R.string.hermes_agents_subtitle),
     REPORTS("reports", HermesPanel.REPORTS, R.string.hermes_reports_title, R.string.hermes_reports_subtitle),
     VOICE("voice", HermesPanel.VOICE, R.string.hermes_voice_title, R.string.hermes_voice_subtitle),
+    TOOLSETS("toolsets", HermesPanel.TOOLSETS, R.string.hermes_toolsets_title, R.string.hermes_toolsets_subtitle),
+    SKILLS("skills", HermesPanel.SKILLS, R.string.hermes_skills_title, R.string.hermes_skills_subtitle),
     ;
 
     companion object {

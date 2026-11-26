@@ -61,7 +61,7 @@ impl RelayClient {
         })
     }
 
-    async fn get<T: DeserializeOwned>(&self, path: &str) -> Result<T, HistoryError> {
+    pub(super) async fn get<T: DeserializeOwned>(&self, path: &str) -> Result<T, HistoryError> {
         let response = self
             .http
             .get(format!("{}{path}", self.base_url))

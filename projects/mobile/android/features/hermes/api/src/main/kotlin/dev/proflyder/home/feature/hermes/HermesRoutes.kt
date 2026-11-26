@@ -8,4 +8,6 @@ object HermesRoutes {
     const val SECTION_PREFIX: String = "hermes/section"
 
     const val REPORT_PREFIX: String = "hermes/report"
+
+    const val TOOLSET_PREFIX: String = "hermes/toolset"
 }

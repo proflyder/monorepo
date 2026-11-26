@@ -81,4 +81,27 @@ class HermesPanelClientTest {
         assertTrue(voice.requests.last().failed)
         assertNull(voice.requests.last().reply)
     }
+
+    @Test
+    fun skillsKeepCategoryOrder() = runBlocking {
+        enqueue("skills")
+        val skills = (client().skills() as Outcome.Success).value
+        assertEquals("/v1/hermes/skills", server.takeRequest().path)
+        assertTrue(skills.available)
+        assertEquals(listOf("notes", "alarm-helper", "report", "arxiv"), skills.skills.map { it.name })
+        assertNull(skills.skills.first().category)
+        assertEquals("home", skills.skills[1].category)
+    }
+
+    @Test
+    fun toolsetsKeepStateAndToolNames() = runBlocking {
+        enqueue("toolsets")
+        val toolsets = (client().toolsets() as Outcome.Success).value
+        assertEquals("/v1/hermes/toolsets", server.takeRequest().path)
+        val web = toolsets.toolsets.first()
+        assertEquals("Web search", web.label)
+        assertTrue(web.enabled && web.configured)
+        assertEquals(listOf("web_extract", "web_search"), web.tools)
+        assertEquals("memory", toolsets.named("memory")?.label)
+    }
 }
