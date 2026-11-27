@@ -287,7 +287,7 @@ private chat it is also the chat id).  Only `TELEGRAM_ALLOWED_USERS` has access:
 `unauthorized_dm_behavior: ignore` (top level and `platforms.telegram.extra`)
 drops strangers' DMs silently, so no pairing codes are sent (upstream default
 is `pair`); `allow_all_users: false` keeps `GATEWAY_ALLOW_ALL_USERS` unset, and
-`group_allowed_chats`/`group_allow_from` are empty.  "`platform_toolsets.telegram` is an
+`group_allowed_chats`/`group_allow_from` are empty.  `platform_toolsets.telegram` is an
 explicit list, so a chat message cannot reach terminal/file/browser tools.
 Alertmanager reads the same OpenBao keys, so the token has one source of truth;
 the currency bot keeps its own bot for rate alerts.  Reply to an alert message
