@@ -1,0 +1,96 @@
+{{- if .Values.networkPolicy.enabled }}
+{{- $np := .Values.networkPolicy }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "hermes.name" . }}-default-deny
+  labels:
+    {{- include "hermes.labels" . | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "hermes.name" . }}-dns
+  labels:
+    {{- include "hermes.labels" . | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $np.dnsNamespace | quote }}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "hermes.name" . }}-gateway
+  labels:
+    {{- include "hermes.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "hermes.selector" . | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: hermes-smoke
+              app.kubernetes.io/instance: {{ include "hermes.name" . }}
+      ports:
+        - {protocol: TCP, port: {{ .Values.apiPort }}}
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              {{- toYaml $np.privateRanges | nindent 14 }}
+      ports:
+        {{- range $np.publicHttpsPorts }}
+        - {protocol: TCP, port: {{ . }}}
+        {{- end }}
+    {{- if $np.mcpGateway.enabled }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ required "networkPolicy.mcpGateway.namespace is required" $np.mcpGateway.namespace | quote }}
+          podSelector:
+            matchLabels:
+              {{- required "networkPolicy.mcpGateway.podLabels is required" $np.mcpGateway.podLabels | toYaml | nindent 14 }}
+      ports:
+        - {protocol: TCP, port: {{ $np.mcpGateway.port }}}
+    {{- end }}
+{{- if .Values.smoke.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "hermes.name" . }}-smoke
+  labels:
+    {{- include "hermes.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: hermes-smoke
+      app.kubernetes.io/instance: {{ include "hermes.name" . }}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "hermes.selector" . | nindent 14 }}
+      ports:
+        - {protocol: TCP, port: {{ .Values.apiPort }}}
+{{- end }}
+{{- end }}

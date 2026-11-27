@@ -275,7 +275,7 @@ class MainGating(unittest.TestCase):
         self.assertNotIn("ci-station", names)
         self.assertEqual(names, ["admin", "ci-android",
                                  "k8s-read", "backup", "secrets-gateway",
-                                 "operator-kv"])
+                                 "operator-kv", "hermes-work-eso"])
         self.assertEqual(github, [(AUDIENCE, HOME_REPOSITORY, None)])
 
     def test_flag_adds_policy_and_role(self):
@@ -295,6 +295,32 @@ class MainGating(unittest.TestCase):
         names, _, github = run_main("--station-repository", "  ")
         self.assertNotIn("ci-station", names)
         self.assertEqual(github, [(AUDIENCE, HOME_REPOSITORY, None)])
+
+
+class HermesInstanceIsolationTests(unittest.TestCase):
+    def test_instance_policy_reads_only_its_own_path(self):
+        policy = configure.hermes_instance_policy("work")
+        paths = re.findall(r'path "([^"]+)"', policy)
+        self.assertEqual(paths, ["secret/data/k8s/hermes-work/*",
+                                 "secret/metadata/k8s/hermes-work/*"])
+        self.assertNotIn('"list"', policy)
+        self.assertNotIn('"update"', policy)
+
+    def test_shared_k8s_policy_denies_the_isolated_instance(self):
+        for kind in ("data", "metadata"):
+            block = re.search(
+                r'path "secret/%s/k8s/hermes-work/\*" \{(.*?)\}' % kind,
+                configure.K8S_POLICY, re.S)
+            self.assertIsNotNone(block, kind)
+            self.assertIn('capabilities = ["deny"]', block.group(1))
+
+    def test_instance_role_is_bound_to_its_namespace(self):
+        roles = configure.hermes_instance_roles()
+        self.assertEqual(roles, {"hermes-work-eso": (
+            ["hermes-secrets"], ["hermes-work"], ["hermes-work-eso"])})
+
+    def test_secrets_gateway_cannot_touch_the_instance(self):
+        self.assertIn('path "secret/data/k8s/hermes-work/*"', configure.SECRETS_GATEWAY_POLICY)
 
 
 class SecretsGatewayPolicyTests(unittest.TestCase):

@@ -4,6 +4,7 @@
     "infra/vpn/client-ca",
     "k8s/flux-system",
     "k8s/home-assistant/scheduler-auth",
-    "k8s/home-assistant/secrets-gateway"
+    "k8s/home-assistant/secrets-gateway",
+    "k8s/hermes-work"
   ]
 }

@@ -177,6 +177,18 @@
    "purpose": "Flux deployment settings (NEXUS_HOST, NEXUS_PUBLIC_HOST, NODE_LAN_IP, HOME_DOMAIN, LAN_CIDR, HAOS_ADDRESS, PVE_NODE_TARGET)",
    "consumer": "ESO → flux-system (postBuild substitution)"
   },
+  "k8s/hermes-work/anthropic": {
+   "purpose": "work Hermes model login: oauth_token from `claude setup-token` (Claude Max with extra usage; else an API key in api_key)",
+   "consumer": "ESO → hermes-work (SecretStore openbao, hermes-anthropic)"
+  },
+  "k8s/hermes-work/api": {
+   "purpose": "work Hermes API_SERVER_KEY (key, 32+ random chars) for the post-upgrade API smoke",
+   "consumer": "ESO → hermes-work (SecretStore openbao, hermes-api)"
+  },
+  "k8s/hermes-work/telegram": {
+   "purpose": "work Hermes Telegram bot: token, allowed_users (owner numeric id only)",
+   "consumer": "ESO → hermes-work (SecretStore openbao, hermes-telegram)"
+  },
   "k8s/home-assistant/chat-alerts": {
    "purpose": "bearer of the Alertmanager webhook into the app chat (mcp-gateway /v1/chat/alerts)",
    "consumer": "ESO → home-assistant (mcp-gateway-chat-alerts), monitoring (alertmanager-telegram)"

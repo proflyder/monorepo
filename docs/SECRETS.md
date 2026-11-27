@@ -70,6 +70,9 @@
 | `k8s/flux-system/app-settings` | non-secret app env for Flux postBuild (`PVE_IP`, `HAOS_IP`, `STATION_IP`, `VPN_CT_IP`, `BB_CT_IP`, NodePorts, `HA_URL`, bb project/thread ids, `CURRENCY_WEBHOOK_URL`) | ESO → flux-system (`flux-app-settings`) |
 | `k8s/flux-system/runtime-values` | Hermes HelmRelease values без токенов (поле `values`) | ESO → flux-system (`runtime-values`, `valuesFrom`) |
 | `k8s/flux-system/settings` | Flux deployment settings (`NEXUS_HOST`, `NEXUS_PUBLIC_HOST`, `NODE_LAN_IP`, `HOME_DOMAIN`, `LAN_CIDR`, `HAOS_ADDRESS`, `PVE_NODE_TARGET`) | ESO → flux-system (postBuild substitution) |
+| `k8s/hermes-work/anthropic` | рабочий Hermes: `oauth_token` из `claude setup-token` (Claude Max с extra usage) | ESO → hermes-work (`SecretStore openbao`, `hermes-anthropic`) |
+| `k8s/hermes-work/api` | рабочий Hermes: `key` = `API_SERVER_KEY` (32+ случайных символа) для API-смоука | ESO → hermes-work (`hermes-api`) |
+| `k8s/hermes-work/telegram` | рабочий Hermes: `token` бота, `allowed_users` = числовой id владельца | ESO → hermes-work (`hermes-telegram`) |
 | `k8s/home-assistant/ha-bridge-ha` | HA long-lived token for ha-bridge | ESO → home-assistant |
 | `k8s/home-assistant/ha-config-sync` | HAOS forced-command agent key and pinned host key for ha-config-sync | ESO → home-assistant |
 | `k8s/home-assistant/hermes-config` | Hermes renderer private values: `private.yaml` (real HA/MA endpoints, Telegram owner chat id) | ESO → home-assistant (`hermes-config-private`) |
@@ -91,6 +94,17 @@
 | `k8s/nexus/nexus-secrets` | Nexus admin password and read-only `ci-reader` password | ESO → nexus (init container, provisioning Job) |
 | `k8s/test` | smoke probe, not secret | Kubernetes auth smoke |
 | `k8s/vaultwarden/vaultwarden-admin` | Argon2id hash of the Vaultwarden /admin token | ESO → vaultwarden |
+
+### Изоляция рабочего Hermes
+
+`secret/k8s/hermes-work/*` читает только роль Kubernetes auth
+`hermes-work-eso` (ServiceAccount `hermes-work/hermes-secrets`, политика
+`hermes-work-eso`, `read` без `list`). Общая роль ESO (`k8s-read`) и
+secrets-gateway получают на этот путь `deny`; `ClusterSecretStore openbao`
+не обслуживает namespace `hermes-work` (`spec.conditions`). Код —
+`projects/home/kubernetes/openbao/configure.py` (`ISOLATED_HERMES_INSTANCES`).
+Пишет секреты владелец (`operator-kv`); шаги — README рабочего экземпляра
+[`projects/home-assistant/hermes/work/README.md`](../projects/home-assistant/hermes/work/README.md).
 
 Старое поле `infra/kubernetes/values-private#hermes_private_yaml` не
 читается (заменено `k8s/home-assistant/hermes-config#private.yaml`); удаление —

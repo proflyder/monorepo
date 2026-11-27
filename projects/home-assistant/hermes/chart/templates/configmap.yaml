@@ -1,0 +1,10 @@
+{{- include "hermes.ownerOnly" . }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "hermes.name" . }}-config
+  labels:
+    {{- include "hermes.labels" . | nindent 4 }}
+data:
+  config.yaml: |
+    {{- toYaml .Values.config | nindent 4 }}

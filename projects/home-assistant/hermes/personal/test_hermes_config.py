@@ -6,8 +6,8 @@ import unittest
 
 import yaml
 
-ROOT = Path(__file__).resolve().parents[3]
-FRAGMENT = ROOT / "projects" / "home-assistant" / "hermes" / "config.fragment.yaml"
+ROOT = Path(__file__).resolve().parents[4]
+FRAGMENT = ROOT / "projects" / "home-assistant" / "hermes" / "personal" / "config.fragment.yaml"
 
 
 class HermesConfigTests(unittest.TestCase):
@@ -115,14 +115,14 @@ class HermesConfigTests(unittest.TestCase):
         self.assertEqual(self.data["skills"]["platform_disabled"]["api_server"], ["report"])
 
     def test_telegram_prompt_covers_the_report_command(self):
-        prompt = (ROOT / "projects" / "home-assistant" / "hermes" / "telegram_prompt.txt").read_text()
+        prompt = (ROOT / "projects" / "home-assistant" / "hermes" / "personal" / "telegram_prompt.txt").read_text()
         for marker in ("Рикардо", "Telegram", "infra_status", "/report", "infra_report", "details.text"):
             assert marker in prompt
         assert "180" not in prompt
         assert len(prompt) > 1000
 
     def test_telegram_uses_polling_and_owner_allowlist(self):
-        text = (ROOT / "projects" / "home-assistant" / "hermes" / "README.md").read_text()
+        text = (ROOT / "projects" / "home-assistant" / "hermes" / "personal" / "README.md").read_text()
         assert "TELEGRAM_BOT_TOKEN" in text
         assert "TELEGRAM_WEBHOOK_URL" in text
         assert "webhook" not in yaml.safe_dump(self.data["platforms"]).lower()
@@ -131,13 +131,13 @@ class HermesConfigTests(unittest.TestCase):
         assert self.data["web"]["search_backend"] == "openai-native"
 
     def test_voice_prompt_keeps_answers_tts_safe(self):
-        prompt = (ROOT / "projects" / "home-assistant" / "hermes" / "voice_prompt.txt").read_text()
+        prompt = (ROOT / "projects" / "home-assistant" / "hermes" / "personal" / "voice_prompt.txt").read_text()
         for marker in ("Рикардо", "Никогда не называй", "URL", "web_search", "music_search", "Будильники", "искажённым", "Похоже", "180", "Комп включается 1–2 минуты"):
             assert marker in prompt
 
     def test_voice_prompt_forbids_guessed_alarm_durations(self):
-        prompt = (ROOT / "projects" / "home-assistant" / "hermes" / "voice_prompt.txt").read_text()
-        soul = (ROOT / "projects" / "home-assistant" / "hermes" / "SOUL.md").read_text()
+        prompt = (ROOT / "projects" / "home-assistant" / "hermes" / "personal" / "voice_prompt.txt").read_text()
+        soul = (ROOT / "projects" / "home-assistant" / "hermes" / "personal" / "SOUL.md").read_text()
         for marker in ("time_now", "alarm_set", "timer_set", "reminder_set", "одну минуту", "label", "вопрос"):
             assert marker in prompt, marker
         assert "один короткий вопрос" in prompt
@@ -145,19 +145,19 @@ class HermesConfigTests(unittest.TestCase):
         assert "ничего не создавай наугад" in soul
 
     def test_voice_layers_require_infra_confirmation(self):
-        prompt = (ROOT / "projects" / "home-assistant" / "hermes" / "voice_prompt.txt").read_text()
+        prompt = (ROOT / "projects" / "home-assistant" / "hermes" / "personal" / "voice_prompt.txt").read_text()
         for marker in ("infra_status", "infra_report", "infra_prepare_restart",
                        "infra_confirm", "infra_cancel"):
             assert marker in prompt
         assert "подтвержд" in prompt.lower()
 
     def test_voice_prompt_ends_confirmation_with_a_question(self):
-        prompt = (ROOT / "projects" / "home-assistant" / "hermes" / "voice_prompt.txt").read_text()
+        prompt = (ROOT / "projects" / "home-assistant" / "hermes" / "personal" / "voice_prompt.txt").read_text()
         assert "последнее предложение ответа — сам вопрос" in prompt
         assert "Подтверждаете?" in prompt
 
     def test_voice_prompt_covers_bb_agent_spawn(self):
-        prompt = (ROOT / "projects" / "home-assistant" / "hermes" / "voice_prompt.txt").read_text()
+        prompt = (ROOT / "projects" / "home-assistant" / "hermes" / "personal" / "voice_prompt.txt").read_text()
         for marker in ("bb_status", "bb_prepare_spawn", "bb_confirm", "bb_cancel",
                        "подтверди", "режима агента", "рабочий профиль"):
             assert marker in prompt, marker
@@ -173,15 +173,15 @@ class HermesConfigTests(unittest.TestCase):
         tools = self.data["mcp_servers"]["infra"]["tools"]
         assert "include" not in tools, "tools.include would hide the phone group"
         for name in ("voice_prompt.txt", "telegram_prompt.txt", "SOUL.md"):
-            text = (ROOT / "projects" / "home-assistant" / "hermes" / name).read_text()
+            text = (ROOT / "projects" / "home-assistant" / "hermes" / "personal" / name).read_text()
             for marker in ("phone_find", "phone_notify", "phone_list", "дословно", "список имён"):
                 assert marker in text, f"{name}: {marker}"
-        telegram = (ROOT / "projects" / "home-assistant" / "hermes" / "telegram_prompt.txt").read_text()
+        telegram = (ROOT / "projects" / "home-assistant" / "hermes" / "personal" / "telegram_prompt.txt").read_text()
         assert "один короткий вопрос" in telegram
         assert "name" in telegram
 
     def test_telegram_prompt_covers_bb_agent_spawn(self):
-        prompt = (ROOT / "projects" / "home-assistant" / "hermes" / "telegram_prompt.txt").read_text()
+        prompt = (ROOT / "projects" / "home-assistant" / "hermes" / "personal" / "telegram_prompt.txt").read_text()
         for marker in ("bb_status", "bb_prepare_spawn", "bb_confirm", "bb_cancel",
                        "тред", "режима агента", "рабочий профиль"):
             assert marker in prompt, marker
@@ -193,7 +193,7 @@ class HermesConfigTests(unittest.TestCase):
 
     def test_voice_personality_has_a_single_source(self):
         assert "agent" not in self.data or "personalities" not in self.data["agent"]
-        prompt = (ROOT / "projects" / "home-assistant" / "hermes" / "voice_prompt.txt").read_text()
+        prompt = (ROOT / "projects" / "home-assistant" / "hermes" / "personal" / "voice_prompt.txt").read_text()
         assert "Рикардо" in prompt
         src = ROOT / "platform" / "deploy-rs" / "src"
         assert "voice_prompt.txt" in (src / "cli.rs").read_text()
@@ -201,8 +201,8 @@ class HermesConfigTests(unittest.TestCase):
         assert 'personalities.set("voice"' in renderer
 
     def test_persona_is_ricardo_not_hermes(self):
-        prompt = (ROOT / "projects" / "home-assistant" / "hermes" / "voice_prompt.txt").read_text()
-        soul = (ROOT / "projects" / "home-assistant" / "hermes" / "SOUL.md").read_text()
+        prompt = (ROOT / "projects" / "home-assistant" / "hermes" / "personal" / "voice_prompt.txt").read_text()
+        soul = (ROOT / "projects" / "home-assistant" / "hermes" / "personal" / "SOUL.md").read_text()
         for text in (prompt, soul):
             assert "Рикардо" in text
             assert "Гермес" in text or "Hermes" in text

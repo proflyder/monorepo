@@ -386,7 +386,7 @@ Read-only экран «Hermes» Android-приложения (вход стро�
   read-only sidecar над файлами) плюс маршрут relay и аудит мутаций в шлюзе.
 - **Включение/выключение наборов и навыков.** В API только чтение; набор
   платформы задаётся `config.yaml`, который рендерится из Git
-  (`projects/home-assistant/hermes/`), поэтому переключатель в приложении
+  (`projects/home-assistant/hermes/personal/`), поэтому переключатель в приложении
   разошёлся бы с GitOps. Нужен PATCH в Hermes и решение, кто владеет конфигом.
 - **MCP-подключения: число инструментов и последние ошибки.** `/v1/toolsets`
   не включает MCP-серверы (`include_default_mcp_servers=False`), а их статус и

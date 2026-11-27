@@ -434,3 +434,17 @@
     требует Android 9 (API 28), хотя minSdk приложения 26. Причина: код TOTP
     можно подсмотреть или переслать, а ключ не покидает Secure Element и
     каждая операция подтверждается биометрией или паролем устройства.
+
+72. **Hermes — по экземпляру на назначение.** Личный и рабочий Hermes —
+    отдельные процессы, PVC, Telegram-боты и секреты; мультиплекс-профили
+    одного шлюза не используются (общий процесс, общий `auth.json`).
+    Общий чарт `projects/home-assistant/hermes/chart` с параметром
+    `instance`, Kustomize base `hermes/flux/base` и overlay на экземпляр.
+    Изолированный экземпляр живёт в namespace `hermes-<instance>` без
+    `hostNetwork`, с default-deny NetworkPolicy и namespaced `SecretStore`;
+    общая роль ESO и `ClusterSecretStore` его путь и namespace не видят.
+    Доступ — только владелец: `unauthorized_dm_behavior: ignore`, allowlist
+    из секрета, без pairing, allow-all и групповых allowlist; чарт отказывает
+    в рендере иначе. Рабочий экземпляр без доступа к HA; алерты дома остаются
+    в личном боте. Личный экземпляр переезжает на чарт отдельным этапом
+    (план — `projects/home-assistant/hermes/README.md`).

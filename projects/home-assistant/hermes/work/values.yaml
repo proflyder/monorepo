@@ -1,0 +1,26 @@
+storage:
+  size: 5Gi
+secretEnv:
+  - {name: TELEGRAM_BOT_TOKEN, secret: hermes-telegram, key: TELEGRAM_BOT_TOKEN}
+  - {name: TELEGRAM_ALLOWED_USERS, secret: hermes-telegram, key: TELEGRAM_ALLOWED_USERS}
+  - {name: API_SERVER_KEY, secret: hermes-api, key: API_SERVER_KEY}
+  - {name: CLAUDE_CODE_OAUTH_TOKEN, secret: hermes-anthropic, key: CLAUDE_CODE_OAUTH_TOKEN}
+smoke:
+  enabled: true
+  keySecret: hermes-api
+  keyProperty: API_SERVER_KEY
+config:
+  model:
+    provider: anthropic
+    default: claude-sonnet-4-6
+  auth:
+    adopt_external_logins: false
+  unauthorized_dm_behavior: ignore
+  platform_toolsets:
+    api_server: [web]
+    telegram: [web]
+  platforms:
+    telegram:
+      enabled: true
+      extra:
+        unauthorized_dm_behavior: ignore

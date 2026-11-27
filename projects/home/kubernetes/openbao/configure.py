@@ -80,6 +80,28 @@ def secrets_gateway_policy() -> str:
 
 SECRETS_GATEWAY_POLICY = secrets_gateway_policy()
 
+ISOLATED_HERMES_INSTANCES = ("work",)
+
+
+def hermes_instance_policy(instance: str) -> str:
+    return (
+        f'path "secret/data/k8s/hermes-{instance}/*" {{\n'
+        '  capabilities = ["read"]\n'
+        '}\n'
+        f'path "secret/metadata/k8s/hermes-{instance}/*" {{\n'
+        '  capabilities = ["read"]\n'
+        '}\n'
+    )
+
+
+def hermes_instance_roles() -> dict:
+    return {
+        f"hermes-{instance}-eso": (
+            ["hermes-secrets"], [f"hermes-{instance}"], [f"hermes-{instance}-eso"])
+        for instance in ISOLATED_HERMES_INSTANCES
+    }
+
+
 GITHUB_ISSUER = "https://token.actions.githubusercontent.com"
 GITHUB_STATION_ENVIRONMENT = "Station"
 GITHUB_ANDROID_ENVIRONMENT = "Android"
@@ -165,7 +187,11 @@ path "secret/metadata/infra/*" {
 path "secret/metadata/infra" {
   capabilities = ["list"]
 }
-"""
+""" + "".join(
+    'path "secret/%s/k8s/hermes-%s/*" {\n  capabilities = ["deny"]\n}\n' % (kind, instance)
+    for instance in ISOLATED_HERMES_INSTANCES
+    for kind in ("data", "metadata")
+)
 
 OPERATOR_KV_POLICY = """\
 # Operator automation (a periodic orphan token kept only on the owner's Mac):
@@ -424,6 +450,7 @@ def ensure_kubernetes(bao: Bao) -> None:
         "k8s-smoke": (["openbao-smoke"], ["openbao-smoke"], ["k8s-read"]),
         "backup": (["openbao-backup"], ["openbao"], ["backup"]),
         "secrets-gateway": (["secrets-gateway"], ["home-assistant"], ["secrets-gateway"]),
+        **hermes_instance_roles(),
     }
     for name, (accounts, namespaces, policies) in roles.items():
         audience = "secrets-gateway" if name == "secrets-gateway" else ""
@@ -562,6 +589,8 @@ def main() -> None:
     ensure_policy(bao, "backup", BACKUP_POLICY)
     ensure_policy(bao, "secrets-gateway", SECRETS_GATEWAY_POLICY)
     ensure_policy(bao, "operator-kv", OPERATOR_KV_POLICY)
+    for instance in ISOLATED_HERMES_INSTANCES:
+        ensure_policy(bao, f"hermes-{instance}-eso", hermes_instance_policy(instance))
     ensure_userpass(bao, args.user)
     ensure_github(bao, audience, args.repository, station_repository)
     if not station_repository:

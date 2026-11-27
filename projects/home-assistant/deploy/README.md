@@ -8,6 +8,12 @@ Assistant** и **Matter Server** работают отдельно в HAOS ка�
 discovery. Каждый Deployment имеет Recreate; данные сохраняются в Retain
 local PV/PVC.
 
+Hermes здесь — личный экземпляр. Рабочий Hermes (`hermes-work`) деплоится
+отдельным чартом `projects/home-assistant/hermes/chart` без `hostNetwork`;
+его смоук — `home-deploy hermes api-smoke` в API экземпляра, без HA.
+Экземпляры, ручные шаги и план миграции личного —
+[`../hermes/README.md`](../hermes/README.md).
+
 HAOS обращается к HA напрямую `.28:8123` (`internal_url`); Hermes voice proxy слушает `.27:8643` и ограничен nftables-правилом:
 только HAOS `.28` и сам K3s `.27`.
 
@@ -45,7 +51,7 @@ media type и digest. Все образы публикуются в GHCR (`ghcr.
 перезапускает контур.
 
 Hermes-конфиг — отдельный воспроизводимый образ `hermes-config`
-(`//projects/home-assistant/hermes:hermes-config_image`,
+(`//projects/home-assistant/hermes/personal:hermes-config_image`,
 `ghcr.io/proflyder/hermes-config`): статический `home-deploy` и reviewed-overlay
 в `/opt/hermes-overlay` (файлы, `skills/**`). `pins` пишет
 `HERMES_CONFIG_IMAGE`; `postRenderers` в `flux/helmrelease.yaml` запускают его
