@@ -91,6 +91,9 @@ class HermesChart(unittest.TestCase):
         self.assertEqual(config["unauthorized_dm_behavior"], "ignore")
         telegram = config["platforms"]["telegram"]
         self.assertEqual(telegram["extra"]["unauthorized_dm_behavior"], "ignore")
+        self.assertIs(config["allow_all_users"], False)
+        self.assertEqual(telegram["extra"]["group_allowed_chats"], [])
+        self.assertEqual(telegram["extra"]["group_allow_from"], [])
         self.assertEqual(config["model"]["provider"], "anthropic")
         self.assertFalse(config["auth"]["adopt_external_logins"])
         self.assertNotIn("mcp_servers", config)
@@ -105,6 +108,11 @@ class HermesChart(unittest.TestCase):
             "telegram": lambda v: v["config"]["platforms"]["telegram"]["extra"].update(
                 unauthorized_dm_behavior="pair"),
             "allow-all": lambda v: v.update(env={"GATEWAY_ALLOW_ALL_USERS": "true"}),
+            "allow-all-config": lambda v: v["config"].update(allow_all_users=True),
+            "group-chats": lambda v: v["config"]["platforms"]["telegram"]["extra"].update(
+                group_allowed_chats=["-100"]),
+            "group-from": lambda v: v["config"]["platforms"]["telegram"]["extra"].update(
+                group_allow_from=["1"]),
             "group": lambda v: v["secretEnv"].append(
                 {"name": "TELEGRAM_GROUP_ALLOWED_CHATS", "secret": "s", "key": "k"}),
             "no-owner": lambda v: v.update(secretEnv=[

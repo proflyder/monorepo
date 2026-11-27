@@ -24,6 +24,12 @@ app.kubernetes.io/instance: {{ include "hermes.name" . }}
 {{- if ne (toString (dig "extra" "unauthorized_dm_behavior" "ignore" $telegram)) "ignore" -}}
 {{- fail "platforms.telegram.extra.unauthorized_dm_behavior must be ignore" -}}
 {{- end -}}
+{{- if ne (toString (dig "allow_all_users" false .Values.config)) "false" -}}
+{{- fail "config.allow_all_users must be false" -}}
+{{- end -}}
+{{- if or (dig "extra" "group_allowed_chats" list $telegram) (dig "extra" "group_allow_from" list $telegram) -}}
+{{- fail "telegram group allowlists must be empty" -}}
+{{- end -}}
 {{- range $name := list "GATEWAY_ALLOW_ALL_USERS" "TELEGRAM_GROUP_ALLOWED_USERS" "TELEGRAM_GROUP_ALLOWED_CHATS" "TELEGRAM_GUEST_MODE" "GATEWAY_ALLOWED_USERS" -}}
 {{- if hasKey $.Values.env $name -}}
 {{- fail (printf "env.%s is forbidden: the instance answers only its owner" $name) -}}

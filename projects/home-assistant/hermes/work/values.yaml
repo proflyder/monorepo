@@ -16,6 +16,7 @@ config:
   auth:
     adopt_external_logins: false
   unauthorized_dm_behavior: ignore
+  allow_all_users: false
   platform_toolsets:
     api_server: [web]
     telegram: [web]
@@ -24,3 +25,5 @@ config:
       enabled: true
       extra:
         unauthorized_dm_behavior: ignore
+        group_allowed_chats: []
+        group_allow_from: []

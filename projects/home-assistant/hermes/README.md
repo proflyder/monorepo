@@ -24,6 +24,7 @@ Telegram bot and secrets. Instances never share a `HERMES_HOME`.
 - Owner-only access is enforced at render time (`hermes.ownerOnly` in
   `chart/templates/_helpers.tpl`): `unauthorized_dm_behavior` must be `ignore`
   globally and for Telegram, `TELEGRAM_ALLOWED_USERS` must come from a secret,
+  `allow_all_users` must be false, Telegram group allowlists must be empty,
   and `GATEWAY_ALLOW_ALL_USERS`, `GATEWAY_ALLOWED_USERS` and the Telegram
   group/guest variables are rejected. A violating values file fails `helm
   template`, so Flux never applies it.
