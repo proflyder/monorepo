@@ -96,6 +96,16 @@ class HermesConfigTests(unittest.TestCase):
             with self.subTest(platform=platform):
                 assert not (set(enabled) & forbidden), enabled
 
+    def test_telegram_strangers_are_silently_ignored(self):
+        assert self.data["unauthorized_dm_behavior"] == "ignore"
+        assert self.data["allow_all_users"] is False
+        extra = self.data["platforms"]["telegram"]["extra"]
+        assert extra["unauthorized_dm_behavior"] == "ignore"
+        assert extra["group_allowed_chats"] == []
+        assert extra["group_allow_from"] == []
+        text = FRAGMENT.read_text()
+        assert "GATEWAY_ALLOW_ALL_USERS" not in text
+
     def test_telegram_report_command_is_visible_and_voice_safe(self):
         telegram = self.data["platforms"]["telegram"]
         menu = telegram["extra"]["command_menu"]

@@ -12,10 +12,16 @@ platform_toolsets:
   api_server: [mcp-homeassistant, mcp-music-assistant, web, mcp-infra]
   telegram: [mcp-homeassistant, mcp-music-assistant, web, mcp-infra]
 
+unauthorized_dm_behavior: "ignore"
+allow_all_users: false
+
 platforms:
   telegram:
     enabled: true
     extra:
+      unauthorized_dm_behavior: "ignore"
+      group_allowed_chats: []
+      group_allow_from: []
       command_menu:
         max_commands: 60
         priority_mode: prepend
