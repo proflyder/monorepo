@@ -1128,6 +1128,82 @@ pub fn assist_smoke_client(
     0
 }
 
+pub const API_SMOKE_TEXT: &str = "Reply with one short sentence. Do not change anything.";
+
+#[must_use]
+pub fn api_smoke_body(text: &str) -> String {
+    gojson::marshal(&json!({
+        "messages": [{"role": "user", "content": text}],
+        "stream": false,
+    }))
+}
+
+#[must_use]
+pub fn api_smoke_reply(data: &Value) -> String {
+    data.get("choices")
+        .and_then(Value::as_array)
+        .and_then(|choices| choices.first())
+        .and_then(|choice| choice.get("message"))
+        .and_then(|message| message.get("content"))
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .trim()
+        .to_string()
+}
+
+pub fn api_smoke_client(
+    url: &str,
+    text: &str,
+    key_file: &str,
+    timeout: Duration,
+    stdout: &mut dyn Write,
+) -> i32 {
+    let mut emit = |payload: Value| {
+        let _ = writeln!(stdout, "{}", gojson::marshal(&payload));
+    };
+    let key = match fs::read_to_string(key_file) {
+        Ok(key) => key,
+        Err(error) => {
+            emit(json!({"ok": false, "error": format!("ReadError: {error}")}));
+            return 1;
+        }
+    };
+    let endpoint = format!("{}/v1/chat/completions", url.trim_end_matches('/'));
+    let config = ureq::Agent::config_builder()
+        .proxy(None)
+        .http_status_as_error(false)
+        .timeout_global(Some(timeout))
+        .build();
+    let client = ureq::Agent::new_with_config(config);
+    let response = client
+        .post(&endpoint)
+        .header("Authorization", &format!("Bearer {}", key.trim()))
+        .header("Content-Type", "application/json")
+        .send(api_smoke_body(text).as_str());
+    let mut response = match response {
+        Ok(response) => response,
+        Err(error) => {
+            emit(json!({"ok": false, "error": format!("URLError: {error}")}));
+            return 1;
+        }
+    };
+    let status = response.status().as_u16();
+    let raw = response.body_mut().read_to_string().unwrap_or_default();
+    if status != 200 {
+        emit(json!({"ok": false, "status": status, "error": format!("HTTPError: {status}")}));
+        return 1;
+    }
+    let reply = serde_json::from_str::<Value>(&raw)
+        .map(|data| api_smoke_reply(&data))
+        .unwrap_or_default();
+    if reply.is_empty() {
+        emit(json!({"ok": false, "status": status, "error": "EmptyReply"}));
+        return 1;
+    }
+    emit(json!({"ok": true, "speech": reply}));
+    0
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1239,6 +1315,30 @@ mod tests {
         assert!(check_voice_logs("INFO retrying").is_ok());
         assert!(check_voice_logs("ERROR boom").is_err());
         assert!(voice_proxy_log_errors("a panic: x").len() == 1);
+    }
+
+    #[test]
+    fn api_smoke_reads_the_first_choice() {
+        let data = json!({"choices": [{"message": {"role": "assistant", "content": " Hi. "}}]});
+        assert_eq!(api_smoke_reply(&data), "Hi.");
+        assert_eq!(api_smoke_reply(&json!({"choices": []})), "");
+        let body: Value = serde_json::from_str(&api_smoke_body("ping")).expect("body");
+        assert_eq!(body["messages"][0]["content"], "ping");
+        assert!(body.get("model").is_none());
+    }
+
+    #[test]
+    fn api_smoke_without_key_file_fails_closed() {
+        let mut out = Vec::new();
+        let code = api_smoke_client(
+            "http://127.0.0.1:9",
+            "ping",
+            "/nonexistent/key",
+            Duration::from_secs(1),
+            &mut out,
+        );
+        assert_eq!(code, 1);
+        assert!(String::from_utf8(out).expect("utf8").contains("ReadError"));
     }
 
     #[test]

@@ -25,6 +25,7 @@ patches in `patches/`.
 | `app-ha-executors` | `scheduler/manifests` (scheduler + ha-bridge + ha-control + ha-scenario) |
 | `app-ha-config-sync` | `ha-config-sync/manifests` |
 | `app-hermes` | `projects/home-assistant/deploy/flux` (`HelmRelease/runtime`) |
+| `app-hermes-work` | `projects/home-assistant/hermes/work` (`HelmRelease/hermes-work`, `HERMES_INSTANCE=work`) |
 
 Paths are relative to `projects/home/kubernetes/` unless absolute. Order:
 `platform-external-secrets -> platform-cert-manager -> platform-traefik ->

@@ -270,7 +270,7 @@ fn run_hermes(
 ) -> Result<(), Failure> {
     let Some((command, sub)) = matches.subcommand() else {
         return Err(Failure::new(
-            "usage: home-deploy hermes rollout|render-config|drift-exporter|assist-smoke ...",
+            "usage: home-deploy hermes rollout|render-config|drift-exporter|assist-smoke|api-smoke ...",
         ));
     };
     match command {
@@ -278,9 +278,10 @@ fn run_hermes(
         "render-config" => run_hermes_render_config(sub, stdout),
         "drift-exporter" => run_hermes_drift_exporter(sub, stderr),
         "assist-smoke" => run_hermes_assist_smoke(sub, stdout),
+        "api-smoke" => run_hermes_api_smoke(sub, stdout),
         other => Err(Failure::new(format!(
             "unknown hermes command {other:?} (expected rollout, render-config, \
-             drift-exporter or assist-smoke)"
+             drift-exporter, assist-smoke or api-smoke)"
         ))),
     }
 }
@@ -384,7 +385,7 @@ fn overlay_dir(explicit: &str, environment: Option<String>) -> Option<PathBuf> {
     };
     chosen
         .map(PathBuf::from)
-        .or_else(|| repo_root().map(|root| root.join("projects/home-assistant/hermes")))
+        .or_else(|| repo_root().map(|root| root.join("projects/home-assistant/hermes/personal")))
 }
 
 fn hermes_config_options(sub: &clap::ArgMatches) -> hermesconfig::Options {
@@ -518,31 +519,58 @@ fn run_hermes_assist_smoke(sub: &clap::ArgMatches, stdout: &mut dyn Write) -> Re
     let token_file = sub
         .get_one::<String>("token-file")
         .map_or("/run/secrets/ha/token", String::as_str);
-    let timeout = sub
-        .get_one::<String>("timeout")
-        .map_or(Ok(std::time::Duration::from_secs(150)), |value| {
-            parse_go_duration(value)
-        })
-        .map_err(|error| Failure::new(format!("hermes assist-smoke: {error}")))?;
-    let retry_window = sub
-        .get_one::<String>("retry-window")
-        .map_or(Ok(std::time::Duration::from_secs(240)), |value| {
-            parse_go_duration(value)
-        })
-        .map_err(|error| Failure::new(format!("hermes assist-smoke: {error}")))?;
+    let (timeout, retry_window) = smoke_durations(sub, "assist-smoke")?;
+    retry_smoke(retry_window, &mut || {
+        hermes::assist_smoke_client(ha_url, agent, text, token_file, timeout, stdout)
+    })
+}
+
+fn smoke_durations(
+    sub: &clap::ArgMatches,
+    command: &str,
+) -> Result<(std::time::Duration, std::time::Duration), Failure> {
+    let duration = |name: &str, default: u64| {
+        sub.get_one::<String>(name)
+            .map_or(Ok(std::time::Duration::from_secs(default)), |value| {
+                parse_go_duration(value)
+            })
+            .map_err(|error| Failure::new(format!("hermes {command}: {error}")))
+    };
+    Ok((duration("timeout", 150)?, duration("retry-window", 240)?))
+}
+
+fn retry_smoke(
+    retry_window: std::time::Duration,
+    attempt: &mut dyn FnMut() -> i32,
+) -> Result<(), Failure> {
     let deadline = std::time::Instant::now() + retry_window;
     let code = loop {
-        let code = hermes::assist_smoke_client(ha_url, agent, text, token_file, timeout, stdout);
+        let code = attempt();
         if code == 0 || std::time::Instant::now() >= deadline {
             break code;
         }
         std::thread::sleep(std::time::Duration::from_secs(10));
     };
     if code == 0 {
-        Ok(())
-    } else {
-        Err(Failure::code(code))
+        return Ok(());
     }
+    Err(Failure::code(code))
+}
+
+fn run_hermes_api_smoke(sub: &clap::ArgMatches, stdout: &mut dyn Write) -> Result<(), Failure> {
+    let Some(url) = sub.get_one::<String>("url") else {
+        return Err(Failure::new("hermes api-smoke: --url is required"));
+    };
+    let Some(key_file) = sub.get_one::<String>("key-file") else {
+        return Err(Failure::new("hermes api-smoke: --key-file is required"));
+    };
+    let text = sub
+        .get_one::<String>("text")
+        .map_or(hermes::API_SMOKE_TEXT, String::as_str);
+    let (timeout, retry_window) = smoke_durations(sub, "api-smoke")?;
+    retry_smoke(retry_window, &mut || {
+        hermes::api_smoke_client(url, text, key_file, timeout, stdout)
+    })
 }
 
 fn parse_go_duration(value: &str) -> Result<std::time::Duration, String> {
@@ -1017,6 +1045,14 @@ fn hermes_command() -> Command {
                 .arg(string("interval")),
         )
         .subcommand(
+            Command::new("api-smoke")
+                .arg(string("url"))
+                .arg(string("key-file"))
+                .arg(string("text"))
+                .arg(string("timeout"))
+                .arg(string("retry-window")),
+        )
+        .subcommand(
             Command::new("assist-smoke")
                 .arg(string("ha-url"))
                 .arg(string("agent"))
@@ -1089,7 +1125,7 @@ mod tests {
     }
 
     fn repo_overlay() -> Option<PathBuf> {
-        repo_root().map(|root| root.join("projects/home-assistant/hermes"))
+        repo_root().map(|root| root.join("projects/home-assistant/hermes/personal"))
     }
 
     #[test]

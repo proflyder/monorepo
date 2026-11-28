@@ -1,0 +1,36 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: hermes-${HERMES_INSTANCE}
+  namespace: flux-system
+spec:
+  releaseName: hermes-${HERMES_INSTANCE}
+  targetNamespace: hermes-${HERMES_INSTANCE}
+  storageNamespace: hermes-${HERMES_INSTANCE}
+  interval: 10m
+  timeout: 8m
+  chart:
+    spec:
+      chart: ./projects/home-assistant/hermes/chart
+      reconcileStrategy: Revision
+      sourceRef:
+        kind: GitRepository
+        name: flux-system
+        namespace: flux-system
+  valuesFrom:
+    - kind: ConfigMap
+      name: hermes-${HERMES_INSTANCE}-values
+      valuesKey: values.yaml
+  values:
+    instance: ${HERMES_INSTANCE}
+    image: ${HERMES_IMAGE}
+    smoke:
+      image: ${HOME_DEPLOY_IMAGE}
+  install:
+    remediation:
+      retries: 0
+  upgrade:
+    remediation:
+      retries: 0
+      strategy: rollback
+      remediateLastFailure: true

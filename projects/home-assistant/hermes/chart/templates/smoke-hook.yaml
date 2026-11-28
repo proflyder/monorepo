@@ -1,0 +1,71 @@
+{{- if .Values.smoke.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "hermes.name" . }}-post-upgrade-smoke
+  labels:
+    app.kubernetes.io/name: hermes-smoke
+    app.kubernetes.io/instance: {{ include "hermes.name" . }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "10"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 300
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: hermes-smoke
+        app.kubernetes.io/instance: {{ include "hermes.name" . }}
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: smoke
+          image: {{ required "smoke.image is required when the hook is enabled" .Values.smoke.image | quote }}
+          imagePullPolicy: IfNotPresent
+          command:
+            - /usr/local/bin/home-deploy
+            - hermes
+            - api-smoke
+            - --url
+            - {{ printf "http://%s:%v" (include "hermes.name" .) .Values.apiPort | quote }}
+            - --key-file
+            - /run/secrets/hermes-api/key
+            - --text
+            - {{ .Values.smoke.text | quote }}
+            - --timeout
+            - 90s
+            - --retry-window
+            - 180s
+          resources:
+            requests: {cpu: 10m, memory: 32Mi}
+            limits: {memory: 128Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: hermes-api
+              mountPath: /run/secrets/hermes-api
+              readOnly: true
+      volumes:
+        - name: hermes-api
+          secret:
+            secretName: {{ required "smoke.keySecret is required when the hook is enabled" .Values.smoke.keySecret | quote }}
+            defaultMode: 0440
+            items:
+              - key: {{ .Values.smoke.keyProperty | quote }}
+                path: key
+{{- end }}

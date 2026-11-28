@@ -1,0 +1,4 @@
+apiVersion: v2
+name: hermes
+version: 0.1.0
+description: One Hermes agent instance per release, selected by the instance value

@@ -106,6 +106,7 @@ enforcement: `DELETE identity/mfa/login-enforcement/userpass-totp`). Потер�
 | `kubernetes` | `external-secrets` | `k8s-read` | SA `external-secrets/external-secrets` |
 | `kubernetes` | `k8s-smoke` | `k8s-read` | smoke-Job |
 | `kubernetes` | `backup` | `backup` | CronJob snapshot |
+| `kubernetes` | `hermes-work-eso` | `hermes-work-eso` | SA `hermes-work/hermes-secrets` (namespaced `SecretStore`), read только `secret/k8s/hermes-work/*` |
 
 - GitHub-роли: `user_claim=job_workflow_ref`, TTL 10 мин / max 15 мин,
   `clock_skew=60`, audience — публичный URL OpenBao. OIDC-claim называет
@@ -115,6 +116,8 @@ enforcement: `DELETE identity/mfa/login-enforcement/userpass-totp`). Потер�
   `Station`, а не роль.
 - `ci-android` — read ровно `secret/ci/android-distribute`; `ci-station` —
   read ровно `secret/ci/deploy-station`; `k8s-read` — read `secret/k8s/*`;
+  `k8s-read` и `secrets-gateway` — `deny` на `secret/k8s/hermes-work/*`;
+  `hermes-work-eso` — read `secret/k8s/hermes-work/*` без `list`;
   `backup` — только `sys/storage/raft/snapshot`; `operator-kv` (токен
   владельца) — create/read/update `secret/{ci,k8s,infra}/*` без delete,
   `sys/*`, `auth/*`.

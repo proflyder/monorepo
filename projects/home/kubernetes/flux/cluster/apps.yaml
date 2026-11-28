@@ -340,6 +340,51 @@ spec:
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
+  name: app-hermes-work
+  namespace: flux-system
+spec:
+  interval: 1m
+  retryInterval: 1m
+  timeout: 10m
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  path: ./projects/home-assistant/hermes/work
+  prune: true
+  wait: true
+  suspend: false
+  dependsOn:
+    - name: platform
+    - name: home-app-pins
+  postBuild:
+    substitute:
+      HERMES_INSTANCE: work
+    substituteFrom:
+      - kind: ConfigMap
+        name: home-app-images
+      - kind: Secret
+        name: flux-app-settings
+  healthChecks:
+    - apiVersion: helm.toolkit.fluxcd.io/v2
+      kind: HelmRelease
+      name: hermes-work
+      namespace: flux-system
+    - apiVersion: external-secrets.io/v1
+      kind: ExternalSecret
+      name: hermes-telegram
+      namespace: hermes-work
+    - apiVersion: external-secrets.io/v1
+      kind: ExternalSecret
+      name: hermes-anthropic
+      namespace: hermes-work
+    - apiVersion: apps/v1
+      kind: Deployment
+      name: hermes-work
+      namespace: hermes-work
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
   name: pve-exporter
   namespace: flux-system
 spec:

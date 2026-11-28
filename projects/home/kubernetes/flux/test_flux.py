@@ -161,7 +161,7 @@ class Cluster(unittest.TestCase):
             "vaultwarden", "nexus", "nexus-provision",
             "home-app-pins", "app-wakegrant",
             "app-intercom", "app-currency-bot", "app-mcp-gateway",
-            "app-ha-executors", "app-ha-config-sync", "app-hermes",
+            "app-ha-executors", "app-ha-config-sync", "app-hermes", "app-hermes-work",
             "app-phone-push", "app-secrets-gateway", "pve-exporter",
         })
         sources = {
@@ -233,6 +233,19 @@ class Cluster(unittest.TestCase):
                     {"kind": "Secret", "name": "flux-app-settings"},
                 ])
                 self.assertTrue(spec["healthChecks"])
+
+    def test_hermes_work_instance_is_applied_from_the_work_overlay(self):
+        spec = self.kustomizations["app-hermes-work"]["spec"]
+        self.assertEqual(spec["path"], "./projects/home-assistant/hermes/work")
+        self.assertTrue(spec["wait"])
+        self.assertEqual(spec["postBuild"]["substitute"], {"HERMES_INSTANCE": "work"})
+        self.assertEqual(spec["dependsOn"], [
+            {"name": "platform"}, {"name": "home-app-pins"},
+        ])
+        checks = {(check["kind"], check["name"], check["namespace"])
+                  for check in spec["healthChecks"]}
+        self.assertIn(("HelmRelease", "hermes-work", "flux-system"), checks)
+        self.assertIn(("Deployment", "hermes-work", "hermes-work"), checks)
 
     def test_pins_cover_every_flux_unit_image(self):
         script = (

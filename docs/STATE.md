@@ -52,7 +52,7 @@
   pull до 4 образов (drop-in'ы в `agent/etc/kubelet.conf.d/`).
 - Namespaces: `home-assistant`, `monitoring`, `traefik`, `cert-manager`,
   `openbao`, `external-secrets`, `currency-bot`, `vaultwarden`, `nexus`,
-  `flux-system`.
+  `flux-system`, `hermes-work`.
 - Под Flux: платформа (ESO, cert-manager, Traefik, маршруты), observability,
   Vaultwarden, Nexus и все деплой-юниты приложений. Вручную: OpenBao,
   host-firewall (nftables) и Cloudflare DNS.
@@ -156,7 +156,10 @@
 - Будильники, таймеры и напоминания — только scheduler; голос ставит их через
   Hermes → mcp-gateway группа `time`. Локальные — только стоп и snooze.
 - Hermes `v0.22.5`, модель через ChatGPT/Codex OAuth; MCP-серверы HA, MA и
-  `infra` (mcp-gateway). Конфиг и деплой — `projects/home-assistant/hermes/README.md`.
+  `infra` (mcp-gateway). Конфиг и деплой — `projects/home-assistant/hermes/personal/README.md`.
+- Рабочий Hermes: namespace `hermes-work`, `HelmRelease/hermes-work`, модель
+  Claude (`CLAUDE_CODE_OAUTH_TOKEN`), свой Telegram-бот, без HA. Экземпляры —
+  `projects/home-assistant/hermes/README.md`.
 - MA + Spotify Connect device «Яндекс Станция Миди».
 - Комп (Windows-ПК): WoL, выключение/блокировка по SSH forced command,
   вход по пропуску `wakegrant` через `solutions/windows-logon-provider`. На ПК

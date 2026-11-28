@@ -817,7 +817,7 @@ test("deploy: shared proto package deploys scheduler and ha-bridge", () => {
 
 test("deploy: hermes change selects its images", () => {
   const config = affected.loadConfig();
-  const result = routeReal(["projects/home-assistant/hermes/hermes-private.example.yaml"]);
+  const result = routeReal(["projects/home-assistant/hermes/personal/hermes-private.example.yaml"]);
   const entries = affected.deployEntries(result, config);
   assert.deepEqual(entries.map((entry) => entry.id), ["hermes"]);
   assert.equal(entries[0].images, "hermes voice-proxy health-exporter home-deploy");
@@ -846,13 +846,13 @@ test("unit matrix: a Bazel service carries its image fields in the same entry", 
 
 test("unit matrix: an image-owning Python unit runs in the unit job, not python", () => {
   const config = affected.loadConfig();
-  const result = routeReal(["projects/home-assistant/hermes/hermes-private.example.yaml"]);
+  const result = routeReal(["projects/home-assistant/hermes/personal/hermes-private.example.yaml"]);
   const entries = affected.matrixEntries(result, config);
   const unit = entries.unit.find((entry) => entry.id === "hermes");
   assert.equal(unit.kind, "python");
   assert.equal(unit.images, "hermes voice-proxy health-exporter home-deploy");
   assert.equal(unit.builder, "mixed");
-  assert.equal(unit.suites, "projects/home-assistant/hermes");
+  assert.equal(unit.suites, "projects/home-assistant/hermes/personal");
   assert.equal(
     entries.python.some((entry) => entry.id === "hermes"),
     false,
@@ -2203,9 +2203,9 @@ test("real repo: markdown-only android change selects no build or deploy unit", 
 test("real repo: explicitly listed hermes markdown still selects its units", () => {
   const config = affected.loadConfig();
   for (const file of [
-    "projects/home-assistant/hermes/HERMES.md",
-    "projects/home-assistant/hermes/SOUL.md",
-    "projects/home-assistant/hermes/skills/time/SKILL.md",
+    "projects/home-assistant/hermes/personal/HERMES.md",
+    "projects/home-assistant/hermes/personal/SOUL.md",
+    "projects/home-assistant/hermes/personal/skills/time/SKILL.md",
   ]) {
     const result = withDeps({}, () =>
       affected.route(config, [file], { root: REPO, base: "b", graph: loadFixtureGraph() }),
@@ -2230,7 +2230,7 @@ test("real repo: README read by a contract test selects its python units", () =>
   const config = affected.loadConfig();
   for (const [file, ids] of [
     ["solutions/voice-proxy/README.md", ["ha-deploy"]],
-    ["projects/home-assistant/hermes/README.md", ["hermes"]],
+    ["projects/home-assistant/hermes/personal/README.md", ["hermes"]],
     ["projects/home-assistant/ha-voice/README.md", ["ha-voice"]],
     ["projects/home/kubernetes/flux/README.md", ["flux-deploy"]],
   ]) {

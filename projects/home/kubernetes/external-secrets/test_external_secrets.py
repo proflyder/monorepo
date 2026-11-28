@@ -120,6 +120,9 @@ class ExternalSecretsContracts(unittest.TestCase):
         self.assertEqual(len(docs), 1)
         store = docs[0]
         self.assertEqual(store["kind"], "ClusterSecretStore")
+        excluded = store["spec"]["conditions"][0]["namespaceSelector"]["matchExpressions"]
+        self.assertEqual(excluded, [{"key": "kubernetes.io/metadata.name",
+                                     "operator": "NotIn", "values": ["hermes-work"]}])
         provider = store["spec"]["provider"]["vault"]
         self.assertEqual(provider["server"], "http://openbao.openbao.svc:8200")
         self.assertEqual(provider["path"], "secret")

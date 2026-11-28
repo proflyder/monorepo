@@ -1,0 +1,109 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "hermes.name" . }}
+  labels:
+    {{- include "hermes.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "hermes.selector" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "hermes.labels" . | nindent 8 }}
+        proflyder.dev/collect-logs: "true"
+      annotations:
+        checksum/config: {{ toYaml .Values.config | sha256sum }}
+    spec:
+      serviceAccountName: {{ include "hermes.name" . }}
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      hostNetwork: {{ .Values.hostNetwork }}
+      terminationGracePeriodSeconds: 90
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10000
+        runAsGroup: 10000
+        fsGroup: 10000
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: seed-config
+          image: {{ required "image is required" .Values.image | quote }}
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/cp", "/etc/hermes/config.yaml", "/opt/data/config.yaml"]
+          volumeMounts:
+            - {name: data, mountPath: /opt/data}
+            - {name: config, mountPath: /etc/hermes, readOnly: true}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests: {cpu: 5m, memory: 16Mi}
+            limits: {memory: 64Mi}
+      containers:
+        - name: gateway
+          image: {{ .Values.image | quote }}
+          imagePullPolicy: IfNotPresent
+          args: ["gateway", "run"]
+          ports:
+            - name: api
+              containerPort: {{ .Values.apiPort }}
+          env:
+            - name: TZ
+              value: {{ .Values.timezone | quote }}
+            - name: HERMES_HOME
+              value: /opt/data
+            - name: HOME
+              value: /opt/data
+            - name: API_SERVER_HOST
+              value: 0.0.0.0
+            - name: API_SERVER_PORT
+              value: {{ .Values.apiPort | quote }}
+            {{- range $name, $value := .Values.env }}
+            - name: {{ $name }}
+              value: {{ $value | quote }}
+            {{- end }}
+            {{- range .Values.secretEnv }}
+            - name: {{ .name }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .secret }}
+                  key: {{ .key }}
+            {{- end }}
+          readinessProbe:
+            tcpSocket:
+              port: api
+            periodSeconds: 10
+          lifecycle:
+            preStop:
+              exec:
+                command:
+                  - /opt/venv/bin/python
+                  - -c
+                  - {{ .Files.Get "files/drain.py" | quote }}
+          volumeMounts:
+            - {name: data, mountPath: /opt/data}
+            - {name: tmp, mountPath: /tmp}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "hermes.name" . }}-data
+        - name: config
+          configMap:
+            name: {{ include "hermes.name" . }}-config
+        - name: tmp
+          emptyDir: {}

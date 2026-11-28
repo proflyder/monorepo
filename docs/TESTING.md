@@ -80,7 +80,7 @@ node --test solutions/bb-home-dispatcher/tests/*.test.js
 (cd solutions/bb-profiles && npm test)
 python3 -m unittest discover -s projects/home-assistant/ha-voice -p 'test_*.py' -v
 python3 -m unittest discover -s projects/home-assistant/deploy -p 'test_*.py' -v
-python3 -m unittest discover -s projects/home-assistant/hermes -p 'test_*.py' -v
+python3 -m unittest discover -s projects/home-assistant/hermes/personal -p 'test_*.py' -v
 python3 -m unittest discover -s projects/home/kubernetes/mcp-gateway -p 'test_*.py' -v
 python3 -m unittest discover -s projects/home/proxmox -p 'test_*.py' -v
 ```

@@ -121,3 +121,19 @@ path "secret/metadata/k8s/home-assistant/secrets-gateway" {
 path "secret/metadata/k8s/home-assistant/secrets-gateway/*" {
   capabilities = ["deny"]
 }
+
+path "secret/data/k8s/hermes-work" {
+  capabilities = ["deny"]
+}
+
+path "secret/data/k8s/hermes-work/*" {
+  capabilities = ["deny"]
+}
+
+path "secret/metadata/k8s/hermes-work" {
+  capabilities = ["deny"]
+}
+
+path "secret/metadata/k8s/hermes-work/*" {
+  capabilities = ["deny"]
+}

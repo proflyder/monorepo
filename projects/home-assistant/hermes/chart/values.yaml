@@ -1,0 +1,38 @@
+instance: ""
+image: ""
+timezone: Asia/Almaty
+hostNetwork: false
+apiPort: 8642
+storage:
+  size: 5Gi
+  storageClassName: local-retain
+resources:
+  requests:
+    cpu: 50m
+    memory: 256Mi
+  limits:
+    memory: 2Gi
+env: {}
+secretEnv: []
+config: {}
+networkPolicy:
+  enabled: true
+  dnsNamespace: kube-system
+  publicHttpsPorts: [443]
+  privateRanges:
+    - 10.0.0.0/8
+    - 172.16.0.0/12
+    - 192.168.0.0/16
+    - 100.64.0.0/10
+    - 169.254.0.0/16
+  mcpGateway:
+    enabled: false
+    namespace: ""
+    podLabels: {}
+    port: 8080
+smoke:
+  enabled: false
+  image: ""
+  keySecret: ""
+  keyProperty: API_SERVER_KEY
+  text: "Reply with one short sentence. Do not change anything."

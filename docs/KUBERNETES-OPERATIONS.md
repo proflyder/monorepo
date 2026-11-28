@@ -86,7 +86,7 @@ storage schema одновременно. Один Deployment = один writer. 
    `${HEALTH_EXPORTER_IMAGE}`, `${HOME_DEPLOY_IMAGE}`, `${HERMES_CONFIG_IMAGE}`
    из pins; неизменный digest не даёт rollout;
 3. `hermes-config` добавляет initContainer `render-config` (overlay из
-   `projects/home-assistant/hermes` → `/opt/data`, fail-closed) и sidecar
+   `projects/home-assistant/hermes/personal` → `/opt/data`, fail-closed) и sidecar
    `config-drift` (`:9118`); приватные значения рендера —
    `Secret/hermes-config-private` из `k8s/home-assistant/hermes-config`
    (поле `private.yaml`);

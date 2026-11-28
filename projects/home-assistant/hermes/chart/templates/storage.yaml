@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "hermes.name" . }}-data
+  labels:
+    {{- include "hermes.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: {{ .Values.storage.storageClassName | quote }}
+  resources:
+    requests:
+      storage: {{ .Values.storage.size | quote }}

@@ -6,9 +6,9 @@ the in-cluster Jobs all use `//platform/deploy-rs:home-deploy`. Subcommands —
 
 ## Hermes config delivery
 
-The reviewed overlay lives in `projects/home-assistant/hermes` and is baked into
+The reviewed overlay lives in `projects/home-assistant/hermes/personal` and is baked into
 the `hermes-config` image at `/opt/hermes-overlay`
-(`//projects/home-assistant/hermes:hermes-config_image`, repository
+(`//projects/home-assistant/hermes/personal:hermes-config_image`, repository
 `ghcr.io/proflyder/hermes-config`). The image holds the static `home-deploy`
 binary as its entrypoint and sets `HERMES_OVERLAY_DIR=/opt/hermes-overlay`, so
 the same image runs both the init container (`hermes render-config`) and the
@@ -20,7 +20,7 @@ Overlay path precedence for both commands:
    `--telegram-prompt`, `--skills`);
 2. `--source-dir DIR`, which fills every unset path with `DIR/<file>`;
 3. `$HERMES_OVERLAY_DIR`;
-4. the repository overlay (`projects/home-assistant/hermes`).
+4. the repository overlay (`projects/home-assistant/hermes/personal`).
 
 `render-config` keeps the parsed YAML tree as the contract: when Hermes rewrites
 `config.yaml` with its own emitter (quotes, comments, indentation), the merged
